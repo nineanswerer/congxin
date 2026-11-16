@@ -1,0 +1,41 @@
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+.output/
+.next/
+*.tsbuildinfo
+
+# 部署与平台配置
+.vercel/
+.netlify/
+.wrangler/
+.cloudbaserc.json
+
+# 环境变量与凭证 —— 绝不入库
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+access_secret
+.zhihu-cli/
+docs/sources/zhihu-cli-skill/
+
+# 他人材料，待队友同意后再决定是否公开
+docs/sources/队友桌宠想法-原始.txt
+
+# 本机与编辑器
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# 本地实测脚本写入的旁路凭证
+scripts/.secret
+
+# 上一轮 Codex 对话导出与提取脚本，属本地参考材料
+_extract.ps1
+octosense-*.md
