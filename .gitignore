@@ -39,3 +39,7 @@ scripts/.secret
 # 上一轮 Codex 对话导出与提取脚本，属本地参考材料
 _extract.ps1
 octosense-*.md
+
+# 刘看山官方素材包的原始解压件（5.4MB），仅本地留档；
+# 实际使用的 WebP 资产在 assets/kanshan/，随仓库公开，授权说明见该目录 NOTICE.md
+docs/sources/kanshan_material/
