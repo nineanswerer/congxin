@@ -250,7 +250,7 @@
 - **已执行**（2026-11-16）：
   - 仓库已建：**`https://github.com/nineanswerer/zhihu-study-pet`**（public，默认分支 `main`），5 次提交全部推送完成，`main` 与 `origin/main` 同步。
   - 描述：*"知乎黑客松 S3 参赛项目：以桌宠为主体的学习搭子，产出可回溯出处的知识卡片"*。
-  - 队友 `5zdz5` 已收到 **write 权限邀请**（邀请 id `344070634`）——⚠️ **GitHub 邀请需对方本人登录点接受后才生效**，且邀请 7 天过期。**接受前他无法推送。**
+  - 队友 `5zdz5` **已是 collaborator（push 权限）**，无待处理邀请（2026-11-16 22:42 经 GitHub API 核实）。
   - 补齐 `README.md`（公开仓库首页，评审会看）与 `.gitattributes`（统一 LF，避免两人跨系统协同时整文件 diff）。
   - **凭证来源说明**：`gh auth login` 未执行；实际用的是 **Git Credential Manager 里已有的 `nineanswerer` OAuth 令牌**（`gho_` 前缀，账号 nineanswerer）。令牌未写入任何项目文件、未提交、未打印。
 - **状态**：已执行（仓库名待作品名确定后统一改名；队友邀请待其本人接受）

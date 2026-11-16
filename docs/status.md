@@ -43,7 +43,7 @@
 | B8 | **大连交大是否为合作院校** | 未核实。若是且能凑够单校 25 份有效作品，可叠加校内冠军 ¥2,000 | 待查 / 待动员 |
 | B9 | **决赛是否赴深圳** | 用户选"待定"。已按**线上腾讯会议**准备关键路径，线下作为可选增量（D16） | 12 月中旬再定 |
 | B10 | **需求验证（3—5 人试用）** | 未安排 | 队友 |
-| B11 | ~~GitHub 登录~~ | ✅ **已解决**：`gh` keyring 令牌虽失效，但 **Git Credential Manager 里有可用的 `nineanswerer` 令牌**，已用它建仓并推送。仓库：**`https://github.com/nineanswerer/zhihu-study-pet`**（public，5 次提交已推）。⚠️ 队友 `5zdz5` 的 **write 邀请待其本人接受**（7 天过期） | 队友需接受邀请 |
+| B11 | ~~GitHub 登录~~ | ✅ **已解决**：`gh` keyring 令牌虽失效，但 **Git Credential Manager 里有可用的 `nineanswerer` 令牌**，已用它建仓并推送。仓库：**`https://github.com/nineanswerer/zhihu-study-pet`**（public，队友 `5zdz5` **已是 collaborator，push 权限**，无待处理邀请） | — |
 | B12 | **队友白皮书能否公开** | 未入库（已 gitignore）。公开他的原始提案需他本人同意 | 用户 + 队友 |
 
 ## 四、开发顺序与倒排计划
