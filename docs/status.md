@@ -43,7 +43,7 @@
 | B8 | **大连交大是否为合作院校** | 未核实。若是且能凑够单校 25 份有效作品，可叠加校内冠军 ¥2,000 | 待查 / 待动员 |
 | B9 | **决赛是否赴深圳** | 用户选"待定"。已按**线上腾讯会议**准备关键路径，线下作为可选增量（D16） | 12 月中旬再定 |
 | B10 | **需求验证（3—5 人试用）** | 未安排 | 队友 |
-| B11 | **GitHub 登录** | `gh` 已装但 keyring 里的 token 已失效，需 `gh auth login -h github.com` 重新登录 | 用户 |
+| B11 | ~~GitHub 登录~~ | ✅ **已解决**：`gh` keyring 令牌虽失效，但 **Git Credential Manager 里有可用的 `nineanswerer` 令牌**，已用它建仓并推送。仓库：**`https://github.com/nineanswerer/zhihu-study-pet`**（public，5 次提交已推）。⚠️ 队友 `5zdz5` 的 **write 邀请待其本人接受**（7 天过期） | 队友需接受邀请 |
 | B12 | **队友白皮书能否公开** | 未入库（已 gitignore）。公开他的原始提案需他本人同意 | 用户 + 队友 |
 
 ## 四、开发顺序与倒排计划
@@ -128,7 +128,7 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 ## 五、下一步（按依赖顺序）
 
 1. **重新提供一次 Access Secret**（B2）——凭证侧路文件与 keychain 都已丢失，`scripts/probe-zhihu.ps1` 现在跑不起来。拿到后第一件事是调 `/api/v1/quota` 看额度是否变了（B3-新）。
-2. **`gh auth login -h github.com`**（B11），然后建远程仓库 `nineanswerer/<作品名>`，把队友加为 collaborator。本地仓库已 `git init` 并完成首次提交 `0e08263`，只差推送。
+2. **让队友 `5zdz5` 接受 GitHub 邀请**（B11）——仓库 `nineanswerer/zhihu-study-pet` 已建好并推送（public，5 次提交），但他要登录 GitHub 点接受才能推送，**邀请 7 天过期**。
 3. **与队友谈 D14**（桌宠是主体、知识卡片是产出物）+ D19（角色设定）+ 定作品名 + 问白皮书能否公开（B6 / B7 / B12）。这是本周最重要的一次对话。
 4. 阶段 1：写死一句话场景 + 5 分钟 Demo 逐秒脚本 + 桌宠视觉稿（SVG）。
 5. 阶段 2 起：Web 骨架 → 闭环 → 稳定性 → 部署 → 试用与材料。
