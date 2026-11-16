@@ -33,6 +33,7 @@
 | [docs/brief.md](docs/brief.md) | 产品定义、目标用户、场景、首版范围与验收条件 |
 | [docs/decisions.md](docs/decisions.md) | D1—D22，每条含日期 / 结论 / 依据 / 状态 |
 | [docs/status.md](docs/status.md) | 已完成、阻塞项、倒排计划 |
+| [docs/队友对齐清单.md](docs/队友对齐清单.md) | 与队友对齐 D14 / D19 的逐条谈法（含白皮书 9 概念处置表） |
 | [docs/rules-知乎S3.md](docs/rules-知乎S3.md) | 官方规则、技术指南正文、额度对照、实测记录 |
 | [AGENTS.md](AGENTS.md) | 团队协作规则（事实纪律、原创与合规、工程纪律、授权边界） |
 | [assets/kanshan/NOTICE.md](assets/kanshan/NOTICE.md) | 刘看山素材来源与使用限制 |
