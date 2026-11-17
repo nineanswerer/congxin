@@ -46,3 +46,12 @@ octosense-*.md
 # 刘看山官方素材包的原始解压件（5.4MB），仅本地留档；
 # 实际使用的 WebP 资产在 assets/kanshan/，随仓库公开，授权说明见该目录 NOTICE.md
 docs/sources/kanshan_material/
+
+# 队友/并行会话在工作区根目录产生的素材中间产物（11-17 14:08—16:11 生成）
+# 这些是实验产物，不属于本仓库内容；避免任何一次 git add -A 把上百个中间文件拖进历史。
+# 若其中确实要作为项目资产公开，请**主动**移入 assets/<用途>/ 再提交，不要留在这里。
+prepared-media/
+videos/
+.tmp/
+dark-echo-*.jpg
+skin-*.png
