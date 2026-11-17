@@ -33,10 +33,38 @@
 | [docs/brief.md](docs/brief.md) | 产品定义、目标用户、场景、首版范围与验收条件 |
 | [docs/decisions.md](docs/decisions.md) | D1—D22，每条含日期 / 结论 / 依据 / 状态 |
 | [docs/status.md](docs/status.md) | 已完成、阻塞项、倒排计划 |
+| [docs/协作规范.md](docs/协作规范.md) | **两个人、两个不同 AI 平台如何共用一份 Git 历史**（上下文四层 + 三个动作 + 目录分工） |
 | [docs/队友对齐清单.md](docs/队友对齐清单.md) | 与队友对齐 D14 / D19 的逐条谈法（含白皮书 9 概念处置表） |
 | [docs/rules-知乎S3.md](docs/rules-知乎S3.md) | 官方规则、技术指南正文、额度对照、实测记录 |
-| [AGENTS.md](AGENTS.md) | 团队协作规则（事实纪律、原创与合规、工程纪律、授权边界） |
+| [contracts/CONTRACTS.md](contracts/CONTRACTS.md) | 契约层：不可变事实（赛程 / 额度 / 技术底座 / 合规红线） |
+| [docs/adr/](docs/adr/) | 决策层：背景复杂的决策单独展开，**"被否决的方案"不许空** |
+| [docs/handoffs/](docs/handoffs/) | 交接层：每次会话一份，AI 自己写，换 AI 平台前的读档点 |
+| [prompts/](prompts/) | 四份可直接复制的提示词：BOOTSTRAP / HANDOFF / CROSS_REVIEW / COMMIT_MSG |
+| [AGENTS.md](AGENTS.md) | 团队协作规则（事实纪律、原创与合规、工程纪律、文档纪律、授权边界、双 AI 协作） |
 | [assets/kanshan/NOTICE.md](assets/kanshan/NOTICE.md) | 刘看山素材来源与使用限制 |
+
+## 双 AI 协作机制
+
+两个人各用**不同的 AI 平台**并行开发、共用一个 GitHub 仓库。Git 只记录"改成了什么"，
+不记录"为什么这么改"和"试过什么失败了"——所以本仓库用**上下文四层**补上：
+
+```
+L0 契约层  contracts/contract.json + CONTRACTS.md   不可变事实，机器可读 + 自检
+L1 身份层  AGENTS.md                                 唯一真源，各平台文件只做指针
+L2 决策层  docs/decisions.md + docs/adr/              只增不改，"被否决的方案"不许空
+L3 交接层  docs/handoffs/                            每次会话一份，让 AI 自己写
+```
+
+配套三个动作：**换平台前 BOOTSTRAP**（读契约→复述→等确认）、**会话结束前 HANDOFF**、
+**每次提交带 `Context:`/`Tried:`/`Verify:` 三行**（hook 强制）。
+
+提交前自检：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
+```
+
+两个 AI 平台一起干活不是风险，**是可以拿出来讲的创作佐证**——官方明确建议保留 AI 交互记录、设计底稿与开发日志，这套机制刚好覆盖这三样。
 
 ## 合规声明
 

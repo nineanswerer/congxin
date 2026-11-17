@@ -1,0 +1,14 @@
+---
+description: 知乎黑客松 S3 项目上下文唯一真源（指向根目录 AGENTS.md）
+alwaysApply: true
+---
+
+项目通用规则见根目录 @AGENTS.md。
+
+本文件**只做指针**。通用规则一律以根目录 `AGENTS.md` 为准，不要在此复制正文——正文有两份就会互相漂移。
+
+## Cursor 专属
+
+- 新会话先执行 `prompts/BOOTSTRAP.md`：读契约 → 复述状态 → **等人确认后才准改文件**。
+- 会话结束前执行 `prompts/HANDOFF.md`。
+- 提交前跑 `powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1`。

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "project": "zhihu-hackathon-s3",
+  "title_working": "zhihu-study-pet",
+  "repo": "https://github.com/nineanswerer/zhihu-study-pet",
+  "team": [
+    { "login": "nineanswerer", "role": "主理 / 后端与知乎对接" },
+    { "login": "5zdz5", "role": "待与队友对齐" }
+  ],
+  "track": {
+    "id": "02",
+    "name": "AI × 陪伴与交互",
+    "status": "已定",
+    "note": "S3 首次单列该赛道；上届无对等获奖形态"
+  },
+  "timeline": {
+    "signup_and_team_deadline": "2026-12-04T23:59+08:00",
+    "submit_window_opens": "2026-12-05T10:00+08:00",
+    "submit_window_closes": "2026-12-07T10:00+08:00",
+    "code_frozen_at": "2026-12-07T10:00+08:00",
+    "preliminary_result": "2026-12-11",
+    "finals": "2026-12-19",
+    "popularity_award_window": "2026-12-05/2026-12-19",
+    "finals_venue": "TBD",
+    "finals_venue_note": "官方未公布具体场地，预计随 12-11 入围通知给出；在此之前不订不可退的票与房"
+  },
+  "budget": {
+    "team_size": 2,
+    "hours_per_person_per_week": "5-10",
+    "total_person_hours_estimate": 38,
+    "scope_rule": "范围必须按人时裁剪；新增功能必须说明它替换掉了什么"
+  },
+  "platform_quota_daily": {
+    "_source": "GET https://developer.zhihu.com/api/v1/quota 实测（2026-11-16 18:47，账号已实名认证）",
+    "_note": "额度取决于账号是否完成实名认证，与是否参赛无关；设计一律按本表取值",
+    "global_search": 5000,
+    "zhihu_search": 5000,
+    "hot_list": 100,
+    "question_discovery": 100,
+    "zhida_openai": 100,
+    "tools": 10,
+    "knowledge": 500,
+    "user_data": 10000,
+    "creator": 500
+  },
+  "tech": {
+    "form": "web-app",
+    "packaging": "PWA",
+    "frontend": "SVG + CSS / Framer Motion 做桌宠状态动画",
+    "backend": "Node 单进程",
+    "session_store": "进程内 Map",
+    "database": "none",
+    "middleware": "none",
+    "deployment": "知乎 AI Works 源码发布（前端+Node后端、不含数据库写入）",
+    "rationale": "官方 FAQ：前端+Node后端且不含数据库写入的全栈项目可用 AI Works 部署；平台暂不支持独立数据库托管"
+  },
+  "zhihu_api": {
+    "main_path": ["question_recommendations", "question_answers"],
+    "main_path_reason": "question_answers 返回原始回答 Url，是卡片可回溯出处的唯一来源",
+    "fallback": ["zhida_openai"],
+    "fallback_reason": "直答用于快速解释与兜底；官方明确观点比较不要用直答替代搜索",
+    "not_in_v1": ["hot_list"],
+    "not_in_v1_reason": "与“一个具体任务里的学习搭子”主线关联弱，预算要留给闭环"
+  },
+  "red_lines": {
+    "secrets_never_in_repo": true,
+    "secrets_never_in_source": true,
+    "ip_kanshan_period_only": true,
+    "no_fake_data_fallback": true,
+    "no_bulk_or_high_frequency_calls": true,
+    "no_published_or_awarded_project_reuse": true
+  },
+  "governance": {
+    "context_layers": ["L0-contract", "L1-identity", "L2-decision", "L3-handoff"],
+    "agents_md_max_lines": 120,
+    "commit_message_required_lines": ["Context:", "Tried:", "Verify:"],
+    "handoff_required_before": ["切换 AI 平台", "结束一次会话", "开始新功能前"]
+  }
+}
