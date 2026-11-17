@@ -392,7 +392,7 @@
               "method": "GET",
               "query": { "ContentType": "string（必填）", "Offset": "int", "Limit": "int" },
               "maps_to": "items[]",
-              "note": "上游只给标题与摘要，**不要把 Summary 当原文**。"
+              "note": "上游只给标题与摘要，**不要把 Summary 当原文**。⚠️ **`ContentType` 必须用 `all` 或遍历多种类型**：实测账号的唯一一条创作是 `pin`（想法），只查 `article` / `answer` 会拿到 0 条并被误判成「这个账号没有创作」。`pin` 的 Summary 基本就是正文，比 `article` 的长得多。"
             },
             {
               "path": "/api/v1/user/creator_account_stats",

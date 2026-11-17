@@ -527,13 +527,23 @@
   | --- | --- | --- |
   | 1 | ⚠️ **收藏类接口的真实路径是 `/api/v1/user/collections`（近期收藏）、`/api/v1/user/favlists`（收藏夹列表）、`/api/v1/user/favlist_contents`（某收藏夹内容）** | **纠正此前记录的 `/api/v1/user/favorites/lists` 与 `/api/v1/user/favorites/recent`——这两个路径实测 404。** 路径是从 zhihu-cli 二进制里反查出来的，不是猜的。 |
   | 2 | ⚠️ **上游有秒级限流**：`Code=30001 second limit exceeded`，间隔 3 秒重试即成功 | **新发现**。后端必须串行化 + 退避重试 + 缓存 + 去重；前端看到的是 `ZHIHU_RATE_LIMITED`，不许自己重试风暴。 |
-  | 3 | ⚠️ **`ContentType` 是必填**：不传上游直接返回 `Code=10001 ContentType is required` | **纠正**此前"可选"的印象。后端要默认补 `all`。 |
+  | 3 | ⚠️ **`ContentType` 是必填**：不传上游直接返回 `Code=10001 ContentType is required`。**而且必须用 `all` 或遍历多种类型**——实测账号唯一的创作是一条 `pin`（想法），只查 `article` / `answer` 都返回 0 条，**会被误判成"这个账号没有创作"** | **纠正**此前"可选"的印象。后端默认补 `all`。另外 `pin` 的 `Summary` 基本就是正文全文，比 `article` 长得多，**别当摘要截断**。 |
   | 4 | `Paging.NextOffset` **是字符串不是数字**（`"3"`） | 后端转成数字再给前端。 |
   | 5 | `collections` 与 `favlists` **没有 Paging**；`followees` / `contents` / `favlist_contents` 有 `Paging{IsEnd, Totals}` | 影响分页实现。 |
   | 6 | `creator_account_stats` 返回 Metrics / Audience / CreationCounts / Followers 等一大包 | 我们只取 Metrics 里的计数，其余不用。 |
   | 7 | `question_recommendations` 只返回 `{Title, Url}`，**没有 Paging** | 候选池深度有限，别指望翻页。 |
   - 上游统一信封 `{Code, Message, Data}`；`Code=0` 成功 / `10001` 参数缺失 / `30001` 秒级限流。
   - **这些细节记在契约的 `x-upstream` 段，后端在这一层抹平，不透给前端。**
+- **结论 5（回答队友的"是不是不能读知乎账号内容了"——能读）**：
+  | 阶段 | 鉴权 | 读谁的 | 状态 |
+  | --- | --- | --- | --- |
+  | 开发期（现在） | `Bearer <Access Secret>` + `X-Request-Timestamp` | Access Secret 所属账号 | **✅ 2026-11-17 实测 8 个端点全部 200** |
+  | 上线后（12-05 起） | 上面 + `X-OAuth-Token` | 任意登录用户 | ⏳ 卡 App ID / App Key 未发放 |
+  - **接口形状完全相同**，OAuth 只是多一个头指定"代表哪个用户" → **算法与前端零返工**。
+  - **OAuth 前提已满足**：官方 FAQ 要求"实名制『有手机号』+ 实名认证"，本账号已满足（D24 结论 3）→ 12-05 拿到凭证后不会再卡账号侧。
+  - **实测取到的真实数据量**（用于判断信号强弱）：关注 3 人 / 收藏夹 1 个含 9 条 / 创作 1 条（`pin`）/ 账号统计完整。
+    → **创作信号样本天然很弱**，所以行为对照的底线是**三个信号里至少两个独立可用**，收藏 + 关注是主力（`user_data` 额度 10000/天，几乎不心疼）。
+  - 结论已写成给队友的正式答复 → `docs/队友对齐清单.md` **零 H**。
 - **依据**：
   - 2026-11-17 17:0x 实测（`Authorization: Bearer <Access Secret>` + `X-Request-Timestamp`），调用了 quota / followees / collections / favlists / favlist_contents / contents / creator_account_stats / question_recommendations 八个端点。
   - D12（主路径与出处可回溯）、D14（桌宠是主体，卡片是产出物）、D19/D20（桌宠状态机）、D22（技术底座）、D24（额度口径）、官方检查第 7 条。
