@@ -64,6 +64,23 @@
     "not_in_v1": ["hot_list"],
     "not_in_v1_reason": "与“一个具体任务里的学习搭子”主线关联弱，预算要留给闭环"
   },
+  "taxonomy": {
+    "path": "contracts/taxonomy.json",
+    "version": "v0",
+    "owner": "nineanswerer",
+    "reviewer": "5zdz5",
+    "status": "初版（B14）——已用账号真实数据跑过并人工标注了基线，待与队友确认后冻结",
+    "topic_categories": ["tooling", "engineering", "ecosystem", "knowledge", "cognition", "career"],
+    "argument_structures": ["problem_solution", "definition", "contrast", "steps", "example"],
+    "rules": [
+      "主题分类用于收藏与关注；论证结构分类用于创作——两套不要混",
+      "命中 0 条落 unknown，是合法结果，不许硬塞",
+      "每条内容必须能指回原文 URL",
+      "改关键词表后必须跑 node server/scripts/classify-check.js 比人工标注基线",
+      "同分即弱结论：第一名与其它类同分时必须标 tied / tied_with，不能装作很确定",
+      "上游摘要会被截断：基于摘要的分类只覆盖原文一部分，提示里必须说明这一点"
+    ]
+  },
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
@@ -87,7 +104,8 @@
       "错误走统一信封，user_hint 必须是中文真实提示",
       "上游秒级限流（Code=30001）由后端退避重试，前端不制造重试风暴",
       "至少 2 个独立行为信号，断层才成立；不足时返回 insufficient，不许硬撑",
-      "后端只给渲染参数，前端负责渲染"
+      "后端只给渲染参数，前端负责渲染",
+      "样本不足、上游截断、同分竞争——三种情况都要在 user_hint / sample_note 里如实说出来"
     ]
   },
   "red_lines": {

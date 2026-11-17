@@ -1375,6 +1375,8 @@
           "category": { "type": "string", "description": "分类名，后端派生。分类体系待算法定稿，先按字符串处理。" },
           "count": { "type": "integer" },
           "ratio": { "type": "number", "description": "0—1，保留两位小数。" },
+          "score": { "type": "integer", "description": "该类里单条内容的最高命中分（标题 2 分 / 摘要 1 分）。跟第二名同分说明 primary 只是弱结论，前端要如实说明同分，不能装作很确定。" },
+          "tied_with": { "type": "array", "items": { "type": "string" }, "description": "与本类**同分**的其它类名。非空说明归类本身是弱结论（只是数组顺序取胜）。" },
           "evidence": {
             "type": "array",
             "items": { "$ref": "#/components/schemas/CategoryEvidence" }
@@ -1468,7 +1470,9 @@
                 "type": "object",
                 "properties": {
                   "primary": { "type": "string" },
-                  "summary": { "type": "string" }
+                  "summary": { "type": "string" },
+                  "tied": { "type": "boolean", "description": "true = 第一名与其它类**同分**，primary 只是数组顺序的产物，不能说成「集中在某类」。" },
+                  "tied_with": { "type": "array", "items": { "type": "string" }, "description": "与第一名同分的类目名。" }
                 }
               },
               { "type": "null" }
@@ -1540,7 +1544,9 @@
                   "traits": {
                     "type": "array",
                     "items": { "type": "string" }
-                  }
+                  },
+                  "tied": { "type": "boolean", "description": "true = primary 与其它结构**同分**，只是弱结论。" },
+                  "tied_with": { "type": "array", "items": { "type": "string" } }
                 }
               },
               { "type": "null" }
