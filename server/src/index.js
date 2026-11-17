@@ -1,0 +1,94 @@
+/**
+ * 「从心」后端入口。
+ *
+ * 技术底座（D22）：前端 + Node 单进程，**零数据库、零中间件**，
+ * 会话放进程内 Map。部署走知乎 AI Works 源码发布。
+ *
+ * 当前实现的接口（对应 contracts/api.json v0.2）：
+ *   GET  /api/quota
+ *   GET  /api/behavior/favorites
+ *   GET  /api/behavior/followees
+ *   GET  /api/behavior/contents
+ * 其余（tension / terrain / situation）在 P4 阶段实现。
+ */
+
+import express from 'express';
+import { config, assertConfig } from './config.js';
+import { toApiError } from './lib/errors.js';
+import { cacheStats } from './lib/cache.js';
+import { quotaRouter } from './routes/quota.js';
+import { behaviorRouter } from './routes/behavior.js';
+import { loadTaxonomy } from './taxonomy.js';
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '1mb' }));
+
+// 开发期跨域（前端 Vite 跑在别的端口）。生产由同域部署，不需要。
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Content-Type');
+    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    return next();
+  });
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    ok: true,
+    service: 'congxin-server',
+    cache: cacheStats(),
+    taxonomy_version: (() => {
+      try {
+        return loadTaxonomy().version;
+      } catch {
+        return null;
+      }
+    })(),
+    upstream_mode: config.oauthToken ? 'oauth' : 'access_secret',
+    time: new Date().toISOString(),
+  });
+});
+
+app.use(quotaRouter);
+app.use(behaviorRouter);
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: {
+      code: 'NOT_FOUND',
+      message: `没有这个接口：${req.method} ${req.path}`,
+      user_hint: '这个地址好像写错了',
+      retryable: false,
+      retry_after_ms: null,
+      upstream: null,
+      detail: null,
+    },
+  });
+});
+
+// 统一错误出口：**只暴露契约里的字段，不透栈**
+app.use((err, req, res, next) => {
+  const apiError = toApiError(err);
+  if (apiError.code === 'INTERNAL_ERROR') {
+    console.error('[server] 未处理异常：', err);
+  }
+  res.status(apiError.httpStatus).json(apiError.toBody());
+});
+
+try {
+  assertConfig();
+} catch (err) {
+  console.error(`[server] 启动自检失败：${err.message}`);
+  process.exit(1);
+}
+
+app.listen(config.port, () => {
+  console.log(`[server] 「从心」后端已启动：http://localhost:${config.port}`);
+  console.log(`[server] 上游鉴权模式：${config.oauthToken ? 'OAuth（登录用户）' : 'Access Secret（开发期自读）'}`);
+  console.log(`[server] 缓存 TTL：${config.cacheTtlMs}ms`);
+});
+
+export default app;

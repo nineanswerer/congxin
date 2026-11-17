@@ -1,0 +1,18 @@
+{
+  "name": "congxin-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "「从心」后端：知乎开放平台调用层 + 行为对照接口。零数据库、单进程。",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "smoke": "node scripts/smoke.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

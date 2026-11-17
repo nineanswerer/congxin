@@ -18,6 +18,7 @@
       9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
      10. post-checkout hook 是否带开工清单
      11. API 契约 api.json 是否存在、可解析、核心接口齐全、出处与 user_hint 必填
+     12. 分类体系 taxonomy.json 是否存在、可解析、类目字段齐全、unknown 兜底在位
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
@@ -108,7 +109,9 @@ if (-not (Test-Path -LiteralPath $agentsPath)) {
 
 # ---------------------------------------------------------------- 4. 密钥扫描
 $secretPatterns = @(
-    @{ Name = '赋值形式(secret/token/key/password)'; Regex = '(?i)(secret|token|api[_-]?key|password|passwd)\s*[:=]\s*["'']?[A-Za-z0-9_\-\.]{16,}' },
+    # 从 process.env 读取的写法（accessSecret: process.env.ZHIHU_ACCESS_SECRET）是安全的：
+    # 仓库里只存变量名，不存密钥。这类必须排除，否则 server/src/config.js 会被误报成泄露。
+    @{ Name = '赋值形式(secret/token/key/password)'; Regex = '(?i)(secret|token|api[_-]?key|password|passwd)\s*[:=]\s*["'']?(?!process\.env\.)[A-Za-z0-9_\-\.]{16,}' },
     @{ Name = 'sk- 前缀';  Regex = 'sk-[A-Za-z0-9]{16,}' },
     @{ Name = 'ghp_ 前缀'; Regex = 'gh[pousr]_[A-Za-z0-9]{20,}' },
     @{ Name = 'github_pat_ 前缀'; Regex = 'github_pat_[A-Za-z0-9_]{20,}' },
@@ -299,6 +302,35 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         }
     } catch {
         Add-Result 'FAIL' 'API 契约 api.json' ('解析失败：' + $_.Exception.Message)
+    }
+}
+
+# ---------------------------------------------------------------- 12. 分类体系契约完整性
+# 分类口径是跨两个人的接口：后端算、前端显示。口径改坏，前端就读不懂。
+$taxPath = Join-Path $Root 'contracts\taxonomy.json'
+if (-not (Test-Path -LiteralPath $taxPath)) {
+    Add-Result 'FAIL' '分类体系 taxonomy.json' '文件缺失'
+} else {
+    try {
+        $taxDoc = ([System.IO.File]::ReadAllText($taxPath)) | ConvertFrom-Json
+        $topicCats = @($taxDoc.topic_categories.categories)
+        $argStructs = @($taxDoc.argument_structures.structures)
+        $why = @()
+        if ($topicCats.Count -lt 5) { $why += "主题分类不足 5 类（实际 $($topicCats.Count)）" }
+        if ($argStructs.Count -lt 3) { $why += "论证结构不足 3 类（实际 $($argStructs.Count)）" }
+        # 每个类目必须带 id / name / description / keywords：前端要显示 name、要说清 description
+        $badTopic = @($topicCats | Where-Object { -not $_.id -or -not $_.name -or -not $_.description -or -not $_.keywords })
+        if ($badTopic.Count -gt 0) { $why += "有 $($badTopic.Count) 个主题分类缺 id/name/description/keywords" }
+        # unknown 兜底必须存在：关键词命中 0 条时不许硬塞进某一类
+        if (-not $taxDoc.matching.unknown.id) { $why += '缺少 unknown 兜底类目' }
+        if ([int]$taxDoc.matching.threshold -lt 1) { $why += '命中阈值 < 1，无关内容会被硬分进类' }
+        if ($why.Count -eq 0) {
+            Add-Result 'PASS' '分类体系 taxonomy.json' "$($topicCats.Count) 个主题类 / $($argStructs.Count) 个论证结构；unknown 兜底与阈值正常"
+        } else {
+            Add-Result 'FAIL' '分类体系 taxonomy.json' ($why -join ' | ')
+        }
+    } catch {
+        Add-Result 'FAIL' '分类体系 taxonomy.json' ('解析失败：' + $_.Exception.Message)
     }
 }
 
