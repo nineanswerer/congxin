@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>从心 · 静帧 2 · 2.5D 认知地图与断层</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg0: #0b0d13;
+    --bg1: #141824;
+    --line: rgba(255,255,255,.11);
+    --ink: #eef1f7;
+    --ink2: #a8b0c2;
+    --ink3: #6d7689;
+    --blue: #4a9eff;
+    --blue-dim: rgba(74,158,255,.16);
+    --amber: #ffb454;
+    --red: #ff6b6b;
+    --green: #5dd39e;
+  }
+  html, body { width: 1600px; height: 900px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(1100px 640px at 44% 4%, rgba(74,158,255,.16), transparent 62%),
+      radial-gradient(700px 480px at 10% 98%, rgba(255,180,84,.09), transparent 62%),
+      radial-gradient(700px 480px at 82% 96%, rgba(255,107,107,.10), transparent 62%),
+      linear-gradient(170deg, var(--bg0), var(--bg1));
+    color: var(--ink);
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", sans-serif;
+    position: relative;
+  }
+  .grain {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.03) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+  .topbar {
+    height: 74px; display: flex; align-items: center; justify-content: space-between;
+    padding: 0 44px; border-bottom: 1px solid var(--line); background: rgba(8,10,15,.4);
+    position: relative; z-index: 40;
+  }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  .logo { font-size: 26px; font-weight: 800; letter-spacing: 6px; }
+  .logo em { font-style: normal; color: var(--blue); }
+  .track { font-size: 13px; color: var(--ink3); letter-spacing: 1px; }
+  .topright { display: flex; align-items: center; gap: 14px; }
+  .pill {
+    font-size: 13px; color: var(--ink2); padding: 7px 15px; border-radius: 999px;
+    border: 1px solid var(--line); background: rgba(255,255,255,.045);
+  }
+  .pill.on { color: #cfe4ff; border-color: rgba(74,158,255,.55); background: var(--blue-dim); }
+  .pill .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 7px; vertical-align: 1px; }
+
+  .stage { position: relative; height: 826px; overflow: hidden; }
+
+  /* ---------- 2.5D 分层栈 ---------- */
+  .stack {
+    position: absolute; left: 0; top: 0; width: 1060px; height: 826px;
+    perspective: 1500px; perspective-origin: 46% 44%;
+  }
+  .layer {
+    position: absolute; border-radius: 18px; padding: 22px 26px;
+    transform-style: preserve-3d;
+    box-shadow: 0 30px 70px rgba(0,0,0,.52);
+  }
+  .layer::before {
+    content: ""; position: absolute; inset: 0; border-radius: 18px;
+    background: linear-gradient(180deg, rgba(255,255,255,.065), rgba(255,255,255,.022));
+    border: 1px solid var(--line);
+  }
+  .l-self {
+    left: 92px; top: 88px; width: 800px; height: 136px;
+    transform: translateZ(-70px) rotateX(12deg);
+    border: 1px solid rgba(74,158,255,.3);
+    background: linear-gradient(180deg, rgba(74,158,255,.10), rgba(74,158,255,.03));
+  }
+  .l-beh {
+    left: 62px; top: 250px; width: 860px; height: 236px;
+    transform: translateZ(0px) rotateX(12deg);
+    border: 1px solid rgba(255,180,84,.34);
+    background: linear-gradient(180deg, rgba(255,180,84,.11), rgba(255,180,84,.028));
+  }
+  .l-situ {
+    left: 92px; top: 552px; width: 800px; height: 138px;
+    transform: translateZ(70px) rotateX(12deg);
+    border: 1px dashed rgba(255,255,255,.24);
+    background: rgba(255,255,255,.028);
+  }
+  .l-self > *, .l-beh > *, .l-situ > * { position: relative; z-index: 2; }
+
+  .lname { display: flex; align-items: baseline; gap: 12px; }
+  .lname .t { font-size: 13px; letter-spacing: 4px; color: var(--ink3); }
+  .lname .n { font-size: 23px; font-weight: 800; letter-spacing: 3px; }
+  .lname .s { font-size: 12.5px; color: var(--ink3); margin-left: auto; letter-spacing: 1px; }
+  .l-self .lname .n { color: #bcdcff; }
+  .l-beh .lname .n { color: #ffd7a3; }
+  .l-situ .lname .n { color: var(--ink2); }
+
+  .row { display: flex; gap: 14px; margin-top: 18px; }
+  .blk {
+    border-radius: 12px; padding: 13px 16px; min-width: 0;
+    border: 1px solid rgba(255,255,255,.17);
+    background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.05));
+    box-shadow: 0 10px 24px rgba(0,0,0,.34);
+  }
+  .blk .bt { font-size: 16.5px; font-weight: 700; white-space: nowrap; }
+  .blk .bv { font-size: 13.5px; color: var(--ink2); margin-top: 5px; }
+  .blk.amber { border-color: rgba(255,180,84,.5); background: linear-gradient(180deg, rgba(255,180,84,.28), rgba(255,180,84,.09)); }
+  .blk.green { border-color: rgba(93,211,158,.45); background: linear-gradient(180deg, rgba(93,211,158,.25), rgba(93,211,158,.08)); }
+  .blk.blue  { border-color: rgba(74,158,255,.5);  background: linear-gradient(180deg, rgba(74,158,255,.26), rgba(74,158,255,.08)); }
+  .blk.ghost {
+    border-style: dashed; border-color: rgba(255,255,255,.22);
+    background: rgba(255,255,255,.035); box-shadow: none; flex: 1;
+  }
+  .blk.ghost .bt { color: var(--ink2); }
+  .blk.ghost .bv { color: var(--ink3); }
+
+  .mbti {
+    position: absolute; left: 30px; top: 58px; z-index: 3;
+    font-size: 60px; font-weight: 900; letter-spacing: 3px; color: #fff;
+    text-shadow: 0 0 38px rgba(74,158,255,.7);
+  }
+  .traits { position: absolute; left: 186px; top: 74px; z-index: 3; display: flex; gap: 9px; }
+  .trait {
+    font-size: 13.5px; padding: 7px 13px; border-radius: 999px;
+    border: 1px solid rgba(74,158,255,.45); background: var(--blue-dim); color: #cfe4ff;
+  }
+
+  /* ---------- 断层 ---------- */
+  .crack {
+    position: absolute; left: 40px; top: 486px; width: 940px; height: 66px; z-index: 22;
+    pointer-events: none;
+  }
+  .crack svg { width: 100%; height: 100%; overflow: visible; }
+  .crack .halo { filter: drop-shadow(0 0 26px rgba(255,107,107,.9)) drop-shadow(0 0 60px rgba(255,107,107,.45)); }
+
+  .cracktag {
+    position: absolute; z-index: 26; font-size: 13px; letter-spacing: 2px;
+    color: #ffc9c9; border: 1px solid rgba(255,107,107,.55); background: rgba(60,20,24,.9);
+    border-radius: 8px; padding: 6px 13px;
+  }
+  .ct-l { left: 56px; top: 496px; }
+  .ct-r { left: 790px; top: 496px; }
+
+  .quote {
+    position: absolute; left: 930px; top: 520px; z-index: 25; width: 600px;
+    background: linear-gradient(180deg, rgba(30,21,25,.96), rgba(18,16,20,.96));
+    border: 1px solid rgba(255,107,107,.45); border-radius: 14px; padding: 16px 20px;
+    box-shadow: 0 22px 50px rgba(0,0,0,.6);
+  }
+  .quote .qq { font-size: 18px; line-height: 1.6; font-weight: 600; }
+  .quote .who { font-size: 12.5px; color: var(--ink3); margin-top: 9px; letter-spacing: .3px; }
+  .quote .who b { color: var(--red); font-weight: 700; }
+
+  /* ---------- 右侧解释 ---------- */
+  .side {
+    position: absolute; right: 52px; top: 92px; width: 388px; z-index: 30;
+    background: rgba(13,16,23,.86); border: 1px solid var(--line); border-radius: 16px;
+    padding: 22px 24px;
+    box-shadow: 0 26px 60px rgba(0,0,0,.5);
+  }
+  .side h3 { font-size: 13.5px; letter-spacing: 3px; color: var(--ink3); font-weight: 600; }
+  .side .f { margin-top: 16px; padding-left: 16px; border-left: 3px solid var(--blue); }
+  .side .f.red { border-left-color: var(--red); }
+  .side .f.amber { border-left-color: var(--amber); }
+  .side .ft { font-size: 15.5px; font-weight: 700; margin-bottom: 7px; }
+  .side .fd { font-size: 13.5px; line-height: 1.78; color: var(--ink2); }
+  .side .fd b { color: var(--ink); }
+
+  .strip {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 108px;
+    border-top: 1px solid var(--line); background: rgba(7,9,13,.55);
+    display: flex; align-items: center; justify-content: space-between; padding: 0 44px;
+    z-index: 40;
+  }
+  .stat { display: flex; flex-direction: column; gap: 6px; }
+  .stat .n { font-size: 26px; font-weight: 800; }
+  .stat .n i { font-style: normal; font-size: 15px; color: var(--ink3); font-weight: 500; margin-left: 3px; }
+  .stat .l { font-size: 13px; color: var(--ink3); letter-spacing: 1px; }
+  .stat.hl .n { color: var(--blue); }
+  .stat.amber .n { color: var(--amber); }
+  .stat.red .n { color: var(--red); }
+  .sep { width: 1px; height: 44px; background: var(--line); }
+  .proof { font-size: 12.5px; color: var(--ink3); line-height: 1.7; text-align: right; }
+  .proof b { color: var(--ink2); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="logo">从<em>心</em></div>
+    <div class="track">AI × 陪伴与交互 · 知乎黑客松 S3</div>
+  </div>
+  <div class="topright">
+    <div class="pill"><span class="dot"></span>知乎数据已接入</div>
+    <div class="pill on">照照镜子</div>
+    <div class="pill">我的卡片 12</div>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="stack">
+    <!-- 上层：说的你 -->
+    <div class="layer l-self">
+      <div class="lname"><span class="t">第一层</span><span class="n">说的你</span><span class="s">前端问卷计分 · 6 题</span></div>
+      <div class="mbti">INTJ</div>
+      <div class="traits"><span class="trait">体系化</span><span class="trait">长期主义</span><span class="trait">要先理顺逻辑</span></div>
+    </div>
+
+    <!-- 中层：做的你 -->
+    <div class="layer l-beh">
+      <div class="lname"><span class="t">第二层</span><span class="n">做的你</span><span class="s">知乎收藏 · 关注 · 创作</span></div>
+      <div class="row">
+        <div class="blk amber"><div class="bt">工具与环境</div><div class="bv">4 / 9 条 · 44%</div></div>
+        <div class="blk amber"><div class="bt">工程与方法</div><div class="bv">2 / 9 条 · 22%</div></div>
+        <div class="blk green"><div class="bt">跨度 778 天</div><div class="bv">却只集中在 6 天</div></div>
+      </div>
+      <div class="row">
+        <div class="blk ghost"><div class="bt">排前两类的 6 条，全是「怎么立刻上手」</div><div class="bv">装环境 · 跟教程 · 跟着做一遍</div></div>
+      </div>
+    </div>
+
+    <!-- 断层 -->
+    <div class="crack">
+      <svg viewBox="0 0 940 96" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="cg" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ff6b6b" stop-opacity="0"/>
+            <stop offset="18%" stop-color="#ff6b6b" stop-opacity=".9"/>
+            <stop offset="50%" stop-color="#ffb454" stop-opacity="1"/>
+            <stop offset="82%" stop-color="#ff6b6b" stop-opacity=".9"/>
+            <stop offset="100%" stop-color="#ff6b6b" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        <path class="halo" fill="none" stroke="url(#cg)" stroke-width="9" stroke-linecap="round"
+          d="M 40 48 L 210 46 L 330 22 L 430 66 L 540 28 L 650 58 L 790 36 L 900 44" />
+        <path fill="none" stroke="rgba(255,255,255,.62)" stroke-width="2.5" stroke-linecap="round"
+          d="M 40 48 L 210 46 L 330 22 L 430 66 L 540 28 L 650 58 L 790 36 L 900 44" />
+      </svg>
+    </div>
+
+    <!-- 下层：情境下的你 -->
+    <div class="layer l-situ">
+      <div class="lname"><span class="t">第三层</span><span class="n">情境下的你</span><span class="s">答完情境题才长出来</span></div>
+      <div class="row" style="margin-top:14px">
+        <div class="blk ghost"><div class="bt">这一层还是空的</div><div class="bv">不预写结论——用你自己的回答填</div></div>
+        <div class="blk blue" style="opacity:.32"><div class="bt">＋ 你的新地块</div><div class="bv">答完情境题后在这里生长</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cracktag ct-l">断层 · 自述 vs 行为</div>
+  <div class="cracktag ct-r">强度 0.72</div>
+
+  <div class="quote">
+    <div class="qq">「我的收藏夹里有 200 篇 PDF，一篇都没用上。」</div>
+    <div class="who">—— 你自己在知乎创作里写的（<b>原话</b>）· zhihu.com/pin/2105715790947292364</div>
+  </div>
+
+  <div class="side">
+    <h3>桌宠看到的断层</h3>
+    <div class="f">
+      <div class="ft">你说的：体系化、长期主义</div>
+      <div class="fd">「先想清楚再动手，喜欢把事情拆成有结构的一步步。」</div>
+    </div>
+    <div class="f red">
+      <div class="ft">你做的：立刻上手</div>
+      <div class="fd">收藏里排前两类的 <b>6 条</b>（工具与环境 4 + 工程与方法 2）全是装环境、跟教程；而且这 9 条散在 <b>778 天里的 6 天</b>——不是持续探索，是一遇任务才动手。</div>
+    </div>
+    <div class="f amber">
+      <div class="ft">强度 0.72 · 置信度随样本走</div>
+      <div class="fd">3 个独立信号（收藏 / 关注 / 创作）。<b>创作只有 1 条</b>，样本不足这一层会在界面上明说，不会装作很确定。</div>
+    </div>
+  </div>
+</div>
+
+<div class="strip">
+  <div class="stat hl"><div class="n">9<i>条收藏</i></div><div class="l">真实账号数据</div></div>
+  <div class="sep"></div>
+  <div class="stat amber"><div class="n">44<i>% 工具与环境</i></div><div class="l">收藏分类 · 排第一</div></div>
+  <div class="sep"></div>
+  <div class="stat red"><div class="n">778<i>天 / 集中在 6 天</i></div><div class="l">任务驱动型收藏</div></div>
+  <div class="sep"></div>
+  <div class="stat"><div class="n">3<i>个独立行为信号</i></div><div class="l">≥2 才算断层成立</div></div>
+  <div class="sep"></div>
+  <div class="proof">
+    数字与引文均为 <b>2026-11-17 真实账号实测</b>（node server/scripts/smoke.js 可复现）<br />
+    断层强度与置信度为<b>后端派生参数</b>，前端只负责渲染
+  </div>
+</div>
+</body>
+</html>
