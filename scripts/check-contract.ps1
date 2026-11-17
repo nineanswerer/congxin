@@ -17,6 +17,7 @@
       8. 是否已有交接记录（WARN）
       9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
      10. post-checkout hook 是否带开工清单
+     11. API 契约 api.json 是否存在、可解析、核心接口齐全、出处与 user_hint 必填
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
@@ -251,6 +252,46 @@ if (-not (Test-Path -LiteralPath $poHook)) {
         Add-Result 'FAIL' 'post-checkout hook' '内容里没有开工清单'
     } else {
         Add-Result 'PASS' 'post-checkout hook' 'pull / clone 后会自动打印开工清单'
+    }
+}
+
+# ---------------------------------------------------------------- 11. API 契约完整性
+# 契约不是文档，是约束。接口形状被改坏时，自检必须拦下来。
+$apiPath = Join-Path $Root 'contracts\api.json'
+if (-not (Test-Path -LiteralPath $apiPath)) {
+    Add-Result 'FAIL' 'API 契约 api.json' '文件缺失'
+} else {
+    try {
+        $apiDoc = ([System.IO.File]::ReadAllText($apiPath)) | ConvertFrom-Json
+        $requiredPaths = @(
+            '/api/behavior/favorites',
+            '/api/behavior/followees',
+            '/api/behavior/contents',
+            '/api/situation/question',
+            '/api/quota'
+        )
+        $missingPaths = @()
+        foreach ($rp in $requiredPaths) {
+            if (-not $apiDoc.paths.PSObject.Properties[$rp]) { $missingPaths += $rp }
+        }
+        # 三条硬规则的机器可判定部分
+        $sourceRequired = @($apiDoc.components.schemas.SourceRef.required) -contains 'question_url'
+        $hintRequired = @($apiDoc.components.schemas.ErrorResponse.properties.error.required) -contains 'user_hint'
+        $emptyFlag = @($apiDoc.components.schemas.FavoritesSignal.required) -contains 'empty'
+
+        $why = @()
+        if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
+        if (-not $sourceRequired) { $why += 'SourceRef 未把 question_url 设为必填' }
+        if (-not $hintRequired) { $why += '错误信封未把 user_hint 设为必填' }
+        if (-not $emptyFlag) { $why += '信号结构未把 empty 设为必填（空数据与失败无法区分）' }
+
+        if ($why.Count -eq 0) {
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填"
+        } else {
+            Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
+        }
+    } catch {
+        Add-Result 'FAIL' 'API 契约 api.json' ('解析失败：' + $_.Exception.Message)
     }
 }
 

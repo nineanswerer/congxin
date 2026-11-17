@@ -498,3 +498,47 @@
   - **技术栈建议**：前端 React + Vite + TypeScript（渲染路线已定 SVG + Framer Motion，D11）；后端 Node 20 + Express 单进程零数据库（D15 / D22）。**API 契约今晚出 `contracts/api.json`**，队友对着 mock 开发，不等后端。
 - **状态**：已定（阶段计划已写入 `docs/status.md`；分工话术写入 `docs/队友对齐清单.md` 零 F，**分工本身待今天下午与队友敲定**）
 
+---
+
+## D28 · 产品级 API 契约 v0 冻结（`contracts/api.json`，方向无关部分）
+
+- **日期**：2026-11-17
+- **触发**：用户直接指示——「先把 contracts/api.json 写出来：三个行为对照接口 + 情境题生成接口，两个方向都用得上，早写早让他对着 mock 开发」。
+- **结论 1（格式）**：契约写成 **OpenAPI 3.1**，落 `contracts/api.json`。
+  - **理由**：队友前端可以**零手写 mock**——`openapi-typescript` 出类型、`@mswjs/openapi` 起 mock 服务、`prism` 起独立 mock 端。契约格式选错，队友就得手抄一遍字段，那才是真返工。
+  - 与 D25「上下文四层」一致：接口形状属于**跨环境会静默出错**的东西，必须机器可读、可自动校验。
+- **结论 2（五个路径，方向无关部分已冻结）**：
+  | 路径 | 作用 | 上游 |
+  | --- | --- | --- |
+  | `GET /api/behavior/favorites` | 收藏信号（收藏跨度 + 结构占比） | `user/collections` + `user/favlists` |
+  | `GET /api/behavior/followees` | 关注信号（关注对象类型分布） | `user/followees` |
+  | `GET /api/behavior/contents` | 创作信号（论证结构 + 活跃度） | `user/contents` + `user/creator_account_stats` |
+  | `POST /api/situation/question` | 情境题生成（每题必带知乎出处） | `user/question_recommendations` + `content/question_answers` + 直答 |
+  | `GET /api/quota` | 额度透传 | `quota` |
+  - **这五个与产品方向无关** → **B13 方向拍板不阻塞并行开工**。拍板后只在派生层增减（`tension` / `terrain`），核心形状不变。
+  - 卡片与情境题**共用同一个 schema**（`SourceCard`，用 `kind` 区分 `knowledge_card` / `situation_question`）——两个方向共用一套渲染逻辑。
+- **结论 3（三条硬规则，写进契约并由自检机器校验）**：
+  1. **出处必填**：`source` 缺失即报错，**不生成没有出处的内容**（AGENTS.md 第 3 节第 4 条）。
+  2. **空数据 ≠ 失败**：空数据走 200 + `empty: true` + `empty_notice`，前端显示真实提示；失败走 4xx/5xx 错误信封。
+  3. **失败必须是真话**：统一错误信封，`user_hint` 是**中文、给人看的**，不允许空字符串或英文原始报错（官方检查第 7 条）。
+  - 这三条已加进 `scripts/check-contract.ps1` 第 11 项，**改坏契约会被自检拦下**，不是靠自觉。
+- **结论 4（今日实测得到的上游事实，其中三处纠正此前记录）**：
+  | # | 事实 | 说明 |
+  | --- | --- | --- |
+  | 1 | ⚠️ **收藏类接口的真实路径是 `/api/v1/user/collections`（近期收藏）、`/api/v1/user/favlists`（收藏夹列表）、`/api/v1/user/favlist_contents`（某收藏夹内容）** | **纠正此前记录的 `/api/v1/user/favorites/lists` 与 `/api/v1/user/favorites/recent`——这两个路径实测 404。** 路径是从 zhihu-cli 二进制里反查出来的，不是猜的。 |
+  | 2 | ⚠️ **上游有秒级限流**：`Code=30001 second limit exceeded`，间隔 3 秒重试即成功 | **新发现**。后端必须串行化 + 退避重试 + 缓存 + 去重；前端看到的是 `ZHIHU_RATE_LIMITED`，不许自己重试风暴。 |
+  | 3 | ⚠️ **`ContentType` 是必填**：不传上游直接返回 `Code=10001 ContentType is required` | **纠正**此前"可选"的印象。后端要默认补 `all`。 |
+  | 4 | `Paging.NextOffset` **是字符串不是数字**（`"3"`） | 后端转成数字再给前端。 |
+  | 5 | `collections` 与 `favlists` **没有 Paging**；`followees` / `contents` / `favlist_contents` 有 `Paging{IsEnd, Totals}` | 影响分页实现。 |
+  | 6 | `creator_account_stats` 返回 Metrics / Audience / CreationCounts / Followers 等一大包 | 我们只取 Metrics 里的计数，其余不用。 |
+  | 7 | `question_recommendations` 只返回 `{Title, Url}`，**没有 Paging** | 候选池深度有限，别指望翻页。 |
+  - 上游统一信封 `{Code, Message, Data}`；`Code=0` 成功 / `10001` 参数缺失 / `30001` 秒级限流。
+  - **这些细节记在契约的 `x-upstream` 段，后端在这一层抹平，不透给前端。**
+- **依据**：
+  - 2026-11-17 17:0x 实测（`Authorization: Bearer <Access Secret>` + `X-Request-Timestamp`），调用了 quota / followees / collections / favlists / favlist_contents / contents / creator_account_stats / question_recommendations 八个端点。
+  - D12（主路径与出处可回溯）、D14（桌宠是主体，卡片是产出物）、D19/D20（桌宠状态机）、D22（技术底座）、D24（额度口径）、官方检查第 7 条。
+  - 方案评估 §3.2（行为数据拿得到、OAuth 后形状相同不返工）、§5.2（保内核换形态）。
+- **未冻结（等 B13）**：`tension`（自述 vs 行为的张力）、`terrain`（三层认知地形结构）两个派生接口是否存在、以什么形状存在；知识卡片产出物是否独立成 `/api/card`。三者都复用 `SourceCard` 与通用信封，**前端可先把消费侧留好接口**。
+- **状态**：**已定（方向无关部分冻结，v0）**；派生接口待 B13 后追加。
+  - `contracts/CONTRACTS.md` 与 `contracts/contract.json` 已同批更新（该目录的变更规则要求同一次提交改三处）。
+

@@ -21,6 +21,32 @@
 | `zhihu_api` | 主路径 / 兜底 / 首版不做 | 低频 |
 | `red_lines` | 合规红线，**不可放宽** | 不变 |
 | `governance` | 协作机制参数（上下文四层、commit 规范） | 中频 |
+| [`api.json`](api.json) | **产品级接口契约**（OpenAPI 3.1）：三个行为对照接口 + 情境题生成接口 + 通用信封 + 桌宠状态机 | 中频，方向无关部分已冻结 |
+
+## 接口契约（`api.json`）
+
+[`api.json`](api.json) 是**我们自己的后端**对外的接口形状，写成 **OpenAPI 3.1**，前端可以直接
+`openapi-typescript` 出类型、`@mswjs/openapi` 起 mock，**不需要手写 mock，也不需要知道知乎开放平台的任何细节**。
+
+| 接口 | 作用 | 上游 |
+| --- | --- | --- |
+| `GET /api/behavior/favorites` | 收藏信号（收藏跨度 + 结构占比） | `user/collections` + `user/favlists` |
+| `GET /api/behavior/followees` | 关注信号（关注对象类型分布） | `user/followees` |
+| `GET /api/behavior/contents` | 创作信号（论证结构 + 活跃度） | `user/contents` + `user/creator_account_stats` |
+| `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | `user/question_recommendations` + `content/question_answers` + 直答 |
+| `GET /api/quota` | 额度透传 | `quota` |
+
+**这四个核心接口与产品方向无关**，所以方向拍板（B13）不阻塞并行开工。拍板后只会在派生层增减
+（`tension` / `terrain`），核心形状不变。
+
+三条硬规则（对应 `AGENTS.md` 第 3 节与官方提交前检查第 7 条）：
+
+1. **不生成没有出处的内容** —— `source` 必填，拿不到真实问题标题 + URL + 原回答链接就报错。
+2. **空数据 ≠ 失败** —— 空数据走 200 + `empty: true` + `empty_notice`，前端显示真实提示。
+3. **失败必须是真话** —— 统一错误信封，`user_hint` 是中文、给人看的，不允许空字符串或英文原始报错。
+
+> 上游的实测细节（`Code=10001` 参数缺失、`Code=30001` 秒级限流、`NextOffset` 是字符串）记在
+> `api.json` 的 `x-upstream` 段，**后端要在这一层抹平，不要透给前端**。
 
 ## 不可变事实（人读）
 

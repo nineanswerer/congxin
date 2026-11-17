@@ -1,0 +1,1428 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "从心 · 产品级 API 契约",
+    "version": "0.1.0",
+    "summary": "知乎黑客松 S3 参赛项目「从心」的前后端接口契约（方向无关部分已冻结）。",
+    "description": "## 这份文档是干什么的\n\n它是**我们自己的后端**对外的接口形状。前端只对着这份文档开发，**不需要知道知乎开放平台的任何细节**（字段名大小写混用、NextOffset 可能是字符串、缺参数返回 Code=10001 等等，全部在后端抹平）。\n\n## 覆盖的接口\n\n| 接口 | 作用 | 原方向（学习桌宠） | 新方向（认·清认知地形） |\n| --- | --- | --- | --- |\n| `GET /api/behavior/favorites` | 收藏信号 | 用「你收藏了什么」佐证卡片主题 | 「做的你」层的行为地貌 |\n| `GET /api/behavior/followees` | 关注信号 | 佐证你在关注哪类知识 | 「做的你」层的关注结构 |\n| `GET /api/behavior/contents` | 创作信号 | 佐证你的表达风格 | 「做的你」层的论证结构 |\n| `POST /api/situation/question` | 情境题生成 | 改造成「你被问到一个真问题」 | 情境题 = 地形生长的单元 |\n| `GET /api/quota` | 额度透传 | 同左 | 同左 |\n\n**这四个核心接口在两个方向下都用得上**，所以它们与方向拍板（B13）无关，可以现在就并行开工。\n\n## 三条硬规则（写进实现，别绕过）\n\n1. **不生成没有出处的内容。** 情境题与知识卡片的 `source` 字段必填。拿不到知乎真实问题标题 + URL + 原回答链接，就**报错**，绝不编一条题。\n2. **空数据 ≠ 失败。** 空数据返回 HTTP 200 + `items: []` + `empty: true` + `empty_notice`，前端要显示真实提示（比如「你还没有收藏内容」），不能显示错误弹窗，更不能塞假数据。\n3. **失败必须是真话。** 4xx/5xx 一律走统一错误信封，带 `user_hint`（中文、给人看的），且带上游原始 `code`/`message`。官方提交前检查第 7 条查的就是这个。\n\n## 还差什么（不阻塞前端）\n\n`tension`（自述 vs 行为的张力）与 `terrain`（三层认知地形结构）两个派生接口**暂不定稿**——它们是否存在、以什么形状存在，取决于方向拍板。目前的约定是：它们复用本文档的 `SourceCard` 与通用信封，**前端先把消费侧留好接口，数据来了直接接**。"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8787",
+      "description": "本地开发后端（真实端口由 server/ 决定，契约不绑死端口）"
+    }
+  ],
+  "tags": [
+    { "name": "behavior", "description": "行为对照：收藏 / 关注 / 创作三个信号" },
+    { "name": "situation", "description": "情境题生成" },
+    { "name": "platform", "description": "平台状态（额度）" }
+  ],
+  "paths": {
+    "/api/behavior/favorites": {
+      "get": {
+        "tags": ["behavior"],
+        "operationId": "getBehaviorFavorites",
+        "summary": "收藏信号",
+        "description": "读「我收藏了什么」，产出**收藏跨度**与**收藏结构占比**。\n\n用于行为对照的第一个信号：一个人收藏什么，比他说自己是什么人更接近他实际在做的事。\n\n**空数据**：没收藏过任何内容时返回 200 + `items: []` + `empty: true` + `empty_notice`，前端显示提示，不要报错。",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 },
+            "description": "返回条数。上游单次上限 50。"
+          },
+          {
+            "name": "include_favlist_detail",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "boolean", "default": true },
+            "description": "是否逐个收藏夹取条目以得到 `favlists[].item_count`。关掉可省掉 N 次上游调用。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "收藏信号",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FavoritesSignalResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "signal": "favorites",
+                        "collected_count": 9,
+                        "span": {
+                          "earliest_fav_time": 1766229000,
+                          "latest_fav_time": 1766229000,
+                          "span_days": 0,
+                          "distinct_days": 1
+                        },
+                        "category_distribution": [
+                          {
+                            "category": "技术实践",
+                            "count": 4,
+                            "ratio": 0.44,
+                            "evidence": [
+                              {
+                                "title": "软件测试笔记（上）：隐藏测试",
+                                "url": "https://zhuanlan.zhihu.com/p/361291526"
+                              }
+                            ]
+                          }
+                        ],
+                        "favlists": [
+                          {
+                            "token": "931246227",
+                            "title": "我的收藏",
+                            "url": "https://www.zhihu.com/collection/931246227",
+                            "is_public": false,
+                            "item_count": 9
+                          }
+                        ],
+                        "items": [
+                          {
+                            "content_type": "article",
+                            "title": "软件测试笔记（上）：隐藏测试",
+                            "summary": "1 隐藏测试简介……",
+                            "url": "https://zhuanlan.zhihu.com/p/361291526",
+                            "author": {
+                              "name": "kgkdfgjdfgdf",
+                              "url": "https://www.zhihu.com/people/blue-69-47",
+                              "headline": "null"
+                            },
+                            "created_at": 1617170726,
+                            "fav_time": 1766229000,
+                            "engagement": {
+                              "like_count": 16,
+                              "comment_count": 0,
+                              "favorite_count": 50
+                            },
+                            "favlists": [
+                              {
+                                "token": "931246227",
+                                "title": "我的收藏",
+                                "url": "https://www.zhihu.com/collection/931246227"
+                              }
+                            ]
+                          }
+                        ],
+                        "empty": false,
+                        "empty_notice": null
+                      },
+                      "meta": {
+                        "source": "zhihu:user.collections+user.favlists",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": {
+                          "api_id": "user_data",
+                          "total": 10000,
+                          "used": 3,
+                          "remaining": 9997
+                        },
+                        "warnings": []
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "空数据（不是错误）",
+                    "value": {
+                      "data": {
+                        "signal": "favorites",
+                        "collected_count": 0,
+                        "span": null,
+                        "category_distribution": [],
+                        "favlists": [],
+                        "items": [],
+                        "empty": true,
+                        "empty_notice": "你还没有收藏内容。收藏几条知乎内容之后，这里会显示你的收藏结构。"
+                      },
+                      "meta": {
+                        "source": "zhihu:user.collections",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "504": { "$ref": "#/components/responses/Timeout" }
+        },
+        "x-upstream": {
+          "quota_class": "user_data",
+          "verified": "2026-11-17 17:0x 实测（Authorization: Bearer <Access Secret> + X-Request-Timestamp）",
+          "calls": [
+            {
+              "path": "/api/v1/user/collections",
+              "method": "GET",
+              "query": { "Offset": "int", "Limit": "int" },
+              "maps_to": "items[]",
+              "note": "近期收藏。**这个接口没有 Paging**，只代表近期，不是完整收藏历史。"
+            },
+            {
+              "path": "/api/v1/user/favlists",
+              "method": "GET",
+              "query": { "Offset": "int", "Limit": "int" },
+              "maps_to": "favlists[]",
+              "note": "收藏夹列表。**没有 Paging**，且不能保证遍历全部收藏夹。"
+            },
+            {
+              "path": "/api/v1/user/favlist_contents",
+              "method": "GET",
+              "query": { "FavlistUrlToken": "string（必填）", "Offset": "int", "Limit": "int" },
+              "maps_to": "favlists[].item_count",
+              "note": "逐收藏夹取条目。**Paging.NextOffset 是字符串不是数字**，后端要转。"
+            }
+          ]
+        }
+      }
+    },
+    "/api/behavior/followees": {
+      "get": {
+        "tags": ["behavior"],
+        "operationId": "getBehaviorFollowees",
+        "summary": "关注信号",
+        "description": "读「我关注了谁」，产出**关注对象类型分布**与**关注焦点**。\n\n关注列表是「这个人持续把注意力放在哪里」最直接的证据。",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 0, "default": 0 },
+            "description": "分页偏移。上游 `Data.Paging` 有 `IsEnd` / `Totals`，有下一页时带 `NextOffset`。"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "关注信号",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/FolloweesSignalResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "signal": "followees",
+                        "followee_count": 3,
+                        "category_distribution": [
+                          {
+                            "category": "技术教育",
+                            "count": 2,
+                            "ratio": 0.67,
+                            "evidence": [
+                              {
+                                "name": "小朱",
+                                "url": "https://www.zhihu.com/people/xiaozhongjiaoyu",
+                                "headline": "Learning by doing"
+                              }
+                            ]
+                          }
+                        ],
+                        "focus": {
+                          "primary": "技术教育",
+                          "summary": "关注集中在技术教育与机器人竞赛，动手实践取向明显。"
+                        },
+                        "items": [
+                          {
+                            "name": "小朱",
+                            "url_token": "xiaozhongjiaoyu",
+                            "url": "https://www.zhihu.com/people/xiaozhongjiaoyu",
+                            "avatar_url": "https://pic1.zhimg.com/50/v2-048d07b0cfc3e433d74a22027074b66e_l.jpg",
+                            "headline": "Learning by doing",
+                            "gender": 2,
+                            "follower_count": 2066,
+                            "category": "技术教育"
+                          }
+                        ],
+                        "empty": false,
+                        "empty_notice": null
+                      },
+                      "meta": {
+                        "source": "zhihu:user.followees",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": {
+                          "api_id": "user_data",
+                          "total": 10000,
+                          "used": 4,
+                          "remaining": 9996
+                        },
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        },
+        "x-upstream": {
+          "quota_class": "user_data",
+          "verified": "2026-11-17 17:0x 实测",
+          "calls": [
+            {
+              "path": "/api/v1/user/followees",
+              "method": "GET",
+              "query": { "Offset": "int", "Limit": "int" },
+              "maps_to": "items[]",
+              "note": "上游字段：Fullname / UrlToken / Url / AvatarUrl / Headline / Gender / FollowerCount；Paging{IsEnd,Totals}"
+            }
+          ]
+        }
+      }
+    },
+    "/api/behavior/contents": {
+      "get": {
+        "tags": ["behavior"],
+        "operationId": "getBehaviorContents",
+        "summary": "创作信号",
+        "description": "读「我写过什么」，产出**论证结构**与**创作活跃度**。\n\n这是三个信号里最弱的一个（样本可能为 0），所以**不能单独作为对照依据**——底线是三个信号里至少有两个独立可用，否则「断层」会退化成「自述 vs 自述」。",
+        "parameters": [
+          {
+            "name": "content_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["all", "answer", "article", "zvideo", "pin", "question"],
+              "default": "all"
+            },
+            "description": "上游参数名是 `ContentType`，**必填**——不传上游直接返回 `Code=10001 ContentType is required`。后端要默认补 `all`。"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "创作信号",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ContentsSignalResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回（有创作时）",
+                    "value": {
+                      "data": {
+                        "signal": "contents",
+                        "content_totals": {
+                          "answer": 0,
+                          "article": 0,
+                          "video": 0,
+                          "pin": 0,
+                          "question": 0,
+                          "all": 0
+                        },
+                        "activity": {
+                          "publish_count": 1,
+                          "view_count": 38,
+                          "upvote_count": 2,
+                          "comment_count": 0,
+                          "active_days": 2
+                        },
+                        "argument_structure": {
+                          "primary": "步骤式",
+                          "distribution": [],
+                          "traits": ["先定义问题再给路径", "以个人实践作证据"]
+                        },
+                        "items": [],
+                        "empty": true,
+                        "empty_notice": "你还没有公开发布的内容，创作信号本次不可用。行为对照还剩收藏与关注两个信号。"
+                      },
+                      "meta": {
+                        "source": "zhihu:user.contents+user.creator_account_stats",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": {
+                          "api_id": "creator",
+                          "total": 500,
+                          "used": 2,
+                          "remaining": 498
+                        },
+                        "warnings": ["content_signal_unavailable"]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        },
+        "x-upstream": {
+          "quota_class": "creator",
+          "verified": "2026-11-17 17:0x 实测",
+          "calls": [
+            {
+              "path": "/api/v1/user/contents",
+              "method": "GET",
+              "query": { "ContentType": "string（必填）", "Offset": "int", "Limit": "int" },
+              "maps_to": "items[]",
+              "note": "上游只给标题与摘要，**不要把 Summary 当原文**。"
+            },
+            {
+              "path": "/api/v1/user/creator_account_stats",
+              "method": "GET",
+              "query": {},
+              "maps_to": "activity",
+              "note": "上游返回 Metrics / Audience / CreationCounts / Followers 等一大包，我们只取 Metrics 里的计数。"
+            }
+          ]
+        }
+      }
+    },
+    "/api/situation/question": {
+      "post": {
+        "tags": ["situation"],
+        "operationId": "postSituationQuestion",
+        "summary": "情境题生成",
+        "description": "生成一道**有知乎出处的**情境题。\n\n链路（已实测可行，2026-11-17）：\n\n```\n问题发现  GET  /api/v1/user/question_recommendations?Query=<主题>&Count=N\n   ↓      → 真实问题标题 + 完整 URL\n回答摘要  GET  /api/v1/content/question_answers?QuestionUrl=<完整URL>&Offset=0&Limit=N\n   ↓      → 真实回答摘要 + 原回答链接\n情境题生成 POST /v1/chat/completions (zhida-fast-1p5 | zhida-thinking-1p5)\n   ↓      → 把上面两段真实材料改写成情境题\n```\n\n⚠️ **直答是「改写者」不是「检索者」。** `zhida-agent` 实测两次都明确回答「我无法访问知乎站内的问题列表」，返回的是自编题面、**零个** `zhihu.com/question/...` 链接。因此**出处字段一律来自前两步上游接口，不由模型生成**；模型只负责把真实材料改写成题面。\n\n⚠️ 拿不到出处就**报错**，不返回没有 `source` 的题。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SituationQuestionRequest" },
+              "examples": {
+                "default": {
+                  "summary": "以 MBTI 主题生成情境题",
+                  "value": {
+                    "topic": "MBTI",
+                    "layer": "situational",
+                    "count": 1,
+                    "answered_sources": [],
+                    "self_report": { "type": "INTJ" },
+                    "difficulty": "medium"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "情境题（每题都带出处）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SituationQuestionResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "questions": [
+                          {
+                            "id": "src_7f2a1c9e4b6d0358",
+                            "kind": "situation_question",
+                            "title": "同类型的人更合得来吗？",
+                            "content": null,
+                            "stem": "你和一个跟你 MBTI 完全相同的朋友同时遇到一个必须由一个人让步的冲突。你会让，还是不让？",
+                            "options": [
+                              { "key": "A", "label": "让，因为对方更在意这段关系" },
+                              { "key": "B", "label": "不让，因为让步会破坏我坚持的原则" }
+                            ],
+                            "difficulty": "medium",
+                            "layer": "situational",
+                            "targets": {
+                              "dimension": "Fi",
+                              "traits": ["内倾情感", "价值优先"]
+                            },
+                            "source": {
+                              "question_title": "认同和自己相同 mbti 的人合得来吗？",
+                              "question_url": "https://www.zhihu.com/question/661168384",
+                              "answer_url": "https://www.zhihu.com/question/661168384/answer/2100000001",
+                              "answer_content_type": "answer",
+                              "answer_token": "2100000001",
+                              "answer_summary": "同类型之间在思维惯性上确实更容易互相理解，但在冲突处理上常常因为「都太固执」而更僵。"
+                            },
+                            "created_at": 1766229000,
+                            "generated_by": "zhida-fast-1p5"
+                          }
+                        ],
+                        "candidates": [
+                          {
+                            "question_title": "认同和自己相同 mbti 的人合得来吗？",
+                            "question_url": "https://www.zhihu.com/question/661168384",
+                            "answer_count": 12
+                          }
+                        ],
+                        "empty": false,
+                        "empty_notice": null
+                      },
+                      "meta": {
+                        "source": "zhihu:user.question_recommendations+content.question_answers+v1.chat.completions",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "cheer",
+                        "quota": {
+                          "api_id": "question_discovery",
+                          "total": 100,
+                          "used": 6,
+                          "remaining": 94
+                        },
+                        "warnings": []
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "捞不到可用题目（不是错误）",
+                    "value": {
+                      "data": {
+                        "questions": [],
+                        "candidates": [],
+                        "empty": true,
+                        "empty_notice": "知乎上暂时没有与这个主题相关、且带回答的讨论。换个说法再试一次。"
+                      },
+                      "meta": {
+                        "source": "zhihu:user.question_recommendations",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "502": { "$ref": "#/components/responses/UpstreamError" },
+          "504": { "$ref": "#/components/responses/Timeout" }
+        },
+        "x-upstream": {
+          "quota_class": "question_discovery（问题发现 + 回答摘要共用 100/天）",
+          "verified": "2026-11-17 16:2x—17:0x 实测",
+          "calls": [
+            {
+              "path": "/api/v1/user/question_recommendations",
+              "method": "GET",
+              "query": { "Query": "string", "Count": "int" },
+              "maps_to": "candidates[]",
+              "note": "上游字段只有 Title 与 Url；**没有 Paging**。"
+            },
+            {
+              "path": "/api/v1/content/question_answers",
+              "method": "GET",
+              "query": { "QuestionUrl": "string（必填）", "Offset": "int", "Limit": "int" },
+              "maps_to": "source.answer_*",
+              "note": "上游 Data.Items[] = {ContentType, ContentToken, Url, Summary}；Paging{IsEnd,NextOffset,Totals}。Summary 是官方服务摘要，不是 AI 生成。"
+            },
+            {
+              "path": "/v1/chat/completions",
+              "method": "POST",
+              "body": {
+                "model": "zhida-fast-1p5 | zhida-thinking-1p5",
+                "messages": "[...含上面两段真实材料...]",
+                "stream": false
+              },
+              "maps_to": "stem / options",
+              "note": "OpenAI 兼容。**不要用 zhida-agent 取出处**——实测它给不出真实链接。"
+            }
+          ]
+        }
+      }
+    },
+    "/api/quota": {
+      "get": {
+        "tags": ["platform"],
+        "operationId": "getQuota",
+        "summary": "额度透传",
+        "description": "把上游 `/api/v1/quota` 的额度透给前端。\n\n官方把「额度实时查询」写成最佳实践，本届是生死线（D17 / D24）：额度取决于**账号是否实名认证**，与是否参赛无关。前端据此在额度将尽时给出真实提示，不要等到调用失败才发现。",
+        "responses": {
+          "200": {
+            "description": "额度",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/QuotaResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "apis": [
+                          {
+                            "api_id": "question_discovery",
+                            "api_name": "问题发现",
+                            "total": 100,
+                            "used": 6,
+                            "remaining": 94
+                          },
+                          {
+                            "api_id": "user_data",
+                            "api_name": "知乎用户数据",
+                            "total": 10000,
+                            "used": 4,
+                            "remaining": 9996
+                          },
+                          {
+                            "api_id": "creator",
+                            "api_name": "创作能力",
+                            "total": 500,
+                            "used": 2,
+                            "remaining": 498
+                          }
+                        ],
+                        "checked_at": 1766229000
+                      },
+                      "meta": {
+                        "source": "zhihu:quota",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-upstream": {
+          "quota_class": "不计入额度",
+          "verified": "2026-11-17 实测",
+          "calls": [
+            {
+              "path": "/api/v1/quota",
+              "method": "GET",
+              "query": {},
+              "maps_to": "apis[]",
+              "note": "上游 Data[] = {APIID, APIName, TotalQuota, TotalUsed, RemainingQuota}，共 9 类。"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "BadRequest": {
+        "description": "参数不合法",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "default": {
+                "value": {
+                  "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "topic 不能为空，且长度需在 1-64 之间",
+                    "user_hint": "换个主题再说一次试试",
+                    "retryable": false,
+                    "retry_after_ms": null,
+                    "upstream": null,
+                    "detail": "field=topic"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "触发知乎限流或额度耗尽",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "rate_limited": {
+                "summary": "秒级限流（上游 Code=30001）",
+                "value": {
+                  "error": {
+                    "code": "ZHIHU_RATE_LIMITED",
+                    "message": "知乎接口触发秒级限流，已自动退避重试仍未成功",
+                    "user_hint": "等几秒再试一下，这不是你的操作问题",
+                    "retryable": true,
+                    "retry_after_ms": 1500,
+                    "upstream": { "code": 30001, "message": "second limit exceeded" },
+                    "detail": null
+                  }
+                }
+              },
+              "quota_exhausted": {
+                "summary": "额度耗尽",
+                "value": {
+                  "error": {
+                    "code": "ZHIHU_QUOTA_EXHAUSTED",
+                    "message": "今日「问题发现」额度已用尽（100/100）",
+                    "user_hint": "今天的调用次数用完了，明天再来",
+                    "retryable": false,
+                    "retry_after_ms": null,
+                    "upstream": null,
+                    "detail": "api_id=question_discovery"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "UpstreamError": {
+        "description": "知乎开放平台返回错误",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "default": {
+                "value": {
+                  "error": {
+                    "code": "ZHIHU_UPSTREAM_ERROR",
+                    "message": "知乎接口返回异常",
+                    "user_hint": "知乎那边暂时不稳定，稍后重试",
+                    "retryable": true,
+                    "retry_after_ms": 2000,
+                    "upstream": { "code": 10001, "message": "ContentType is required" },
+                    "detail": null
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Timeout": {
+        "description": "上游超时",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+            "examples": {
+              "default": {
+                "value": {
+                  "error": {
+                    "code": "ZHIHU_TIMEOUT",
+                    "message": "知乎接口超时",
+                    "user_hint": "网络有点慢，再试一次",
+                    "retryable": true,
+                    "retry_after_ms": 3000,
+                    "upstream": null,
+                    "detail": "timeout_ms=10000"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ResponseMeta": {
+        "type": "object",
+        "required": ["source", "fetched_at", "cached", "pet_state"],
+        "description": "所有成功响应共用的元信息。前端用它决定动画状态与提示。",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "数据来源标识，形如 `zhihu:user.collections`。用于排错与调试。"
+          },
+          "fetched_at": {
+            "type": "integer",
+            "description": "本次取数完成时间（Unix 秒）。"
+          },
+          "cached": {
+            "type": "boolean",
+            "description": "是否命中缓存。演示路径大量命中缓存是设计好的（缓存 + 去重是硬需求）。"
+          },
+          "cache_age_s": {
+            "type": "integer",
+            "description": "缓存年龄（秒）。未命中缓存时为 0。"
+          },
+          "pet_state": {
+            "$ref": "#/components/schemas/PetState",
+            "description": "桌宠当前应处的状态。前端据此切动画。`thinking` 表示上游调用进行中。"
+          },
+          "quota": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/QuotaSnapshot" },
+              { "type": "null" }
+            ],
+            "description": "本次调用消耗的额度类快照。缓存命中时为 null。"
+          },
+          "warnings": {
+            "type": "array",
+            "description": "不阻断本次请求、但前端应当展示的提示码。",
+            "items": { "type": "string" },
+            "examples": ["content_signal_unavailable", "partial_signal"]
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "user_hint", "retryable"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "机器可读错误码，取值见 `x-error-codes`。",
+                "examples": ["ZHIHU_RATE_LIMITED"]
+              },
+              "message": {
+                "type": "string",
+                "description": "技术描述，给日志与排错看。"
+              },
+              "user_hint": {
+                "type": "string",
+                "description": "**给人看的中文提示，直接显示在界面上。** 官方提交前检查第 7 条要求的就是这个，不能是空字符串、不能是英文报错、不能是「未知错误」。"
+              },
+              "retryable": {
+                "type": "boolean",
+                "description": "前端是否应显示「重试」按钮。"
+              },
+              "retry_after_ms": {
+                "type": ["integer", "null"],
+                "description": "建议重试等待毫秒数。为 null 表示不提示具体时间。"
+              },
+              "upstream": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "code": { "type": "integer" },
+                      "message": { "type": "string" }
+                    }
+                  },
+                  { "type": "null" }
+                ],
+                "description": "知乎上游的原始错误，便于定位。前端不要原样显示给用户。"
+              },
+              "detail": {
+                "type": ["string", "null"],
+                "description": "附加技术细节。"
+              }
+            }
+          }
+        }
+      },
+      "QuotaSnapshot": {
+        "type": "object",
+        "properties": {
+          "api_id": { "type": "string" },
+          "total": { "type": "integer" },
+          "used": { "type": "integer" },
+          "remaining": { "type": "integer" }
+        }
+      },
+      "PetState": {
+        "type": "string",
+        "enum": [
+          "idle",
+          "thinking",
+          "cheer",
+          "greet",
+          "sleep",
+          "play",
+          "eating",
+          "emitting",
+          "error"
+        ],
+        "description": "桌宠状态机（D19 / D20）。\n\n| 状态 | 官方素材 | 触发 |\n| --- | --- | --- |\n| `idle` | ✅ 待机 | 默认静置 |\n| `thinking` | ✅ 电波（看电脑 + 灯泡） | 调用知乎接口期间 |\n| `cheer` | ✅ 弥撒 | 生成成功 |\n| `greet` | ✅ 打打滚（挥手） | 首次进入 |\n| `sleep` | ✅ 呆毛（Zzz） | 长时间无操作 |\n| `play` | ✅ 运球（踢足球） | 任务完成 / 庆祝 |\n| `eating` | ❌ 自建 CSS 过渡 | 吞咽资料 |\n| `emitting` | ❌ 自建 CSS 过渡 | 吐出卡片 / 情境题 |\n| `error` | ❌ 自建 CSS 过渡 | 失败 |\n\n`eating` / `emitting` / `error` 三个官方素材没有对应帧，**必须做降级**：素材缺失时用静态占位 + 状态气泡，不许卡住动画。"
+      },
+      "SourceRef": {
+        "type": "object",
+        "required": ["question_title", "question_url"],
+        "description": "出处。AGENTS.md 第 3 节第 4 条：「每张生成的知识卡片都要能回溯到原文出处，不可回溯的内容不生成卡片。」→ **这个对象必填，缺出处就是错误，不是降级。**",
+        "properties": {
+          "question_title": {
+            "type": "string",
+            "description": "知乎真实问题标题，原样来自 `question_recommendations`。"
+          },
+          "question_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "知乎问题完整 URL，形如 `https://www.zhihu.com/question/<id>`。",
+            "examples": ["https://www.zhihu.com/question/661168384"]
+          },
+          "answer_url": {
+            "type": ["string", "null"],
+            "description": "原回答链接，来自 `question_answers` 的 `Url` 字段。**这是回跳出处的关键**——直答给不了这个。"
+          },
+          "answer_content_type": {
+            "type": ["string", "null"],
+            "enum": ["answer", "article", null]
+          },
+          "answer_token": {
+            "type": ["string", "null"],
+            "description": "上游 `ContentToken`。"
+          },
+          "answer_summary": {
+            "type": ["string", "null"],
+            "description": "官方服务摘要（**不是 AI 生成**），前端展示时不要标成「AI 总结」。"
+          }
+        }
+      },
+      "ChoiceOption": {
+        "type": "object",
+        "required": ["key", "label"],
+        "properties": {
+          "key": { "type": "string", "examples": ["A"] },
+          "label": { "type": "string", "description": "选项正文。" },
+          "hint": { "type": ["string", "null"], "description": "选项的补充说明，可空。" }
+        }
+      },
+      "CognitionTarget": {
+        "type": "object",
+        "required": ["dimension", "traits"],
+        "description": "这道题在对焦什么。维度可以是 MBTI 四轴、认知功能（Fi/Si/Ti…）或自定义标签——具体取值等方向拍板后定，**先按字符串处理，不要写死枚举**。",
+        "properties": {
+          "dimension": { "type": "string", "examples": ["Fi"] },
+          "traits": {
+            "type": "array",
+            "items": { "type": "string" },
+            "examples": ["内倾情感", "价值优先"]
+          }
+        }
+      },
+      "SourceCard": {
+        "type": "object",
+        "required": ["id", "kind", "title", "source", "created_at"],
+        "description": "**卡片与情境题共用同一个对象**，用 `kind` 区分。两个方向共用一套渲染逻辑，只是内容字段不同。",
+        "properties": {
+          "id": { "type": "string", "examples": ["src_7f2a1c9e4b6d0358"] },
+          "kind": {
+            "type": "string",
+            "enum": ["knowledge_card", "situation_question"],
+            "description": "`knowledge_card` = 知识摘要卡（原方向）；`situation_question` = 情境题（新方向）。"
+          },
+          "title": { "type": "string" },
+          "content": {
+            "type": ["string", "null"],
+            "description": "知识摘要正文。`kind=situation_question` 时为 null。"
+          },
+          "stem": {
+            "type": ["string", "null"],
+            "description": "情境题题面。`kind=knowledge_card` 时为 null。"
+          },
+          "options": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ChoiceOption" },
+            "description": "情境题选项。无选项时为空数组，不要给 null。"
+          },
+          "difficulty": {
+            "type": ["string", "null"],
+            "enum": ["easy", "medium", "hard", null]
+          },
+          "layer": {
+            "type": ["string", "null"],
+            "enum": ["self_reported", "behavioral", "situational", null],
+            "x-label": "self_reported = 说的你；behavioral = 做的你；situational = 情境下的你"
+          },
+          "targets": { "$ref": "#/components/schemas/CognitionTarget" },
+          "source": { "$ref": "#/components/schemas/SourceRef" },
+          "created_at": { "type": "integer", "description": "Unix 秒。" },
+          "generated_by": {
+            "type": ["string", "null"],
+            "description": "生成模型标识，如 `zhida-fast-1p5`。直答只做改写，出处不归它管。"
+          }
+        }
+      },
+      "ZhihuAuthor": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "headline": { "type": ["string", "null"] }
+        }
+      },
+      "Engagement": {
+        "type": "object",
+        "properties": {
+          "like_count": { "type": "integer" },
+          "comment_count": { "type": "integer" },
+          "favorite_count": { "type": "integer" }
+        }
+      },
+      "ContentItem": {
+        "type": "object",
+        "required": ["content_type", "title", "url"],
+        "description": "一条知乎内容（收藏条目 / 创作条目共用）。",
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "enum": ["answer", "article", "zvideo", "pin", "question", "unknown"]
+          },
+          "title": { "type": "string" },
+          "summary": { "type": ["string", "null"] },
+          "url": { "type": "string", "format": "uri" },
+          "author": { "$ref": "#/components/schemas/ZhihuAuthor" },
+          "created_at": { "type": "integer" },
+          "engagement": { "$ref": "#/components/schemas/Engagement" }
+        }
+      },
+      "CategoryEvidence": {
+        "type": "object",
+        "description": "分类占比的**证据条目**。前端必须能点开看到依据——不然「行为对照」就成了黑盒断言。",
+        "properties": {
+          "title": { "type": ["string", "null"] },
+          "name": { "type": ["string", "null"] },
+          "url": { "type": "string", "format": "uri" },
+          "headline": { "type": ["string", "null"] }
+        }
+      },
+      "CategoryBucket": {
+        "type": "object",
+        "required": ["category", "count", "ratio"],
+        "properties": {
+          "category": { "type": "string", "description": "分类名，后端派生。分类体系待算法定稿，先按字符串处理。" },
+          "count": { "type": "integer" },
+          "ratio": { "type": "number", "description": "0—1，保留两位小数。" },
+          "evidence": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CategoryEvidence" }
+          }
+        }
+      },
+      "FavlistRef": {
+        "type": "object",
+        "properties": {
+          "token": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string", "format": "uri" }
+        }
+      },
+      "FavlistMeta": {
+        "type": "object",
+        "required": ["token", "title", "url"],
+        "properties": {
+          "token": { "type": "string" },
+          "title": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "is_public": { "type": "boolean" },
+          "item_count": { "type": ["integer", "null"] }
+        }
+      },
+      "FavoritesSignal": {
+        "type": "object",
+        "required": ["signal", "collected_count", "items", "empty"],
+        "properties": {
+          "signal": { "type": "string", "const": "favorites" },
+          "collected_count": { "type": "integer" },
+          "span": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "earliest_fav_time": { "type": "integer" },
+                  "latest_fav_time": { "type": "integer" },
+                  "span_days": { "type": "integer" },
+                  "distinct_days": { "type": "integer" }
+                }
+              },
+              { "type": "null" }
+            ],
+            "description": "**收藏跨度**：收藏行为横跨多长时间、集中在多少天。这是「收藏跨度」这个信号本身。"
+          },
+          "category_distribution": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CategoryBucket" }
+          },
+          "favlists": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/FavlistMeta" }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                { "$ref": "#/components/schemas/ContentItem" },
+                {
+                  "type": "object",
+                  "properties": {
+                    "fav_time": { "type": "integer" },
+                    "favlists": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/FavlistRef" }
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "empty": { "type": "boolean" },
+          "empty_notice": { "type": ["string", "null"] }
+        }
+      },
+      "FolloweesSignal": {
+        "type": "object",
+        "required": ["signal", "followee_count", "items", "empty"],
+        "properties": {
+          "signal": { "type": "string", "const": "followees" },
+          "followee_count": { "type": "integer" },
+          "category_distribution": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CategoryBucket" },
+            "description": "**关注对象类型分布**——这个信号的核心。"
+          },
+          "focus": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "primary": { "type": "string" },
+                  "summary": { "type": "string" }
+                }
+              },
+              { "type": "null" }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "url"],
+              "properties": {
+                "name": { "type": "string" },
+                "url_token": { "type": "string" },
+                "url": { "type": "string", "format": "uri" },
+                "avatar_url": { "type": ["string", "null"] },
+                "headline": { "type": ["string", "null"] },
+                "gender": { "type": ["integer", "null"], "description": "上游原值：1 = 女，2 = 男，0 未知。" },
+                "follower_count": { "type": "integer" },
+                "category": { "type": ["string", "null"] }
+              }
+            }
+          },
+          "empty": { "type": "boolean" },
+          "empty_notice": { "type": ["string", "null"] }
+        }
+      },
+      "ContentsSignal": {
+        "type": "object",
+        "required": ["signal", "content_totals", "items", "empty"],
+        "properties": {
+          "signal": { "type": "string", "const": "contents" },
+          "content_totals": {
+            "type": "object",
+            "properties": {
+              "answer": { "type": "integer" },
+              "article": { "type": "integer" },
+              "video": { "type": "integer" },
+              "pin": { "type": "integer" },
+              "question": { "type": "integer" },
+              "all": { "type": "integer" }
+            }
+          },
+          "activity": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "publish_count": { "type": "integer" },
+                  "view_count": { "type": "integer" },
+                  "upvote_count": { "type": "integer" },
+                  "comment_count": { "type": "integer" },
+                  "active_days": { "type": "integer" }
+                }
+              },
+              { "type": "null" }
+            ]
+          },
+          "argument_structure": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "primary": { "type": ["string", "null"] },
+                  "distribution": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/CategoryBucket" },
+                    "description": "**创作论证结构**——结构类型如「定义式 / 对比式 / 步骤式 / 举例式」。"
+                  },
+                  "traits": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              { "type": "null" }
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ContentItem" }
+          },
+          "empty": { "type": "boolean" },
+          "empty_notice": { "type": ["string", "null"] }
+        }
+      },
+      "SituationQuestionRequest": {
+        "type": "object",
+        "required": ["topic"],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "主题词，直接作为 `question_recommendations` 的 `Query`。例：`MBTI`、`人格测试`、`认识自己`。"
+          },
+          "layer": {
+            "type": "string",
+            "enum": ["self_reported", "behavioral", "situational"],
+            "default": "situational",
+            "x-label": "self_reported = 说的你；behavioral = 做的你；situational = 情境下的你",
+            "description": "这道题属于哪一层。两个方向共用：原方向用来选卡片主题，新方向用来决定往哪一层地形上生长。"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3,
+            "default": 1
+          },
+          "answered_sources": {
+            "type": "array",
+            "items": { "type": "string", "format": "uri" },
+            "default": [],
+            "description": "已答过的题目 URL，用于去重，避免重复出题。"
+          },
+          "self_report": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string", "description": "自报类型，如 `INTJ`。" },
+                  "notes": { "type": ["string", "null"] }
+                }
+              },
+              { "type": "null" }
+            ],
+            "description": "用户自述的可选输入。有值时，后端会让情境题去**对照**自述，是「断层」信号的输入之一。"
+          },
+          "difficulty": {
+            "type": "string",
+            "enum": ["easy", "medium", "hard"],
+            "default": "medium"
+          },
+          "seed": {
+            "type": ["string", "null"],
+            "description": "可选随机种子，传入后同样的请求生成同样的题（调试与 mock 用）。"
+          }
+        }
+      },
+      "SituationQuestionData": {
+        "type": "object",
+        "required": ["questions", "empty"],
+        "properties": {
+          "questions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SourceCard" }
+          },
+          "candidates": {
+            "type": "array",
+            "description": "本次从知乎捞到的候选问题池（看板用，让「知乎是原料来源」这件事在界面上可见）。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "question_title": { "type": "string" },
+                "question_url": { "type": "string", "format": "uri" },
+                "answer_count": { "type": ["integer", "null"] }
+              }
+            }
+          },
+          "empty": { "type": "boolean" },
+          "empty_notice": { "type": ["string", "null"] }
+        }
+      },
+      "QuotaApiEntry": {
+        "type": "object",
+        "required": ["api_id", "total", "used", "remaining"],
+        "properties": {
+          "api_id": { "type": "string", "examples": ["question_discovery"] },
+          "api_name": { "type": "string" },
+          "total": { "type": "integer" },
+          "used": { "type": "integer" },
+          "remaining": { "type": "integer" }
+        }
+      },
+      "FavoritesSignalResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/FavoritesSignal" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "FolloweesSignalResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/FolloweesSignal" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "ContentsSignalResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/ContentsSignal" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "SituationQuestionResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/SituationQuestionData" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "QuotaResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["apis", "checked_at"],
+            "properties": {
+              "apis": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/QuotaApiEntry" }
+              },
+              "checked_at": { "type": "integer" }
+            }
+          },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "ErrorResponseEnvelope": {
+        "deprecated": true,
+        "description": "已废弃：与 `ErrorResponse` 完全重复，保留仅为兼容早期草稿。**新代码一律用 `ErrorResponse`。**",
+        "type": "object"
+      }
+    }
+  },
+  "x-contract": {
+    "version": "v0",
+    "frozen_at": "2026-11-17",
+    "owner": "nineanswerer",
+    "reviewer": "5zdz5",
+    "frozen_scope": "方向无关部分：三个行为对照接口 + 情境题生成接口 + 通用信封 + 桌宠状态机 + 额度透传",
+    "open_scope": [
+      "`tension`（自述 vs 行为的张力）与 `terrain`（三层认知地形结构）两个派生接口——存在与否、形状如何，取决于方向拍板（B13）。两者复用本文档的 `SourceCard` 与通用信封。",
+      "知识卡片产出物接口（原方向的主链路）——大概率复用 `SourceCard` + `kind=knowledge_card`，是否独立成 `/api/card` 待定。"
+    ],
+    "change_rule": "接口形状变了，先改本文件，再改 `contracts/CONTRACTS.md`，同一次提交；改完跑 `scripts/check-contract.ps1`。"
+  },
+  "x-mock": {
+    "note": "本文件是 OpenAPI 3.1 文档，前端可以零手写 mock。",
+    "options": [
+      {
+        "tool": "npx @mswjs/openapi ./contracts/api.json --watch",
+        "note": "浏览器端 mock（MSW），推荐。前端 `npm i -D msw @mswjs/openapi` 即可。"
+      },
+      {
+        "tool": "npx prism mock ./contracts/api.json --port 8788",
+        "note": "独立 mock 服务端，跨端通用。"
+      },
+      {
+        "tool": "npx openapi-typescript ./contracts/api.json -o web/src/types/api.ts",
+        "note": "只生成 TypeScript 类型，不起服务。"
+      }
+    ],
+    "tips": [
+      "mock 端口不要与真后端端口冲突；真后端端口由 `server/` 决定。",
+      "文档里的 `examples` 已经是真实结构，可以直接复制进前端测试夹具。",
+      "响应形状不会随方向拍板而变——变的只是多了哪几个派生字段。"
+    ]
+  },
+  "x-upstream": {
+    "base_url": "https://developer.zhihu.com",
+    "auth": {
+      "development": "Authorization: Bearer <Access Secret> + X-Request-Timestamp（Unix 秒）+ Content-Type: application/json",
+      "oauth": "Authorization: Bearer <Access Secret> + X-OAuth-Token + X-Request-Timestamp",
+      "note": "开发期用 Access Secret 读**账号自己**的数据；12-05 拿到 App ID / App Key 后换成登录用户的数据。**两者接口形状相同，不返工。**"
+    },
+    "envelope": {
+      "shape": "{ \"Code\": int, \"Message\": string, \"Data\": object | null }",
+      "codes": {
+        "0": "成功",
+        "10001": "参数缺失（实测例：`ContentType is required`、`FavlistUrlToken is required`）",
+        "30001": "`second limit exceeded` —— **秒级限流**，需退避重试"
+      }
+    },
+    "throttle": {
+      "fact": "2026-11-17 实测：连续调用会触发 `Code=30001 second limit exceeded`，间隔 3 秒后重试即成功。",
+      "implication": "后端必须做**串行化 + 退避重试 + 缓存 + 去重**。前端只看到 `ZHIHU_RATE_LIMITED`，不要自己重试风暴。"
+    }
+  },
+  "x-error-codes": {
+    "note": "所有错误走同一个信封。`user_hint` 是**直接显示在界面上的中文提示**，不允许为空、不允许是英文原始报错。官方提交前检查第 7 条查的就是这个。",
+    "table": [
+      { "code": "VALIDATION_ERROR", "http": 400, "retryable": false, "when": "入参不合法", "user_hint_example": "换个主题再说一次试试" },
+      { "code": "ZHIHU_AUTH_INVALID", "http": 401, "retryable": false, "when": "Access Secret / OAuth Token 无效", "user_hint_example": "登录状态失效了，重新授权一下" },
+      { "code": "OAUTH_REQUIRED", "http": 401, "retryable": false, "when": "该接口需要登录用户身份但当前是开发期自读模式", "user_hint_example": "这个功能需要先登录知乎账号" },
+      { "code": "ZHIHU_RATE_LIMITED", "http": 429, "retryable": true, "when": "上游秒级限流（Code=30001）", "user_hint_example": "等几秒再试一下，这不是你的操作问题" },
+      { "code": "ZHIHU_QUOTA_EXHAUSTED", "http": 429, "retryable": false, "when": "今日额度用尽", "user_hint_example": "今天的调用次数用完了，明天再来" },
+      { "code": "ZHIHU_UPSTREAM_ERROR", "http": 502, "retryable": true, "when": "上游返回非 0 Code", "user_hint_example": "知乎那边暂时不稳定，稍后重试" },
+      { "code": "ZHIHU_TIMEOUT", "http": 504, "retryable": true, "when": "上游超时", "user_hint_example": "网络有点慢，再试一次" },
+      { "code": "INTERNAL_ERROR", "http": 500, "retryable": true, "when": "后端自身异常", "user_hint_example": "出了点问题，我们正在查" }
+    ],
+    "forbidden": [
+      "返回伪造的兜底数据（AGENTS.md 第 3 节第 1 条 + 官方检查第 7 条）",
+      "`user_hint` 写成「未知错误」「Error」「undefined」",
+      "把上游英文报错直接甩给用户"
+    ]
+  },
+  "x-directions": {
+    "note": "这份契约是**两个方向共用**的。拍板（B13）之后只会在派生层增减，核心四个接口的形状不变。",
+    "original_learning_pet": {
+      "label": "原方向 · 学习桌宠",
+      "usage": [
+        "三个行为信号 → 佐证卡片主题（「你收藏的都是这类东西，所以你在意的是这个」）",
+        "情境题 → 改造成「知乎上正在被问的真问题」作为追问入口",
+        "`SourceCard.kind=knowledge_card` → 桌宠吐出的卡片（是否独立成接口待定）"
+      ],
+      "risk": "若 Demo 里出现太多「检索知乎 → 展示观点对照」的界面，会被评审打成「AI × 知识与探索」赛道，而不是 02「AI × 陪伴与交互」。→ **Demo 主叙事要是「你在空间里走」，不是「我们检索了知乎」。**"
+    },
+    "new_cognition_terrain": {
+      "label": "新方向 · 认·清认知地形",
+      "usage": [
+        "三个行为信号 → 「做的你」层的行为地貌",
+        "情境题 → 情境下的你：每答一题长一块地形",
+        "自述 vs 行为 → 断层信号（`tension` 接口待定）"
+      ],
+      "risk": "3D 自由漫游容易被评审读成「走丢了」，且刘看山没有 3D 模型（自建要 20—30 人时）。→ 收敛成 2.5D 分层地图，真 3D 只用在断层特写一处。"
+    },
+    "shared_bottom_line": "**三个信号里至少要有两个独立可用**，否则「断层」退化成「自述 vs 自述」，产品价值塌一半。收藏 + 关注是两个最稳的信号（user_data 额度 10000/天），创作最弱（可能为 0 条）。"
+  }
+}

@@ -31,6 +31,7 @@
 - **双 AI 协作机制已落地并实跑验证**（D25 / ADR-0001）：上下文四层 L0 契约（`contracts/`）、L1 身份（`AGENTS.md` 为唯一真源，五个平台文件只做指针）、L2 决策（`docs/decisions.md` + `docs/adr/`）、L3 交接（`docs/handoffs/`）；四份提示词（BOOTSTRAP / HANDOFF / CROSS_REVIEW / COMMIT_MSG）；`.githooks/commit-msg` 强制 `Context:`/`Tried:`/`Verify:` 三行；`scripts/check-contract.ps1` 自检**实跑 PASS 8 / WARN 0 / FAIL 0**；hook 实测**空洞提交被拒、`Tried:` 为空被拒、格式正确放行**。
 - **机制已升级为"全自动触发"**（D25 结论 6–7）：四个触发点全部自动化 —— **开工**（五个平台指针文件被平台自动加载并指向 `prompts/BOOTSTRAP.md`，新 AI 自己读、自己等确认，**换 AI 平台不用人粘提示词**）、**拉取**（`.githooks/post-checkout` 自动打印开工清单）、**收工**（协议内置交接与自检要求，AI 自己做）、**提交**（人说的理由由 AI 转录进 `.ctx/current.md`，hook 自动填 `Context:` 行，**人不用手改 commit message**）。**人真正要做的只剩"跟 AI 说一句为什么改"。** 自检扩到 **10 项**，实跑 **PASS 10 / WARN 0 / FAIL 0**；commit-msg hook 三个用例实测通过（自动填充 / 空 `Tried:` 被拒 / 人手写优先）。
 - **与队友完成首轮对齐**（11-17）：D14（桌宠是主体、知识卡片是产出物）与 D19（角色沿用官方刘看山）**均已定**。队友对"GitHub 提交 + 两人分别用不同 AI"提出疑虑 → 见 D25 与 `docs/协作规范.md`。
+- **产品级 API 契约 v0 已冻结**（11-17 晚）→ [contracts/api.json](../contracts/api.json)：**OpenAPI 3.1，5 个路径**（`/api/behavior/favorites`、`/api/behavior/followees`、`/api/behavior/contents`、`POST /api/situation/question`、`/api/quota`）。**方向无关部分已冻结，队友现在就能起 mock 并行开工，不必等后端。** 三条硬规则（出处必填 / 空数据≠失败 / 失败说真话）已加进 `scripts/check-contract.ps1` 第 11 项，**改坏契约会被自检拦下**。详见 [decisions.md](decisions.md) D28、交付话术见 [队友对齐清单.md](队友对齐清单.md) 零 G。
 
 ## 三、阻塞项
 
@@ -103,7 +104,7 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 | # | 阶段 | 时间 | 人时 | 产出（**能给人看的**） | 验收标准 |
 | --- | --- | --- | --- | --- | --- |
 | **P1** | 定形状 | 11-17 下午 | 4 | 一句话场景 + Demo 逐秒脚本 v1 + 1 张桌宠静帧 | 队友认可画面 |
-| **P2** | 骨架 + **API 契约** | 11-17 晚 — 11-18 | 10 | `server/` 最小闭环：真调知乎 → 产出**带出处的卡片 JSON**；`web/` 能显示卡片 + 桌宠待机 | 命令行跑通 `question_recommendations → question_answers → 卡片`；网页看得到卡片和出处链接 |
+| **P2** | 骨架 + **API 契约** | 11-17 晚 — 11-18 | 10 | ✅ **API 契约已冻结**（`contracts/api.json`）｜ ⬜ `server/` 最小闭环：真调知乎 → 产出**带出处的卡片 JSON**；`web/` 能显示卡片 + 桌宠待机 | 命令行跑通 `question_recommendations → question_answers → 卡片`；网页看得到卡片和出处链接 |
 | **P3** | 闭环可演 | 11-19 — 11-21 | 14 | 拖入资料 → 桌宠动画 → 吐卡片 → 点开原文 → 追问 → 知乎补观点 → 归置小屋 | **能完整演一遍 Demo 脚本，不用 mock** |
 | **P4** | 拟真 + 失败态 | 11-22 — 11-24 | 7 | 界面不像骨架；接口失败/额度耗尽/空数据的真实提示；缓存与去重 | 每种失败手动点一遍，提示是真的 |
 | **P5** | 打磨 | 11-25 — 11-27 | 4 | 动画节奏、文案、卡片排版、首次使用引导 | 队友提 ≤5 条，改完 |
@@ -136,7 +137,7 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 
 1. 🔴 **今天下午第一件事：和队友拍板产品方向**（B13）。把 [方案评估-认知地形.md](方案评估-认知地形.md) 给他看——里面有三处**实测**出来的技术事实（直答 Agent 不能站内检索、行为数据要用 Access Secret 读、刘看山没有 3D 模型）和完整人时估算。评估文档第 6 节列了要一起定的 4 个问题。
 2. **方向定了之后**才做 P1 三件产出（按新方向的一句话场景 + Demo 逐秒脚本 + 1 张静帧）。**方向没定不要动手做视觉稿。**
-3. **P2 第一步：写死 API 契约**（`contracts/api.json`），三个接口的请求/响应形状定下来 → 队友前端才能对着 mock 并行开工。**这是整个并行度的开关。**
+3. ✅ **API 契约已冻结**（`contracts/api.json`，OpenAPI 3.1，5 个接口）→ **现在就把零 G 发给队友，让他起 mock 并行开工**，不必等后端写完。这是并行度的开关，现在开了。
 4. **确认 App ID / App Key 是否已可获取**（B4）：账号实名 + 手机号前提已满足，官方取密钥路径 `https://www.zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p3`。
 5. **P2—P6 按总表推进**，每阶段结束必须拿到"能给人看的东西"才算过。
 6. **P6 的审核时间是外部依赖**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**（总表已把 P6 排到 11-30，别拖）。

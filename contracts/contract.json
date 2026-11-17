@@ -64,6 +64,27 @@
     "not_in_v1": ["hot_list"],
     "not_in_v1_reason": "与“一个具体任务里的学习搭子”主线关联弱，预算要留给闭环"
   },
+  "api_contract": {
+    "path": "contracts/api.json",
+    "format": "OpenAPI 3.1",
+    "version": "v0",
+    "owner": "nineanswerer",
+    "reviewer": "5zdz5",
+    "status": "方向无关部分已冻结；tension / terrain 两个派生接口待方向拍板（B13）后定稿",
+    "frozen_endpoints": [
+      "GET /api/behavior/favorites",
+      "GET /api/behavior/followees",
+      "GET /api/behavior/contents",
+      "POST /api/situation/question",
+      "GET /api/quota"
+    ],
+    "rules": [
+      "出处必填：source 缺失即报错，不生成无出处的内容",
+      "空数据走 200 + empty + empty_notice，与失败严格区分",
+      "错误走统一信封，user_hint 必须是中文真实提示",
+      "上游秒级限流（Code=30001）由后端退避重试，前端不制造重试风暴"
+    ]
+  },
   "red_lines": {
     "secrets_never_in_repo": true,
     "secrets_never_in_source": true,
