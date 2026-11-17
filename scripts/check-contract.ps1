@@ -267,7 +267,10 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
             '/api/behavior/favorites',
             '/api/behavior/followees',
             '/api/behavior/contents',
+            '/api/behavior/tension',
             '/api/situation/question',
+            '/api/terrain',
+            '/api/terrain/answer',
             '/api/quota'
         )
         $missingPaths = @()
@@ -278,15 +281,19 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         $sourceRequired = @($apiDoc.components.schemas.SourceRef.required) -contains 'question_url'
         $hintRequired = @($apiDoc.components.schemas.ErrorResponse.properties.error.required) -contains 'user_hint'
         $emptyFlag = @($apiDoc.components.schemas.FavoritesSignal.required) -contains 'empty'
+        # 认知闭环底线：断层必须带 signal_count 与 insufficient（信号不足时不能硬撑断层）
+        $tensionRequired = @($apiDoc.components.schemas.TensionData.required)
+        $tensionFlag = ($tensionRequired -contains 'signal_count') -and ($tensionRequired -contains 'insufficient')
 
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
         if (-not $sourceRequired) { $why += 'SourceRef 未把 question_url 设为必填' }
         if (-not $hintRequired) { $why += '错误信封未把 user_hint 设为必填' }
         if (-not $emptyFlag) { $why += '信号结构未把 empty 设为必填（空数据与失败无法区分）' }
+        if (-not $tensionFlag) { $why += 'TensionData 未把 signal_count / insufficient 设为必填（断层会失去诚实底线）' }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }

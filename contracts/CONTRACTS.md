@@ -33,17 +33,26 @@
 | `GET /api/behavior/favorites` | 收藏信号（收藏跨度 + 结构占比） | `user/collections` + `user/favlists` |
 | `GET /api/behavior/followees` | 关注信号（关注对象类型分布） | `user/followees` |
 | `GET /api/behavior/contents` | 创作信号（论证结构 + 活跃度） | `user/contents` + `user/creator_account_stats` |
+| `POST /api/behavior/tension` | **张力信号**：自述 vs 行为 → 断层 | 复用上面三个接口的结果 |
 | `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | `user/question_recommendations` + `content/question_answers` + 直答 |
+| `GET /api/terrain` | 三层认知地形（说的你 / 做的你 / 情境下的你）+ 断层 + 桥 | 派生，不调上游 |
+| `POST /api/terrain/answer` | 提交情境题回答 → 地形生长 | 派生，不调上游 |
 | `GET /api/quota` | 额度透传 | `quota` |
 
-**这四个核心接口与产品方向无关**，所以方向拍板（B13）不阻塞并行开工。拍板后只会在派生层增减
-（`tension` / `terrain`），核心形状不变。
+**产品结构（2026-11-17 方向已定）**：**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，
+不是另一个产品。两条线共用同一批知乎原料接口 —— 认知闭环的后端代码与主流程是同一份。
+
+**渲染责任**：**后端只给参数**（归一化坐标、高度、强度、置信度），**前端负责渲染**。
+2.5D 分层地图用 SVG + CSS `perspective`，断层特写处用 Three.js 做一次真实推镜。
 
 三条硬规则（对应 `AGENTS.md` 第 3 节与官方提交前检查第 7 条）：
 
 1. **不生成没有出处的内容** —— `source` 必填，拿不到真实问题标题 + URL + 原回答链接就报错。
 2. **空数据 ≠ 失败** —— 空数据走 200 + `empty: true` + `empty_notice`，前端显示真实提示。
 3. **失败必须是真话** —— 统一错误信封，`user_hint` 是中文、给人看的，不允许空字符串或英文原始报错。
+
+外加一条**认知闭环专属底线**：**至少 2 个独立可用的行为信号，断层才成立**。只有 1 个时必须返回
+`insufficient: true` + `insufficient_reason`，**不许拿一个信号硬撑出断层**。
 
 > 上游的实测细节（`Code=10001` 参数缺失、`Code=30001` 秒级限流、`NextOffset` 是字符串）记在
 > `api.json` 的 `x-upstream` 段，**后端要在这一层抹平，不要透给前端**。

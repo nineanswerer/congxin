@@ -67,22 +67,27 @@
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
-    "version": "v0",
+    "version": "v0.2",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "方向无关部分已冻结；tension / terrain 两个派生接口待方向拍板（B13）后定稿",
+    "status": "方向已定（桌宠主体 + 认知闭环），8 个路径全部冻结",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
       "GET /api/behavior/contents",
+      "POST /api/behavior/tension",
       "POST /api/situation/question",
+      "GET /api/terrain",
+      "POST /api/terrain/answer",
       "GET /api/quota"
     ],
     "rules": [
       "出处必填：source 缺失即报错，不生成无出处的内容",
       "空数据走 200 + empty + empty_notice，与失败严格区分",
       "错误走统一信封，user_hint 必须是中文真实提示",
-      "上游秒级限流（Code=30001）由后端退避重试，前端不制造重试风暴"
+      "上游秒级限流（Code=30001）由后端退避重试，前端不制造重试风暴",
+      "至少 2 个独立行为信号，断层才成立；不足时返回 insufficient，不许硬撑",
+      "后端只给渲染参数，前端负责渲染"
     ]
   },
   "red_lines": {
