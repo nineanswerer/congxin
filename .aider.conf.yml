@@ -1,2 +1,5 @@
 # 让 Aider 读取与其它 AI 平台同一份上下文
-read: AGENTS.md
+#
+# AGENTS.md 是规则唯一真源；BOOTSTRAP.md 是开工协议（读什么、复述什么、什么时候才能改文件）。
+# 两个都进 read 列表，Aider 开工时就不用靠人提醒、不用人粘贴提示词。
+read: AGENTS.md,prompts/BOOTSTRAP.md

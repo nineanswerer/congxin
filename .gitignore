@@ -36,6 +36,9 @@ npm-debug.log*
 # 本地实测脚本写入的旁路凭证
 scripts/.secret
 
+# 待提交的改动理由（AI 转录人说过的话，提交后由 hook 自动清空，不入库）
+.ctx/
+
 # 上一轮 Codex 对话导出与提取脚本，属本地参考材料
 _extract.ps1
 octosense-*.md

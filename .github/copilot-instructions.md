@@ -1,5 +1,16 @@
 @AGENTS.md
 
-本文件**只做指针**。通用规则一律以根目录 `AGENTS.md` 为准，不要在此复制正文。
+本文件**只做指针**。通用规则一律以根目录 `AGENTS.md` 为准，不要在此复制正文——正文有两份就会互相漂移。
 
-新会话先执行 `prompts/BOOTSTRAP.md`；会话结束前执行 `prompts/HANDOFF.md`；提交前跑 `scripts/check-contract.ps1`。
+---
+
+# 自动执行的工作协议（不用人提醒、不用人粘贴）
+
+**开工协议全文见 [`prompts/BOOTSTRAP.md`](prompts/BOOTSTRAP.md)。Copilot 打开本仓库时会自动加载本文件，因此：**
+
+1. **开工前自己读 `prompts/BOOTSTRAP.md`**，按里面的顺序读契约 → 规则 → 决策 → 进度 → 最新交接，
+   然后复述现状、**停下来等用户确认**，确认后才准改文件。
+2. **收工前按同一份协议的「收工协议」段执行**：
+   - 把用户明确说过的改动理由写进 `.ctx/current.md`（格式 `Context: <理由>`）→ commit hook 会自动填进 commit message
+   - 按 `prompts/HANDOFF.md` 写一份交接到 `docs/handoffs/`
+   - 跑 `powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1`

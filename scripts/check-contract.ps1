@@ -8,13 +8,15 @@
 
     检查项：
       1. contract.json 存在且是合法 JSON
-      2. 必备文件都在（上下文四层骨架 + 四份提示词 + hook）
+      2. 必备文件都在（上下文四层骨架 + 四份提示词 + 两个 hook）
       3. AGENTS.md 不超过行数上限（别写太长，否则每次会话都在烧 token）
       4. 疑似密钥扫描（FAIL 级：赋值形式 / 常见前缀 / 整行裸密钥）
-      5. .gitignore 覆盖 .env* 与 access_secret
+      5. .gitignore 覆盖 .env* / access_secret / .ctx
       6. contract.json 里的关键日期在 docs/status.md 里能对上
       7. commit-msg hook 是否已安装（WARN）
       8. 是否已有交接记录（WARN）
+      9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
+     10. post-checkout hook 是否带开工清单
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
@@ -73,7 +75,8 @@ $required = @(
     'prompts\HANDOFF.md',
     'prompts\CROSS_REVIEW.md',
     'prompts\COMMIT_MSG.md',
-    '.githooks\commit-msg'
+    '.githooks\commit-msg',
+    '.githooks\post-checkout'
 )
 $missing = @()
 foreach ($r in $required) {
@@ -157,8 +160,9 @@ $giProblems = @()
 if ($giText -notmatch '(?m)^\.env\s*$' -and $giText -notmatch '(?m)^\.env\.\*') { $giProblems += '.env' }
 if ($giText -notmatch '(?m)^\.env\.\*') { $giProblems += '.env.*' }
 if ($giText -notmatch '(?m)^access_secret\s*$') { $giProblems += 'access_secret' }
+if ($giText -notmatch '(?m)^\.ctx/') { $giProblems += '.ctx/（待提交理由的临时文件，不该入库）' }
 if ($giProblems.Count -eq 0) {
-    Add-Result 'PASS' '.gitignore 覆盖凭证' '.env / .env.* / access_secret 均已排除'
+    Add-Result 'PASS' '.gitignore 覆盖凭证' '.env / .env.* / access_secret / .ctx 均已排除'
 } else {
     Add-Result 'FAIL' '.gitignore 覆盖凭证' ("未排除：" + ($giProblems -join ', '))
 }
@@ -203,6 +207,51 @@ if ($handoffCount -gt 0) {
     Add-Result 'PASS' '交接记录' "$handoffCount 份"
 } else {
     Add-Result 'WARN' '交接记录' '还没有交接记录。换 AI 平台前先让 AI 写一份（见 prompts/HANDOFF.md）'
+}
+
+# ---------------------------------------------------------------- 9. 自动触发点
+# 双 AI 协作要"不用人记得"，前提是每个 AI 平台一开仓库就能自己读到工作协议。
+# 注意：Gemini 的 context.fileName 只能指向**一个**文件，所以指针链可能是两跳
+# （指针文件 → AGENTS.md → prompts/BOOTSTRAP.md）。这里验的是**链能不能走通**，
+# 不是"指针文件里有没有 BOOTSTRAP 这个词"。
+$agentsText = if (Test-Path -LiteralPath (Join-Path $Root 'AGENTS.md')) { [System.IO.File]::ReadAllText((Join-Path $Root 'AGENTS.md')) } else { '' }
+$agentsHasBoot = ($agentsText -match 'BOOTSTRAP')
+
+$pointers = @(
+    'CLAUDE.md',
+    '.cursor\rules\00-project.mdc',
+    '.gemini\settings.json',
+    '.aider.conf.yml',
+    '.github\copilot-instructions.md'
+)
+$pointerProblems = @()
+foreach ($p in $pointers) {
+    $pp = Join-Path $Root $p
+    if (-not (Test-Path -LiteralPath $pp)) { $pointerProblems += "$p 缺失"; continue }
+    try { $pt = [System.IO.File]::ReadAllText($pp) } catch { $pointerProblems += "$p 读取失败"; continue }
+    if ($pt -notmatch 'AGENTS\.md') { $pointerProblems += "$p 未指向 AGENTS.md"; continue }
+    # 直接指 BOOTSTRAP，或经 AGENTS.md 两跳到 BOOTSTRAP，都算通
+    if ($pt -match 'BOOTSTRAP') { continue }
+    if ($agentsHasBoot) { continue }
+    $pointerProblems += "$p 到 BOOTSTRAP 的指针链断了"
+}
+if ($pointerProblems.Count -eq 0) {
+    Add-Result 'PASS' '各平台指针文件' "$($pointers.Count) 个平台均能读到 AGENTS.md 与开工协议"
+} else {
+    Add-Result 'FAIL' '各平台指针文件' ($pointerProblems -join ' | ')
+}
+
+# ---------------------------------------------------------------- 10. post-checkout hook 可执行
+$poHook = Join-Path $Root '.githooks\post-checkout'
+if (-not (Test-Path -LiteralPath $poHook)) {
+    Add-Result 'FAIL' 'post-checkout hook' '文件缺失'
+} else {
+    $poText = [System.IO.File]::ReadAllText($poHook)
+    if ($poText -notmatch 'BOOTSTRAP|contract\.json') {
+        Add-Result 'FAIL' 'post-checkout hook' '内容里没有开工清单'
+    } else {
+        Add-Result 'PASS' 'post-checkout hook' 'pull / clone 后会自动打印开工清单'
+    }
 }
 
 # ---------------------------------------------------------------- 输出

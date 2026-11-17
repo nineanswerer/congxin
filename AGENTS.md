@@ -47,11 +47,12 @@
 
 1. **上下文四层是唯一真源**，按顺序读：`contracts/contract.json`（不可变事实）→ 本文件（团队规则）→ `docs/decisions.md`（已有决策）→ `docs/status.md`（当前进度）→ `docs/handoffs/` 最新一份（上一个 AI 的交接）。
 2. **各平台的规则文件只做指针**（`CLAUDE.md`、`.cursor/rules/`、`.gemini/settings.json`、`.aider.conf.yml`、`.github/copilot-instructions.md`），不复制正文——正文有两份就会互相漂移。
-3. **新会话先 BOOTSTRAP**：读契约 → 复述现状 → **等人确认后才准改文件**（`prompts/BOOTSTRAP.md`）。
-4. **会话结束前 HANDOFF**：让 AI 自己写交接记录，人只审阅（`prompts/HANDOFF.md`）。
-5. **commit 必须带三行** `Context:` / `Tried:` / `Verify:`，由 `.githooks/commit-msg` 强制。其中 **`Context:` 必须由人写**，AI 不知道"为什么"。
+3. **开工协议见 `prompts/BOOTSTRAP.md`**：读契约 → 复述现状 → **等人确认后才准改文件**。各平台的指针文件会被平台自动加载，**AI 自己读这份协议，不用人粘贴、不用人提醒**。
+4. **收工协议在同一份文件的「收工协议」段**：让 AI 自己写交接记录，人只审阅（`prompts/HANDOFF.md`）。
+5. **commit 必须带三行** `Context:` / `Tried:` / `Verify:`，由 `.githooks/commit-msg` 强制。其中 **`Context:` 必须由人给**，AI 不知道"为什么"——但**人不必手改 commit message**：AI 把人明确说过的理由转录进 `.ctx/current.md`，hook 自动填入；人没说就别写。
 6. **改别人负责的目录前先说一声**；同一文件同一时间只由一个人改。目录分工见 `docs/协作规范.md`。
 7. **提交前跑** `powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1`，有 FAIL 不能提交。
 8. **AI 的建议与人的判断冲突时，以契约为准**；契约要改就写 ADR（`docs/adr/`），不要默默改。
+9. **`git pull` 之后** `.githooks/post-checkout` 会自动打印开工清单——契约变了要重读，这一步不用靠人记。
 
 完整机制见 [`docs/协作规范.md`](docs/协作规范.md)。

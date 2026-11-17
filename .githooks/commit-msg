@@ -2,7 +2,11 @@
 # commit-msg hook —— 强制 commit 信息带上下文
 #
 # 为什么：AI 写 diff 时看得见"改成了什么"，但写 commit message 时它不知道"为什么"。
-# 所以 Context 行必须由人来给，机器只负责拦住空洞的提交。
+# 所以 Context 行必须由人给，机器只负责拦住空洞的提交。
+#
+# Context 自动填充：若 commit message 里没有 Context: 行，
+# 而 .ctx/current.md 里有"人明确说过的理由"，就自动补上。
+# AI 只负责**转录人说过的话**，不负责推断——推断出来的 Context 是零信息量的。
 #
 # 规范见 prompts/COMMIT_MSG.md
 # 安装：powershell -ExecutionPolicy Bypass -File scripts/install-hooks.ps1
@@ -15,8 +19,48 @@ if [ -z "$MSG_FILE" ] || [ ! -f "$MSG_FILE" ]; then
   exit 0
 fi
 
+TOP=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+CTX_FILE="$TOP/.ctx/current.md"
+
 # Windows 上 message 文件是 CRLF，统一去掉 \r
 BODY=$(tr -d '\r' < "$MSG_FILE")
+
+get_field() {
+  # 取第一个以 "$1:" 开头的行的值并去掉首尾空白
+  printf '%s\n' "$BODY" | awk -v k="$1" '
+    index($0, k ":") == 1 { print substr($0, length(k) + 2); exit }
+  ' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+# ---- 0. Context 自动填充（人说的理由在 .ctx/current.md 里等着）----
+CTX_MSG=$(get_field "Context")
+CTX_PENDING=""
+if [ -f "$CTX_FILE" ]; then
+  CTX_PENDING=$(tr -d '\r' < "$CTX_FILE" | awk '
+    index($0, "Context:") == 1 { print substr($0, length("Context:") + 1); exit }
+  ' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+fi
+
+FILLED=0
+if [ -z "$CTX_MSG" ] && [ -n "$CTX_PENDING" ]; then
+  TMP="${MSG_FILE}.autofill"
+  # awk 的 -v 会把反斜杠当转义符，先换掉
+  CLEAN=$(printf '%s' "$CTX_PENDING" | tr '\\' '/')
+  awk -v v="$CLEAN" '
+    BEGIN { done = 0 }
+    {
+      print
+      if (!done && NR > 1 && $0 ~ /^[[:space:]]*$/) {
+        print "Context: " v
+        done = 1
+      }
+    }
+    END { if (!done) print "Context: " v }
+  ' "$MSG_FILE" > "$TMP" && mv "$TMP" "$MSG_FILE"
+  BODY=$(tr -d '\r' < "$MSG_FILE")
+  FILLED=1
+  echo "commit-msg: 已用 .ctx/current.md 填充 Context: 行。" >&2
+fi
 
 # 标题 = 第一段空行之前的第一行非空行
 TITLE=$(printf '%s\n' "$BODY" | awk '
@@ -47,11 +91,7 @@ fi
 # ---- 3. Context / Tried / Verify 三行必须存在且非空 ----
 check_line() {
   key="$1"
-  val=$(printf '%s\n' "$BODY" | awk -v k="$key" '
-    index($0, k ":") == 1 { print substr($0, length(k) + 2); exit }
-  ')
-  # 去掉前后空白
-  val=$(printf '%s' "$val" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  val=$(get_field "$key")
   if [ -z "$val" ]; then
     echo "" >&2
     echo "commit-msg: 缺少或为空的 '${key}:' 行。" >&2
@@ -66,8 +106,17 @@ check_line "Verify"
 if [ "$FAIL" -ne 0 ]; then
   echo "" >&2
   echo "三行说明：为什么这么改 / 试过什么 / 怎么验证的。见 prompts/COMMIT_MSG.md" >&2
+  echo "Context 也可以事先写进 .ctx/current.md（内容为 'Context: <理由>'），提交时自动带入。" >&2
   echo "紧急情况可 git commit --no-verify 绕过，但请在群里说一声。" >&2
   exit 1
+fi
+
+# ---- 4. 提交成功，pending context 用掉了就清空 ----
+if [ -f "$CTX_FILE" ]; then
+  if [ "$FILLED" -eq 0 ] && [ -n "$CTX_PENDING" ]; then
+    echo "commit-msg: Context 由人手写，.ctx/current.md 本次未使用，已清空。" >&2
+  fi
+  : > "$CTX_FILE"
 fi
 
 exit 0

@@ -419,6 +419,13 @@
   3. **commit 三行由 hook 强制**（`.githooks/commit-msg`）：`Context:` / `Tried:` / `Verify:`。其中 **`Context:` 必须由人写**——AI 看得见 diff，但不知道"为什么"；硬写出来的 Context 只是 diff 的复述，看着煞有介事实则零信息量，还会污染下一个 AI 的判断。AI 负责标题与 `Tried:`。
   4. **目录所有权按目录分**：`nineanswerer` → `server/`、`docs/decisions.md`、`contracts/`；`5zdz5` → `web/`、`assets/`、`docs/adr/`、`docs/handoffs/`。共享区（`contracts/`、`docs/status.md`、`README.md`）走 PR，不直推 main；每天至少合并一次。
   5. **自检闸**：`scripts/check-contract.ps1` 检查文件齐全、AGENTS.md 行数上限、**疑似密钥扫描**、关键日期与 status.md 一致、hook 是否安装、是否有交接记录。**有 FAIL 不能提交。**
+  6. **机制必须"不用人记得"——三条触发点全部自动化**（2026-11-17 补做，这是 D25 落地后的复查结论）：
+     - **开工** → 各平台指针文件（`CLAUDE.md` / `.cursor/rules/00-project.mdc` / `.gemini/settings.json` / `.aider.conf.yml` / `.github/copilot-instructions.md`）被平台**自动加载**并指向 `prompts/BOOTSTRAP.md`，新 AI 自己读、自己复述、自己等确认。**换 AI 平台不再需要人手动粘贴 BOOTSTRAP。**
+     - **拉取** → `.githooks/post-checkout` 在 `git pull` / `clone` / 切分支后**自动打印开工清单**，提醒"契约变了要重读"。**不再依赖人记得。**
+     - **收工** → 开工协议的「收工协议」段写明：AI 自己写交接到 `docs/handoffs/`、自己跑自检。**不再需要人提醒。**
+     - **提交** → `Context:` 行仍由人给，但**人不用手改 commit message**：AI 把人明确说过的理由转录进 `.ctx/current.md`（已 gitignore），`commit-msg` hook 在 `Context:` 缺失时自动填入，提交后自动清空。**AI 只转录不许推断。**
+     - → **人真正要做的只剩一件事：跟 AI 说清"为什么改"**，一句话。
+  7. **自检脚本同步扩到 10 项**，新增：各平台指针文件是否都能走到开工协议（验**指针链**，不是验关键词）、post-checkout 是否带开工清单、`.ctx/` 是否已 gitignore。
 - **被否决的方案**（详见 ADR-0001）：
   - **A. 只靠 GitHub 版本控制**——Git 记 diff，不记"为什么"和"试过什么失败了"。换平台必然重建上下文，且重建时"猜得很自信"。
   - **B. 全队统一到一个 AI 平台**——表面消除了上下文割裂，实则把风险换成单点：一人账号/额度/模型变动即全队停摆，且放弃双模型交叉审查这一优势。

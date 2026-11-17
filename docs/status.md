@@ -29,6 +29,7 @@
 - 建立项目目录：`AGENTS.md` / `docs/` / `docs/sources/`。
 - **GitHub 仓库已建并推送**：`https://github.com/nineanswerer/zhihu-study-pet`（public，branch `main`），队友 `5zdz5` **已是 collaborator（push 权限），无待处理邀请**（11-16 22:42 经 GitHub API 核实）。密钥不在仓库内（双重确认：rg 扫描 + `git log -p --all`）。
 - **双 AI 协作机制已落地并实跑验证**（D25 / ADR-0001）：上下文四层 L0 契约（`contracts/`）、L1 身份（`AGENTS.md` 为唯一真源，五个平台文件只做指针）、L2 决策（`docs/decisions.md` + `docs/adr/`）、L3 交接（`docs/handoffs/`）；四份提示词（BOOTSTRAP / HANDOFF / CROSS_REVIEW / COMMIT_MSG）；`.githooks/commit-msg` 强制 `Context:`/`Tried:`/`Verify:` 三行；`scripts/check-contract.ps1` 自检**实跑 PASS 8 / WARN 0 / FAIL 0**；hook 实测**空洞提交被拒、`Tried:` 为空被拒、格式正确放行**。
+- **机制已升级为"全自动触发"**（D25 结论 6–7）：四个触发点全部自动化 —— **开工**（五个平台指针文件被平台自动加载并指向 `prompts/BOOTSTRAP.md`，新 AI 自己读、自己等确认，**换 AI 平台不用人粘提示词**）、**拉取**（`.githooks/post-checkout` 自动打印开工清单）、**收工**（协议内置交接与自检要求，AI 自己做）、**提交**（人说的理由由 AI 转录进 `.ctx/current.md`，hook 自动填 `Context:` 行，**人不用手改 commit message**）。**人真正要做的只剩"跟 AI 说一句为什么改"。** 自检扩到 **10 项**，实跑 **PASS 10 / WARN 0 / FAIL 0**；commit-msg hook 三个用例实测通过（自动填充 / 空 `Tried:` 被拒 / 人手写优先）。
 - **与队友完成首轮对齐**（11-17）：D14（桌宠是主体、知识卡片是产出物）与 D19（角色沿用官方刘看山）**均已定**。队友对"GitHub 提交 + 两人分别用不同 AI"提出疑虑 → 见 D25 与 `docs/协作规范.md`。
 
 ## 三、阻塞项

@@ -1,0 +1,34 @@
+#!/bin/sh
+# post-checkout —— pull / clone / 切分支之后自动提醒本仓库的工作规约。
+#
+# 为什么：队友拉取更新后最容易忘的就是"契约变了要重读"。
+# 把它做成 git 的钩子，就不用靠人记得——环境自己会提示。
+#
+# 每次 HEAD 变化时打印一段简短的开工清单。
+
+set -u
+
+PREV="${1:-}"
+NEXT="${2:-}"
+
+# HEAD 没变（同一个 commit 重新 checkout）就不打扰
+if [ -n "$PREV" ] && [ "$PREV" = "$NEXT" ]; then
+  exit 0
+fi
+
+SHORT=$(git rev-parse --short HEAD 2>/dev/null || echo '?')
+
+echo "" >&2
+echo "──────────────────────────────────────────────────────────" >&2
+echo " 仓库已更新（${SHORT}）。开工前按顺序读完再动手：" >&2
+echo "   1. contracts/contract.json    不可变事实（赛程/额度/底座/红线）" >&2
+echo "   2. AGENTS.md                  规则唯一真源" >&2
+echo "   3. docs/decisions.md          已有决策与依据" >&2
+echo "   4. docs/status.md             当前进度与阻塞项" >&2
+echo "   5. docs/handoffs/ 最新一份     上一个 AI 的交接" >&2
+echo " 然后用你的话复述现状，停下来等人确认，再改文件。" >&2
+echo " 提交前：powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1" >&2
+echo "──────────────────────────────────────────────────────────" >&2
+echo "" >&2
+
+exit 0
