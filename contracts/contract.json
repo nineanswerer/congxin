@@ -1,8 +1,10 @@
 {
   "schema_version": 1,
   "project": "zhihu-hackathon-s3",
-  "title_working": "zhihu-study-pet",
-  "repo": "https://github.com/nineanswerer/zhihu-study-pet",
+  "title": "从心",
+  "title_pinyin": "congxin",
+  "title_note": "作品名与队名均为「从心」。GitHub 仓库名不能是纯中文——非 ASCII 字符会被规范化成连字符（实测 从心x → -x，从心 → -），因此仓库用拼音名 congxin。",
+  "repo": "https://github.com/nineanswerer/congxin",
   "team": [
     { "login": "nineanswerer", "role": "主理 / 后端与知乎对接" },
     { "login": "5zdz5", "role": "待与队友对齐" }

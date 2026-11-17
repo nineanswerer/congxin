@@ -27,7 +27,7 @@
 - 读队友原始提案《Agent Pet OS：概念映射与全量工程目录实战白皮书》，归档于 [sources/队友桌宠想法-原始.txt](sources/队友桌宠想法-原始.txt)。
 - 确定选题定位、形态、技术选型、开发顺序、奖线策略 → [decisions.md](decisions.md) D9—D14。
 - 建立项目目录：`AGENTS.md` / `docs/` / `docs/sources/`。
-- **GitHub 仓库已建并推送**：`https://github.com/nineanswerer/zhihu-study-pet`（public，branch `main`），队友 `5zdz5` **已是 collaborator（push 权限），无待处理邀请**（11-16 22:42 经 GitHub API 核实）。密钥不在仓库内（双重确认：rg 扫描 + `git log -p --all`）。
+- **GitHub 仓库已建并推送**：**<https://github.com/nineanswerer/congxin>**（public，branch `main`），队友 `5zdz5` **已是 collaborator（push 权限），无待处理邀请**（11-16 22:42 经 GitHub API 核实）。密钥不在仓库内（双重确认：rg 扫描 + `git log -p --all`）。**仓库名 11-17 由 `zhihu-study-pet` 改为 `congxin`**——作品名定为「从心」，但 GitHub 会把仓库名里的非 ASCII 字符规范化成连字符，纯中文名不可用（见 D26）。
 - **双 AI 协作机制已落地并实跑验证**（D25 / ADR-0001）：上下文四层 L0 契约（`contracts/`）、L1 身份（`AGENTS.md` 为唯一真源，五个平台文件只做指针）、L2 决策（`docs/decisions.md` + `docs/adr/`）、L3 交接（`docs/handoffs/`）；四份提示词（BOOTSTRAP / HANDOFF / CROSS_REVIEW / COMMIT_MSG）；`.githooks/commit-msg` 强制 `Context:`/`Tried:`/`Verify:` 三行；`scripts/check-contract.ps1` 自检**实跑 PASS 8 / WARN 0 / FAIL 0**；hook 实测**空洞提交被拒、`Tried:` 为空被拒、格式正确放行**。
 - **机制已升级为"全自动触发"**（D25 结论 6–7）：四个触发点全部自动化 —— **开工**（五个平台指针文件被平台自动加载并指向 `prompts/BOOTSTRAP.md`，新 AI 自己读、自己等确认，**换 AI 平台不用人粘提示词**）、**拉取**（`.githooks/post-checkout` 自动打印开工清单）、**收工**（协议内置交接与自检要求，AI 自己做）、**提交**（人说的理由由 AI 转录进 `.ctx/current.md`，hook 自动填 `Context:` 行，**人不用手改 commit message**）。**人真正要做的只剩"跟 AI 说一句为什么改"。** 自检扩到 **10 项**，实跑 **PASS 10 / WARN 0 / FAIL 0**；commit-msg hook 三个用例实测通过（自动填充 / 空 `Tried:` 被拒 / 人手写优先）。
 - **与队友完成首轮对齐**（11-17）：D14（桌宠是主体、知识卡片是产出物）与 D19（角色沿用官方刘看山）**均已定**。队友对"GitHub 提交 + 两人分别用不同 AI"提出疑虑 → 见 D25 与 `docs/协作规范.md`。
@@ -43,12 +43,12 @@
 | B4 | **OAuth 凭证（App ID / App Key）** | **创建项目之后**才由赛事页面分配（官方技术指南 1.2 + FAQ 给出取密钥路径：`zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p3`）→ 12-05 之后才能联调。代码必须提前用 Mock 打通。另需确认账号**已实名 + 有手机号**，否则 OAuth 校验不过 | 到时由用户取 |
 | B5 | ~~技术指南正文~~ | ✅ **已读通**（该飞书文档公开可读，无需登录）→ rules 第十一节 11.1—11.10。含 800 美元定义、开放能力 10 类、AI Works 部署流程、4 条 FAQ | — |
 | B6 | ~~与队友对齐 D14 定位~~ | ✅ **已完成**（11-17 队友回"可以，差不多"）：桌宠是主体、知识卡片是产出物，队友无异议；角色沿用官方刘看山（D19 已定，队友未提原创形象） | — |
-| B7 | **队名 / 作品名** | 未定。决赛须提供最终项目名与成员真实姓名；仓库名也建议与作品名一致 | 用户 + 队友 |
+| B7 | ~~队名 / 作品名~~ | ✅ **已定**（11-17）：作品名与队名均为 **「从心」**。仓库名用拼音 `congxin`——GitHub 把仓库名里的非 ASCII 字符规范化成连字符，纯中文名不可用（D26） | — |
 | B8 | **大连交大是否为合作院校** | 未核实。若是且能凑够单校 25 份有效作品，可叠加校内冠军 ¥2,000 | 待查 / 待动员 |
 | B9 | **决赛是否赴深圳** | 用户选"待定"。已按**线上腾讯会议**准备关键路径，线下作为可选增量（D16） | 12 月中旬再定 |
 | B10 | **需求验证（3—5 人试用）** | 未安排 | 队友 |
-| B11 | ~~GitHub 登录~~ | ✅ **已解决**：`gh` keyring 令牌虽失效，但 **Git Credential Manager 里有可用的 `nineanswerer` 令牌**，已用它建仓并推送。仓库：**`https://github.com/nineanswerer/zhihu-study-pet`**（public，队友 `5zdz5` **已是 collaborator，push 权限**，无待处理邀请） | — |
-| B12 | **队友白皮书能否公开** | 未入库（已 gitignore）。公开他的原始提案需他本人同意 | 用户 + 队友 |
+| B11 | ~~GitHub 登录~~ | ✅ **已解决**：`gh` keyring 令牌虽失效，但 **Git Credential Manager 里有可用的 `nineanswerer` 令牌**，已用它建仓并推送。仓库：**`https://github.com/nineanswerer/congxin`**（public，队友 `5zdz5` **已是 collaborator，push 权限**，无待处理邀请） | — |
+| B12 | ~~队友原始提案能否公开~~ | ✅ **已定**（11-17）：**不公开入库**。仓库中不含该文件；其中的架构取舍理由已逐条写进 D5，**取舍理由进仓库、原始提案不进** | — |
 
 ## 四、开发顺序与倒排计划
 
@@ -83,8 +83,8 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 - ⬜ **一句话场景定义**
 - ⬜ **5 分钟决赛 Demo 逐秒脚本**
 - ⬜ 桌宠卡片与"小屋"的视觉稿
-- ⬜ **定作品名 / 队名**（B7，定了之后要改仓库名 + `contract.json` 的 `title_working` 与 `repo`）
-- ⬜ 队友原始提案能否公开进仓库（B12，已在开场消息里问过，尚无答复）
+- ✅ **作品名 / 队名已定为「从心」**（11-17）。仓库名同步改为 `congxin`（GitHub 命名限制，见 D26）
+- ✅ **队友原始提案不公开入库**（11-17 决定），仓库中不含该文件
 
 ### 阶段 2：骨架（11-17 — 11-18）
 
@@ -128,13 +128,12 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 
 ## 五、下一步（按依赖顺序）
 
-1. **向队友发消息**回复"GitHub 提交 + 双 AI"疑虑（D25 已落地机制，文案见 `docs/队友对齐清单.md`）：说清两个 AI 是资产（官方明确要 AI 交互记录）、四层机制、三个动作、目录分工，并请他确认**作品名**与**原始提案能否公开**。
+1. **向队友发消息**回复"GitHub 提交 + 双 AI"疑虑（D25 已落地机制，文案见 `docs/队友对齐清单.md` 零 E）：说清两个 AI 是资产（官方明确要 AI 交互记录）、四层机制已自动化、目录分工。**作品名已定「从心」、提案已定不公开，这两条不用再问。**
 2. **阶段 1 收口**：写死一句话场景 + 5 分钟 Demo 逐秒脚本 + 桌宠视觉稿（SVG）。**这是唯一不能外包给 AI 的产出**——场景和 Demo 脚本必须人来定，AI 只能排版。
 3. **确认 App ID / App Key 是否已可获取**（B4）：账号实名 + 手机号这两个 OAuth 前提已满足，官方取密钥路径 `https://www.zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p3`。若 12-05 前就能拿到，OAuth 联调可提前，不必等提交窗口。
 4. **搭 `server/` 骨架**：Node 单进程 + 进程内 Map，先跑通 `question_recommendations` → `question_answers` → 卡片带出处这条最小闭环。
-5. **定作品名 / 队名**（B7），同步改仓库名 + `contract.json` 的 `title_working` 与 `repo`。
-6. 阶段 2 起：Web 骨架 → 闭环 → 稳定性 → 部署 → 试用与材料。
-7. **D22 附带的日程风险**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**，别把审核时间压到 12-07 截止之后。
+5. 阶段 2 起：Web 骨架 → 闭环 → 稳定性 → 部署 → 试用与材料。
+6. **D22 附带的日程风险**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**，别把审核时间压到 12-07 截止之后。
 
 ## 六、记录纪律
 

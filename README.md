@@ -1,8 +1,10 @@
-# 知乎黑客松 S3 · 湾区共创季 — 参赛项目
+# 从心 — 知乎黑客松 S3 · 湾区共创季参赛项目
 
-> 作品名待定，当前用工作名 `zhihu-study-pet`。
+> **作品名 / 队名：从心**｜仓库：<https://github.com/nineanswerer/congxin>
 > 团队：2 人（`nineanswerer` / `5zdz5`）｜活动：`activity_code=zhihu_hackathon_2026_p3`
 > **当前状态：选题定位与工程基线建设阶段，尚未进入功能开发。**
+>
+> *（仓库名用拼音 `congxin` 而非中文「从心」：GitHub 会把仓库名里的非 ASCII 字符规范化成连字符——实测 `从心x` 改完真名变成 `-x`，纯中文 `从心` 会变成 `-` 并与已有仓库冲突。所以作品名是「从心」，仓库名必须是 ASCII。）*
 
 ## 这是什么
 
@@ -31,7 +33,7 @@
 | 文件 | 内容 |
 | --- | --- |
 | [docs/brief.md](docs/brief.md) | 产品定义、目标用户、场景、首版范围与验收条件 |
-| [docs/decisions.md](docs/decisions.md) | D1—D22，每条含日期 / 结论 / 依据 / 状态 |
+| [docs/decisions.md](docs/decisions.md) | D1—D26，每条含日期 / 结论 / 依据 / 状态 |
 | [docs/status.md](docs/status.md) | 已完成、阻塞项、倒排计划 |
 | [docs/协作规范.md](docs/协作规范.md) | **两个人、两个不同 AI 平台如何共用一份 Git 历史**（上下文四层 + 三个动作 + 目录分工） |
 | [docs/队友对齐清单.md](docs/队友对齐清单.md) | 与队友对齐 D14 / D19 的逐条谈法（含白皮书 9 概念处置表） |
@@ -76,4 +78,5 @@ powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
 
 ## 队友提案说明
 
-`docs/sources/队友桌宠想法-原始.txt`（队友原始提案《Agent Pet OS》）**暂未公开入库**，待队友本人同意后决定是否公开。其中的企业级架构建议（Kafka / Neo4j / Redis / K8s / 微服务 / 多 Agent 并发 / 数字分身 / A2A）已在 [decisions.md](docs/decisions.md) D5 中逐条说明取舍理由。
+队友原始提案《Agent Pet OS》**已确定不公开入库**（2026-11-17 决定），仓库中不含该文件。
+其中提出的企业级架构建议（Kafka / Neo4j / Redis / K8s / 微服务 / 多 Agent 并发 / 数字分身 / A2A）已在 [decisions.md](docs/decisions.md) D5 中逐条说明取舍理由——**取舍理由本身进仓库，原始提案不进**。
