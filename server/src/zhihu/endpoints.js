@@ -5,7 +5,7 @@
  *    而是下面这三个。这是从 zhihu-cli 二进制里反查出来的。
  */
 
-import { callUpstream } from './client.js';
+import { callUpstream, callUpstreamPost } from './client.js';
 
 export async function getQuota() {
   const data = await callUpstream('/api/v1/quota');
@@ -69,4 +69,57 @@ export async function getContents(contentType = 'all', limit = 50, offset = 0) {
 export async function getCreatorAccountStats() {
   const data = await callUpstream('/api/v1/user/creator_account_stats');
   return data ?? {};
+}
+
+/**
+ * 主题问题推荐（问题发现，100 次/天）。
+ * ⚠️ 上游只有 Title 与 Url，**没有 Paging**。
+ */
+export async function getQuestionRecommendations(query, count = 5) {
+  const data = await callUpstream('/api/v1/user/question_recommendations', {
+    Query: query,
+    Count: count,
+  });
+  return {
+    items: data?.Items ?? data?.items ?? [],
+    raw: data ?? null,
+  };
+}
+
+/**
+ * 某问题下的回答摘要。
+ * ⚠️ `QuestionUrl` 必填，缺失上游直接 Code=10001。
+ * ⚠️ `Summary` 是**官方服务摘要**，不是 AI 生成——前端展示时不要标成「AI 总结」。
+ */
+export async function getQuestionAnswers(questionUrl, limit = 5) {
+  const data = await callUpstream('/api/v1/content/question_answers', {
+    QuestionUrl: questionUrl,
+    Offset: 0,
+    Limit: limit,
+  });
+  return {
+    items: data?.Items ?? [],
+    paging: data?.Paging ?? null,
+  };
+}
+
+/**
+ * 直答（OpenAI 兼容）。
+ *
+ * ⚠️ **直答是「改写者」不是「检索者」**：实测 `zhida-agent` 给不出真实知乎链接，
+ *    所以出处字段一律来自上游接口，不由模型生成（契约 `POST /api/situation/question` 的硬要求）。
+ * ⚠️ 不要用 `zhida-agent`——用 `zhida-fast-1p5` 或 `zhida-thinking-1p5`。
+ */
+export async function chatComplete(model, messages, { temperature = 0.7 } = {}) {
+  const payload = await callUpstreamPost('/v1/chat/completions', {
+    model,
+    messages,
+    stream: false,
+    temperature,
+  });
+  const content = payload?.choices?.[0]?.message?.content ?? null;
+  return {
+    content: typeof content === 'string' ? content : null,
+    raw: payload,
+  };
 }

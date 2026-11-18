@@ -35,6 +35,21 @@ function buildHeaders() {
  * @param {object} query
  */
 export async function callUpstream(path, query = {}) {
+  return callUpstreamJson(path, { method: 'GET', query });
+}
+
+/**
+ * POST 版本（直答 `/v1/chat/completions` 用）。
+ * ⚠️ 直答的响应**不是** `{Code, Message, Data}` 信封，而是 OpenAI 兼容的
+ *    `{ choices: [{ message: { content } }] }`——所以这里**不拆信封**，原样返回 JSON。
+ * @param {string} path
+ * @param {{query?:object, body?:object}} options
+ */
+export async function callUpstreamPost(path, body = {}) {
+  return callUpstreamJson(path, { method: 'POST', body, raw: true });
+}
+
+async function callUpstreamJson(path, { method = 'GET', query = {}, body = null, raw = false } = {}) {
   const url = new URL(path, config.upstreamBase);
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
@@ -45,7 +60,9 @@ export async function callUpstream(path, query = {}) {
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
     try {
       const res = await fetch(url, {
+        method,
         headers: buildHeaders(),
+        body: body ? JSON.stringify(body) : undefined,
         signal: AbortSignal.timeout(config.upstreamTimeoutMs),
       });
 
@@ -61,14 +78,17 @@ export async function callUpstream(path, query = {}) {
         });
       }
 
-      const body = await res.json();
+      const payload = await res.json();
 
-      if (body.Code === 0) return body.Data;
+      // 直答是 OpenAI 兼容响应，没有 {Code,Message,Data} 信封，原样返回
+      if (raw) return payload;
+
+      if (payload.Code === 0) return payload.Data;
 
       // 秒级限流：退避后重试
-      if (body.Code === 30001) {
-        lastError = new ApiError('ZHIHU_RATE_LIMITED', `知乎接口触发秒级限流：${body.Message}`, {
-          upstream: { code: body.Code, message: body.Message },
+      if (payload.Code === 30001) {
+        lastError = new ApiError('ZHIHU_RATE_LIMITED', `知乎接口触发秒级限流：${payload.Message}`, {
+          upstream: { code: payload.Code, message: payload.Message },
           retryAfterMs: config.retryBaseMs * attempt,
         });
         if (attempt === MAX_ATTEMPTS) break;
@@ -77,15 +97,15 @@ export async function callUpstream(path, query = {}) {
       }
 
       // 参数缺失：重试没有意义
-      if (body.Code === 10001) {
-        throw new ApiError('ZHIHU_UPSTREAM_ERROR', `知乎接口报参数缺失：${body.Message}`, {
-          upstream: { code: body.Code, message: body.Message },
+      if (payload.Code === 10001) {
+        throw new ApiError('ZHIHU_UPSTREAM_ERROR', `知乎接口报参数缺失：${payload.Message}`, {
+          upstream: { code: payload.Code, message: payload.Message },
           retryable: false,
         });
       }
 
-      throw new ApiError('ZHIHU_UPSTREAM_ERROR', `知乎接口返回异常：${body.Message}`, {
-        upstream: { code: body.Code, message: body.Message },
+      throw new ApiError('ZHIHU_UPSTREAM_ERROR', `知乎接口返回异常：${payload.Message}`, {
+        upstream: { code: payload.Code, message: payload.Message },
         retryable: true,
       });
     } catch (err) {

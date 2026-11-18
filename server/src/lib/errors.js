@@ -44,6 +44,11 @@ export const ERROR_CATALOG = {
     retryable: true,
     hint: '网络有点慢，再试一次',
   },
+  QUESTION_NOT_FOUND: {
+    http: 404,
+    retryable: false,
+    hint: '这道题已经失效了，重新出一道吧',
+  },
   INTERNAL_ERROR: {
     http: 500,
     retryable: true,
