@@ -4,7 +4,7 @@
  * 技术底座（D22）：前端 + Node 单进程，**零数据库、零中间件**，
  * 会话放进程内 Map。部署走知乎 AI Works 源码发布。
  *
- * 当前实现的接口（对应 contracts/api.json v0.3 的 9 个路径，**全部已实现**）：
+ * 当前实现的接口（对应 contracts/api.json v0.4 的 **13 个路径**，**全部已实现**）：
  *   GET  /api/quota
  *   GET  /api/behavior/favorites
  *   GET  /api/behavior/followees
@@ -14,6 +14,10 @@
  *   GET  /api/terrain
  *   POST /api/terrain/answer
  *   GET  /api/tone
+ *   GET  /api/auth/profile
+ *   GET  /api/auth/login
+ *   GET  /api/auth/callback
+ *   POST /api/auth/logout
  */
 
 import express from 'express';
@@ -24,9 +28,11 @@ import { quotaRouter } from './routes/quota.js';
 import { behaviorRouter } from './routes/behavior.js';
 import { cognitionRouter } from './routes/cognition.js';
 import { toneRouter } from './routes/tone.js';
+import { authRouter } from './routes/auth.js';
 import { loadTaxonomy } from './taxonomy.js';
 import { loadTone } from './tone.js';
 import { sessionStats } from './session.js';
+import { authContextMiddleware, authSessionStats } from './lib/auth-session.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -49,6 +55,8 @@ app.get('/api/health', (req, res) => {
     service: 'congxin-server',
     cache: cacheStats(),
     sessions: sessionStats(),
+    auth: authSessionStats(),
+    oauth_configured: Boolean(config.oauthAppId && config.oauthAppKey && config.oauthRedirectUri),
     taxonomy_version: (() => {
       try {
         return loadTaxonomy().version;
@@ -75,10 +83,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// 登录上下文：把**当前请求的 OAuth token**带给上游调用层（没有会话时走 Access Secret 自读）
+app.use(authContextMiddleware);
+
 app.use(quotaRouter);
 app.use(behaviorRouter);
 app.use(cognitionRouter);
 app.use(toneRouter);
+app.use(authRouter);
 
 app.use((req, res) => {
   res.status(404).json({
@@ -113,6 +125,7 @@ try {
 app.listen(config.port, () => {
   console.log(`[server] 「从心」后端已启动：http://localhost:${config.port}`);
   console.log(`[server] 上游鉴权模式：${config.oauthToken ? 'OAuth（登录用户）' : 'Access Secret（开发期自读）'}`);
+  console.log(`[server] 知乎登录入口：${config.oauthAppId && config.oauthAppKey && config.oauthRedirectUri ? '已就绪' : '未就绪（App ID / App Key 由赛事页面在项目创建后分配）'}`);
   console.log(`[server] 缓存 TTL：${config.cacheTtlMs}ms`);
 });
 

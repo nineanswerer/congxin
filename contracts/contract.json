@@ -43,7 +43,15 @@
     "tools": 10,
     "knowledge": 500,
     "user_data": 10000,
-    "creator": 500
+    "creator": 500,
+    "_measured_2026_11_18": {
+      "checked_at": "2026-11-18 21:00",
+      "note": "当日已用/剩余快照。**每日额度按北京时间 00:00 重置，不结转。**",
+      "used": { "question_discovery": 19, "zhida_openai": 3, "creator": 17, "user_data": 89 },
+      "remaining": { "global_search": 5000, "zhihu_search": 5000, "hot_list": 100, "question_discovery": 81, "zhida_openai": 97, "tools": 10, "knowledge": 500, "user_data": 9911, "creator": 483 },
+      "bottleneck": "**问题发现只有 100 次/天**（问题推荐与回答摘要共用），是主路径的硬瓶颈；Demo 演练、3—5 人试用、决赛现场全靠缓存与去重扛。",
+      "overage_price": "问题回答 20 元/千次；知乎搜索 20 元/千次；用户创作内容摘要 / 关注列表 / 收藏夹内容各 10 元/千次"
+    }
   },
   "tech": {
     "form": "web-app",
@@ -101,10 +109,10 @@
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
-    "version": "v0.3",
+    "version": "v0.4",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "方向已定（桌宠主体 + 认知闭环），9 个路径全部有代码",
+    "status": "方向已定（桌宠主体 + 认知闭环）；**13 个路径冻结**：9 个已实现并实跑 + 4 个登录路径待 12-05 OAuth 凭证到位",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
@@ -114,7 +122,11 @@
       "GET /api/terrain",
       "POST /api/terrain/answer",
       "GET /api/quota",
-      "GET /api/tone"
+      "GET /api/tone",
+      "GET /api/auth/profile",
+      "GET /api/auth/login",
+      "GET /api/auth/callback",
+      "POST /api/auth/logout"
     ],
     "rules": [
       "出处必填：source 缺失即报错，不生成无出处的内容",
@@ -123,8 +135,25 @@
       "上游秒级限流（Code=30001）由后端退避重试，前端不制造重试风暴",
       "至少 2 个独立行为信号，断层才成立；不足时返回 insufficient，不许硬撑",
       "后端只给渲染参数，前端负责渲染",
-      "样本不足、上游截断、同分竞争——三种情况都要在 user_hint / sample_note 里如实说出来"
-    ]
+      "样本不足、上游截断、同分竞争——三种情况都要在 user_hint / sample_note 里如实说出来",
+      "登录态只有两种：oauth（用户授权过知乎）与 developer_account（开发期自读）；后者不许编昵称、不许假装拿到了用户资料",
+      "OAuth Token 只留服务端，浏览器只拿 HttpOnly + Secure Cookie 里的随机 session id",
+      "OAuth Token 过期或鉴权失败时停止读取，不静默切回 Access Secret 所属账号",
+      "App ID / App Key 由赛事页面在项目创建后分配，不走通用邮件申请流程；拿不到就不编造领取入口"
+    ],
+    "auth": {
+      "credential_source": "赛事页面在项目创建后分配 App ID / App Key；黑客松不走通用邮件申请流程",
+      "available_from": "2026-12-05",
+      "upstream_profile_endpoint": "GET https://openapi.zhihu.com/user（只需 OAuth access_token，不需要 Access Secret 与 X-Request-Timestamp）",
+      "protocol_gotchas": [
+        "回调参数是 authorization_code（不是 code），但换 token 的表单字段叫 code——接收端两个都要收",
+        "回调不返 state，做不到标准登录 CSRF 校验，上线前必须向平台确认",
+        "只有 access_token + expires_in=3600，没有 refresh token，1 小时必过期",
+        "/access_token 与 /user 响应里 code=20000 表示成功，别当错误",
+        "创作能力四项（我的全文 / 评论 / 账号统计 / 单篇统计）不支持 OAuth 身份切换"
+      ],
+      "uid_handling": "uid 超过 JavaScript 安全整数范围：后端按字符串返回，前端按字符串处理，不要先转 Number 再转字符串"
+    }
   },
   "red_lines": {
     "secrets_never_in_repo": true,

@@ -17,7 +17,7 @@
       8. 是否已有交接记录（WARN）
       9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
      10. post-checkout hook 是否带开工清单
-     11. API 契约 api.json 是否存在、可解析、核心接口齐全、出处与 user_hint 必填
+     11. API 契约 api.json 是否存在、可解析、13 个核心接口齐全、出处与 user_hint 必填、登录两模式齐全
      12. 分类体系 taxonomy.json 是否存在、可解析、类目字段齐全、unknown 兜底在位
      13. 语气契约 tone.json 是否存在、可解析、**默认语气是不是 gentle**、两个语气台词是否齐全
 
@@ -112,7 +112,11 @@ if (-not (Test-Path -LiteralPath $agentsPath)) {
 $secretPatterns = @(
     # 从 process.env 读取的写法（accessSecret: process.env.ZHIHU_ACCESS_SECRET）是安全的：
     # 仓库里只存变量名，不存密钥。这类必须排除，否则 server/src/config.js 会被误报成泄露。
-    @{ Name = '赋值形式(secret/token/key/password)'; Regex = '(?i)(secret|token|api[_-]?key|password|passwd)\s*[:=]\s*["'']?(?!process\.env\.)[A-Za-z0-9_\-\.]{16,}' },
+    # ⚠️ 排除「右值是**函数调用**」的情况：`const oauthToken = oauthTokenForRequest(...)`
+    #    这种右值是调用结果，不是硬编码在仓库里的密钥，不该被判成泄露。
+    #    判据：右值那串标识符后面紧跟 `(` → 是调用。
+    #    真·硬编码密钥后面不会跟 `(`，所以这条排除**不会放宽对真密钥的拦截**。
+    @{ Name = '赋值形式(secret/token/key/password)'; Regex = '(?i)(secret|token|api[_-]?key|password|passwd)\s*[:=]\s*["'']?(?!process\.env\.)(?![A-Za-z0-9_\-\.]*\()[A-Za-z0-9_\-\.]{16,}' },
     @{ Name = 'sk- 前缀';  Regex = 'sk-[A-Za-z0-9]{16,}' },
     @{ Name = 'ghp_ 前缀'; Regex = 'gh[pousr]_[A-Za-z0-9]{20,}' },
     @{ Name = 'github_pat_ 前缀'; Regex = 'github_pat_[A-Za-z0-9_]{20,}' },
@@ -276,7 +280,11 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
             '/api/terrain',
             '/api/terrain/answer',
             '/api/quota',
-            '/api/tone'
+            '/api/tone',
+            '/api/auth/profile',
+            '/api/auth/login',
+            '/api/auth/callback',
+            '/api/auth/logout'
         )
         $missingPaths = @()
         foreach ($rp in $requiredPaths) {
@@ -291,6 +299,11 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         $tensionFlag = ($tensionRequired -contains 'signal_count') -and ($tensionRequired -contains 'insufficient')
         # 语气默认值也是拍板过的（用户 2026-11-18），契约层必须写死 gentle
         $toneDefault = $apiDoc.components.schemas.ToneId.default
+        # 登录（OAuth）：两种模式必须写死，且「没登录」与「登录了」前端要能分开
+        $authRequired = @($apiDoc.components.schemas.AuthProfileData.required)
+        $authModeOk = ($authRequired -contains 'mode') -and ($authRequired -contains 'fullname') -and ($authRequired -contains 'empty')
+        $authModes = @($apiDoc.components.schemas.AuthMode.enum)
+        $authEnumOk = ($authModes -contains 'oauth') -and ($authModes -contains 'developer_account')
 
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
@@ -299,9 +312,11 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         if (-not $emptyFlag) { $why += '信号结构未把 empty 设为必填（空数据与失败无法区分）' }
         if (-not $tensionFlag) { $why += 'TensionData 未把 signal_count / insufficient 设为必填（断层会失去诚实底线）' }
         if ($toneDefault -ne 'gentle') { $why += "ToneId.default 不是 gentle（实际 '$toneDefault'）——用户拍板过默认是温和陪伴" }
+        if (-not $authModeOk) { $why += 'AuthProfileData 未把 mode / fullname / empty 设为必填（前端分不清「没登录」与「登录了」）' }
+        if (-not $authEnumOk) { $why += 'AuthMode 枚举缺 oauth / developer_account 两种模式' }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle / 登录两模式齐全"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }

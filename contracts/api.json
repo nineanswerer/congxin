@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "从心 · 产品级 API 契约",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "summary": "知乎黑客松 S3 参赛项目「从心」的前后端接口契约（方向已定：桌宠主体 + 认知闭环）。",
-    "description": "## 这份文档是干什么的\n\n它是**我们自己的后端**对外的接口形状。前端只对着这份文档开发，**不需要知道知乎开放平台的任何细节**（字段名大小写混用、NextOffset 可能是字符串、缺参数返回 Code=10001 等等，全部在后端抹平）。\n\n## 产品结构（2026-11-17 方向已定）\n\n**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，不是另一个产品。两条线共用同一批知乎原料接口。\n\n```\n主流程：资料 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点\n                                            │\n                        桌宠主动发起 ↓（同一个后端进程）\n                                            ▼\n「照镜子」环节：自述 → 行为对照 → 断层 → 情境题 → 答完长出一块地形\n```\n\n## 覆盖的接口\n\n| 接口 | 作用 | 归属 |\n| --- | --- | --- |\n| `GET /api/behavior/favorites` | 收藏信号 | 原料（两线共用） |\n| `GET /api/behavior/followees` | 关注信号 | 原料（两线共用） |\n| `GET /api/behavior/contents` | 创作信号 | 原料（两线共用） |\n| `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | 原料（两线共用） |\n| `POST /api/behavior/tension` | 自述 vs 行为的张力信号 → 断层 | 认知闭环 |\n| `GET /api/terrain` | 三层认知地形结构（说的你 / 做的你 / 情境下的你）+ 断层 + 桥 | 认知闭环 |\n| `POST /api/terrain/answer` | 提交情境题回答 → 地形生长 | 认知闭环 |\n| `GET /api/quota` | 额度透传 | 平台 |\n| `GET /api/tone` | **桌宠语气目录 + 全部台词**（语气切换器用） | 平台 |\n\n## 三条硬规则（写进实现，别绕过）\n\n1. **不生成没有出处的内容。** 情境题与知识卡片的 `source` 字段必填。拿不到知乎真实问题标题 + URL + 原回答链接，就**报错**，绝不编一条题。\n2. **空数据 ≠ 失败。** 空数据返回 HTTP 200 + `items: []` + `empty: true` + `empty_notice`，前端要显示真实提示（比如「你还没有收藏内容」），不能显示错误弹窗，更不能塞假数据。\n3. **失败必须是真话。** 4xx/5xx 一律走统一错误信封，带 `user_hint`（中文、给人看的），且带上游原始 `code`/`message`。官方提交前检查第 7 条查的就是这个。\n\n## 渲染责任划分（**别搞反**）\n\n**后端只给参数，不做渲染决策。** 认知地形由前端用 SVG + CSS `perspective` 渲染成 2.5D 分层地图，断层特写处用 Three.js 做一次真实推镜。后端给的是**归一化坐标、高度、强度、置信度**这类参数。\n\n→ 这样后端不依赖任何渲染库，前端也不需要理解后端的算法。"
+    "description": "## 这份文档是干什么的\n\n它是**我们自己的后端**对外的接口形状。前端只对着这份文档开发，**不需要知道知乎开放平台的任何细节**（字段名大小写混用、NextOffset 可能是字符串、缺参数返回 Code=10001 等等，全部在后端抹平）。\n\n## 产品结构（2026-11-17 方向已定）\n\n**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，不是另一个产品。两条线共用同一批知乎原料接口。\n\n```\n主流程：资料 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点\n                                            │\n                        桌宠主动发起 ↓（同一个后端进程）\n                                            ▼\n「照镜子」环节：自述 → 行为对照 → 断层 → 情境题 → 答完长出一块地形\n```\n\n## 覆盖的接口\n\n| 接口 | 作用 | 归属 |\n| --- | --- | --- |\n| `GET /api/behavior/favorites` | 收藏信号 | 原料（两线共用） |\n| `GET /api/behavior/followees` | 关注信号 | 原料（两线共用） |\n| `GET /api/behavior/contents` | 创作信号 | 原料（两线共用） |\n| `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | 原料（两线共用） |\n| `POST /api/behavior/tension` | 自述 vs 行为的张力信号 → 断层 | 认知闭环 |\n| `GET /api/terrain` | 三层认知地形结构（说的你 / 做的你 / 情境下的你）+ 断层 + 桥 | 认知闭环 |\n| `POST /api/terrain/answer` | 提交情境题回答 → 地形生长 | 认知闭环 |\n| `GET /api/quota` | 额度透传 | 平台 |\n| `GET /api/tone` | **桌宠语气目录 + 全部台词**（语气切换器用） | 平台 |\n| `GET /api/auth/profile` | 当前登录用户资料（昵称 / 头像 / 一句话介绍） | 登录 |\n| `GET /api/auth/login` | 发起知乎授权（302 跳转） | 登录 |\n| `GET /api/auth/callback` | 授权回调（换 token、建会话） | 登录 |\n| `POST /api/auth/logout` | 退出登录、清会话 | 登录 |\n\n## 三条硬规则（写进实现，别绕过）\n\n1. **不生成没有出处的内容。** 情境题与知识卡片的 `source` 字段必填。拿不到知乎真实问题标题 + URL + 原回答链接，就**报错**，绝不编一条题。\n2. **空数据 ≠ 失败。** 空数据返回 HTTP 200 + `items: []` + `empty: true` + `empty_notice`，前端要显示真实提示（比如「你还没有收藏内容」），不能显示错误弹窗，更不能塞假数据。\n3. **失败必须是真话。** 4xx/5xx 一律走统一错误信封，带 `user_hint`（中文、给人看的），且带上游原始 `code`/`message`。官方提交前检查第 7 条查的就是这个。\n\n## 登录（OAuth）：两种模式，一个接口\n\n`GET /api/auth/profile` 永远返回 200，但有两种模式，看 `data.mode`：\n\n- `mode: oauth` —— 用户授权过知乎（12-05 拿到 App ID / App Key 之后），昵称、头像、一句话介绍都是真的。\n- `mode: developer_account` —— 开发期没有 OAuth 会话。上游没有「读自己昵称」的接口，所以昵称等字段为 null，前端显示通用称呼。\n\n**不许在 `developer_account` 模式下编一个昵称。** 官方提交前检查第 6、7 条查的就是假数据与假身份。\n\n`login` / `callback` / `logout` 三个接口在 12-05 拿到赛事分配的 App ID / App Key 之前**不可用**（见各自的 `x-availability`）。\n\nOAuth 的协议坑（回调参数叫 `authorization_code`、`state` 不回传、token 1 小时过期且没有 refresh token）记在 `x-auth` 段。\n\n## 渲染责任划分（**别搞反**）\n\n**后端只给参数，不做渲染决策。** 认知地形由前端用 SVG + CSS `perspective` 渲染成 2.5D 分层地图，断层特写处用 Three.js 做一次真实推镜。后端给的是**归一化坐标、高度、强度、置信度**这类参数。\n\n→ 这样后端不依赖任何渲染库，前端也不需要理解后端的算法。"
   },
   "servers": [
     {
@@ -16,7 +16,8 @@
     { "name": "behavior", "description": "行为对照：收藏 / 关注 / 创作三个信号 + 张力" },
     { "name": "situation", "description": "情境题生成" },
     { "name": "terrain", "description": "认知闭环：三层认知地形与断层" },
-    { "name": "platform", "description": "平台状态（额度）" }
+    { "name": "platform", "description": "平台状态（额度）" },
+    { "name": "auth", "description": "登录与会话（知乎 OAuth）：资料 / 发起授权 / 回调 / 退出" }
   ],
   "paths": {
     "/api/behavior/favorites": {
@@ -1086,8 +1087,203 @@
           }
         }
       }
-    }
-  },
+    },
+    "/api/auth/profile": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "getAuthProfile",
+        "summary": "当前登录用户资料（昵称 / 头像 / 一句话介绍）",
+        "description": "桌宠开口第一句要叫得出名字，所以需要一份**当前身份**的用户资料。\n\n**这个接口永远返回 200，但有两种模式**（看 `data.mode`）：\n\n| mode | 什么时候 | 含义 |\n| --- | --- | --- |\n| `oauth` | 用户已授权知乎（12-05 拿到 App ID / App Key 之后） | 真实登录用户，`fullname` / `avatar_url` 等字段有值 |\n| `developer_account` | 开发期没有 OAuth 会话 | 读的是 Access Secret 所属账号；上游没有「读自己昵称」的接口，所以昵称等字段为 null，前端显示通用称呼 |\n\n**不许在 `developer_account` 模式下编一个昵称**——官方提交前检查第 6、7 条查的就是假数据与假身份。\n\n`uid` 来自知乎开放平台的 `openapi.zhihu.com/user`，**可能超过 JavaScript 安全整数范围**，前端必须按字符串处理（后端已按字符串返回）。",
+        "responses": {
+          "200": {
+            "description": "用户资料",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthProfileResponse" },
+                "examples": {
+                  "oauth_mode": {
+                    "summary": "已授权知乎",
+                    "value": {
+                      "data": {
+                        "mode": "oauth",
+                        "uid": "969570047710216200",
+                        "hash_id": "0e4f7a",
+                        "fullname": "示例昵称",
+                        "gender": "unknown",
+                        "headline": "一句话介绍",
+                        "description": "",
+                        "avatar_url": "https://picx.zhimg.com/example.jpg",
+                        "url": "https://openapi.zhihu.com/users/969570047710216200",
+                        "empty": false,
+                        "empty_notice": null
+                      },
+                      "meta": {
+                        "source": "zhihu:openapi_user",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  },
+                  "developer_account_mode": {
+                    "summary": "开发期（还没有 OAuth 会话）",
+                    "value": {
+                      "data": {
+                        "mode": "developer_account",
+                        "uid": null,
+                        "hash_id": null,
+                        "fullname": null,
+                        "gender": null,
+                        "headline": null,
+                        "description": null,
+                        "avatar_url": null,
+                        "url": null,
+                        "empty": true,
+                        "empty_notice": "还没接知乎登录，先用通用称呼叫你。"
+                      },
+                      "meta": {
+                        "source": "none",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-upstream": {
+          "calls": [
+            {
+              "host": "openapi.zhihu.com",
+              "path": "/user",
+              "method": "GET",
+              "query": {},
+              "maps_to": "data",
+              "auth": "Authorization: Bearer <OAuth access_token>（**不需要** Access Secret，也不需要 X-Request-Timestamp）",
+              "note": "仅 `mode=oauth` 时调用。响应里的 `code: 20000` 表示**成功**，不要当错误。"
+            }
+          ],
+          "verified": "2026-11-18 官方文档核对（未实调：OAuth 凭证 12-05 后才发放）"
+        }
+      }
+    },
+    "/api/auth/login": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "authLogin",
+        "summary": "发起知乎授权（302 跳转到知乎授权页）",
+        "description": "前端只要把用户送到这个接口，后端负责拼授权 URL。\n\n**12-05 之前不可用**：App ID / App Key 由赛事页面在**项目创建后**分配（官方 `hackathon-oauth.md`），拿不到就不该走这条路。\n\n⚠️ **三个官方协议坑，实现前必读**（完整清单见 `x-auth` 段）：\n\n1. 回调参数叫 `authorization_code`（**不是** `code`），但换 token 的表单字段又叫 `code`——接收端两个都得收。\n2. **回调不返 `state`** → 做不到标准登录 CSRF 校验，上线前必须向平台确认。\n3. token **1 小时过期且没有 refresh token**，过期后大概率要重新授权。",
+        "responses": {
+          "302": {
+            "description": "跳转到知乎授权页",
+            "headers": {
+              "Location": {
+                "description": "知乎授权页 URL",
+                "schema": { "type": "string", "format": "uri" }
+              }
+            }
+          },
+          "401": {
+            "description": "OAuth 尚未启用（凭证没到位）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        },
+        "x-availability": {
+          "available_from": "2026-12-05",
+          "blocked_by": "ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY 未发放（赛事页面在项目创建后分配）",
+          "rule": "**凭证没到位就返回 401 + 中文 user_hint，绝不伪造跳转。**"
+        }
+      }
+    },
+    "/api/auth/callback": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "authCallback",
+        "summary": "授权回调：换 token、建会话",
+        "description": "知乎授权完成后会跳回这个接口。后端在这里做三件事：换 access_token → 建会话 → 302 回前端。\n\n- **会话**：浏览器只拿一个随机 session id，走 `HttpOnly` + `Secure` Cookie；**OAuth Token 留服务端**，不进前端响应、不进 URL、不进日志。\n- **回调参数两个都收**：`authorization_code`（实测主路径）与 `code`（兼容可能的协议修订），以 `authorization_code` 优先。\n- **Token 过期或鉴权失败时停止读取**，不静默切回 Access Secret 所属账号（官方明确要求）；用户再次主动登录时再发起授权。",
+        "responses": {
+          "302": {
+            "description": "跳回前端",
+            "headers": {
+              "Location": {
+                "description": "回前端的地址",
+                "schema": { "type": "string" }
+              }
+            }
+          },
+          "401": {
+            "description": "授权失败或回调无效",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        },
+        "x-availability": {
+          "available_from": "2026-12-05",
+          "blocked_by": "ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY 未发放",
+          "rule": "**回调地址必须与赛事页面登记值逐字符一致**（协议、域名、端口、路径、尾部斜杠、Query 都算）。"
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "authLogout",
+        "summary": "退出登录、清会话",
+        "description": "清掉会话里的 OAuth Token 与用户身份，并让浏览器 Cookie 失效。\n\n**幂等**：没有会话时也返回 200 + `logged_in: false`，不报错。\n**退出后不自动重新登录**——用户再次主动登录时再发起授权。",
+        "responses": {
+          "200": {
+            "description": "已退出",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthSessionResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "已退出",
+                    "value": {
+                      "data": {
+                        "logged_in": false,
+                        "mode": "developer_account",
+                        "notice": "已退出登录。"
+                      },
+                      "meta": {
+                        "source": "none",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-availability": {
+          "available_from": "现在",
+          "blocked_by": null,
+          "rule": "无会话时幂等返回 200。"
+        }
+      }
+    }  },
   "components": {
     "responses": {
       "BadRequest": {
@@ -2137,6 +2333,57 @@
           "meta": { "$ref": "#/components/schemas/ResponseMeta" }
         }
       },
+      "AuthMode": {
+        "type": "string",
+        "enum": ["oauth", "developer_account"],
+        "description": "`oauth` = 用户已授权知乎；`developer_account` = 开发期没有 OAuth 会话，昵称等字段为空，**前端要显示通用称呼，不许假装拿到了用户资料**。"
+      },
+      "AuthProfileData": {
+        "type": "object",
+        "required": ["mode", "uid", "fullname", "avatar_url", "headline", "empty", "empty_notice"],
+        "description": "当前身份的用户资料。**字段必须存在**，取不到时给 null 并把 `empty` 置 true——前端不要靠「字段不存在」判断。",
+        "properties": {
+          "mode": { "$ref": "#/components/schemas/AuthMode" },
+          "uid": {
+            "type": ["string", "null"],
+            "description": "知乎用户数字 ID。上游是 int64，**可能超过 JavaScript 安全整数范围**：后端按字符串返回，前端也按字符串处理，不要先转 Number 再转字符串。"
+          },
+          "hash_id": { "type": ["string", "null"], "description": "知乎用户字符串标识。" },
+          "fullname": { "type": ["string", "null"], "description": "昵称。`developer_account` 模式下为 null。" },
+          "gender": { "type": ["string", "null"], "enum": ["male", "female", "unknown", null] },
+          "headline": { "type": ["string", "null"], "description": "一句话介绍。" },
+          "description": { "type": ["string", "null"], "description": "个人详细描述。" },
+          "avatar_url": { "type": ["string", "null"], "description": "头像 URL。" },
+          "url": { "type": ["string", "null"], "description": "知乎用户主页地址。" },
+          "empty": { "type": "boolean", "description": "取不到资料时为 true（开发期模式恒为 true）。" },
+          "empty_notice": { "type": ["string", "null"], "description": "中文真实提示，前端直接显示。" }
+        }
+      },
+      "AuthProfileResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/AuthProfileData" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
+      "AuthSessionData": {
+        "type": "object",
+        "required": ["logged_in", "mode"],
+        "properties": {
+          "logged_in": { "type": "boolean" },
+          "mode": { "$ref": "#/components/schemas/AuthMode" },
+          "notice": { "type": ["string", "null"], "description": "中文真实提示。" }
+        }
+      },
+      "AuthSessionResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/AuthSessionData" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
       "ErrorResponseEnvelope": {
         "deprecated": true,
         "description": "已废弃：与 `ErrorResponse` 完全重复，保留仅为兼容早期草稿。**新代码一律用 `ErrorResponse`。**",
@@ -2145,12 +2392,12 @@
     }
   },
   "x-contract": {
-    "version": "v0.2",
-    "frozen_at": "2026-11-17",
+    "version": "v0.4",
+    "frozen_at": "2026-11-18",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "**方向已定**（2026-11-17）：桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。8 个路径全部冻结。",
-    "frozen_scope": "三个行为对照接口 + 情境题生成接口 + 张力 / 地形 / 地形生长三个认知闭环接口 + 通用信封 + 桌宠状态机 + 额度透传",
+    "status": "**方向已定**（2026-11-17）：桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。**13 个路径全部冻结**（9 个已实现 + 4 个登录路径待 12-05 OAuth 凭证到位）。",
+    "frozen_scope": "三个行为对照接口 + 情境题生成接口 + 张力 / 地形 / 地形生长三个认知闭环接口 + 通用信封 + 桌宠状态机 + 额度透传 + 语气目录 + 登录与会话（OAuth）四个路径",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
@@ -2159,13 +2406,54 @@
       "POST /api/situation/question",
       "GET /api/terrain",
       "POST /api/terrain/answer",
-      "GET /api/quota"
+      "GET /api/quota",
+      "GET /api/tone",
+      "GET /api/auth/profile",
+      "GET /api/auth/login",
+      "GET /api/auth/callback",
+      "POST /api/auth/logout"
     ],
     "open_scope": [
       "知识卡片产出物接口（主流程那条「资料 → 带出处的卡片」）——大概率复用 `SourceCard` + `kind=knowledge_card`，是否独立成 `/api/card` 待定，**不阻塞**。",
       "桌宠在「照镜子」环节的**台词生成**：先用模板 + 张力数据拼（稳定、零成本），有余力再接直答生成（`zhida-fast-1p5`）。**默认走模板**，不做也能演。"
     ],
     "change_rule": "接口形状变了，先改本文件，再改 `contracts/CONTRACTS.md`，同一次提交；改完跑 `scripts/check-contract.ps1`。"
+  },
+  "x-auth": {
+    "note": "知乎 OAuth 的**官方协议坑**。实现前必读。来源：官方 Skill 包 `references/oauth.md` 与 `references/hackathon-oauth.md`（2026-11-18 核对）。",
+    "credential_source": {
+      "fact": "App ID / App Key **由赛事页面在项目创建后分配**，黑客松**不走通用邮件申请流程**。",
+      "official_wording": "「项目创建后，赛事页面分配 App ID 和 App Key。」「尚无凭证时，不要编造提前领取入口，也不直接套用通用应用的邮件申请流程。」",
+      "our_action": "12-05 提交窗口开启后去赛事页面取；**在此之前 OAuth 一律走降级，不编造入口**。",
+      "note": "App ID / App Key 与开放平台 Access Secret **不是同一个东西**，三者职责不同。"
+    },
+    "flow": [
+      "GET /api/auth/login → 302 到 https://openapi.zhihu.com/authorize?redirect_uri=...&app_id=...&response_type=code",
+      "用户在知乎登录并确认授权 → 回调带 **authorization_code**（不是 code）",
+      "GET /api/auth/callback → 后端 POST https://openapi.zhihu.com/access_token（表单字段名却是 **code**）换 token",
+      "token 只留服务端；浏览器只拿 HttpOnly + Secure Cookie 里的随机 session id",
+      "之后带 X-OAuth-Token 调 /api/v1/user/* 读该用户的数据"
+    ],
+    "gotchas": [
+      "回调参数是 `authorization_code`，**不是** `code`；但换 token 的表单字段叫 `code`。接收端两个都要收。",
+      "**回调不返 `state`** → 做不到标准登录 CSRF 校验，上线前必须向平台确认，别自己假装做了。",
+      "**只有 access_token + expires_in=3600，没有 refresh token** → 1 小时必过期；过期后是否必须重新授权，官方也标为待确认。",
+      "`/access_token` 与 `/user` 响应里的 **`code: 20000` 表示成功**，别当错误。",
+      "Token 过期或鉴权失败时**停止读取**，不静默切回 Access Secret 所属账号（官方明确要求）。",
+      "创作能力四项（我的全文 / 评论 / 账号统计 / 单篇统计）**不支持 OAuth 身份切换**，只有列表接口可以。",
+      "回调地址必须与赛事页面登记值**逐字符一致**（协议、域名、端口、路径、尾部斜杠、Query 都算）。"
+    ],
+    "security": [
+      "App Key / OAuth Token 不进源码、URL、前端响应、日志、截图、视频。",
+      "App ID 可公开；App Key / Access Secret / OAuth Token 只进服务端。",
+      "环境变量名：ZHIHU_OAUTH_APP_ID / ZHIHU_OAUTH_APP_KEY / ZHIHU_OAUTH_REDIRECT_URI / ZHIHU_ACCESS_SECRET。"
+    ],
+    "endpoints_availability": {
+      "GET /api/auth/profile": "现在就能用（没有 OAuth 会话时返回 developer_account 模式）",
+      "GET /api/auth/login": "12-05 拿到 App ID / App Key 之后",
+      "GET /api/auth/callback": "12-05 拿到 App ID / App Key 之后",
+      "POST /api/auth/logout": "现在就能用（无会话时幂等返回 logged_in=false）"
+    }
   },
   "x-mock": {
     "note": "本文件是 OpenAPI 3.1 文档，前端可以零手写 mock。",
@@ -2194,7 +2482,7 @@
     "auth": {
       "development": "Authorization: Bearer <Access Secret> + X-Request-Timestamp（Unix 秒）+ Content-Type: application/json",
       "oauth": "Authorization: Bearer <Access Secret> + X-OAuth-Token + X-Request-Timestamp",
-      "note": "开发期用 Access Secret 读**账号自己**的数据；12-05 拿到 App ID / App Key 后换成登录用户的数据。**两者接口形状相同，不返工。**"
+      "note": "开发期用 Access Secret 读**账号自己**的数据；12-05 拿到 App ID / App Key 后换成登录用户的数据。**两者接口形状相同，不返工。** OAuth token 只有 1 小时有效期且没有 refresh token，见 `x-auth` 段。"
     },
     "envelope": {
       "shape": "{ \"Code\": int, \"Message\": string, \"Data\": object | null }",
@@ -2245,7 +2533,7 @@
     ],
     "demo_shape": {
       "minutes_3": "主流程：桌宠吃资料、吐卡片、点开知乎原回答、补观点",
-      "minutes_15": "照镜子环节：桌宠发现「你说你是 X，但你收藏的 82% 是 Y」→ 断层出现 → 抛情境题",
+      "minutes_15": "照镜子环节：桌宠发现「你说你是 X，但你收藏的 67% 是 Y」→ 断层出现 → 抛情境题",
       "rule": "**Demo 主叙事是「桌宠在陪你干活」，不是「我们检索了知乎」。** Demo 里出现太多「检索 → 展示观点对照」的界面，会被评审打成 01「AI × 知识与探索」，而不是 02「AI × 陪伴与交互」。"
     },
     "terrain_form": {

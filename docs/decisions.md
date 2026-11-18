@@ -788,3 +788,50 @@
 
 - **状态**：**已定**
 
+---
+
+## D34 · 接入方式三选一：**维持 API 直连**（Skill / MCP 只当开发期工具）+ OAuth 凭证路径确认
+
+- **日期**：2026-11-18 21:0x
+- **触发**：用户给出 `https://developer.zhihu.com/docs?key=zhihu_search` 并附截图，问「除了 api，还有 Skill 和 MCP，你看看哪个我们用的合适」。
+- **结论**：**产品运行时继续走后端直连 HTTP API**（D15 原样成立，本轮用实测坐实）；
+  **官方 Skill / CLI / MCP 定位为开发期与调试期的工具，不进产品。**
+- **依据（2026-11-18 实测，不是查文档推断）**：
+  1. **MCP 只有 4 个工具**：直连 `https://developer.zhihu.com/api/mcp/v1` 做 `initialize` + `tools/list`，
+     返回 `global_search` / `hot_list` / `zhida` / `zhihu_search` **恰好 4 个**。
+     主路径要的 `question_recommendations` 与 `question_answers` **都不在里面**。
+  2. **Skill 只有 4 个且全是搜索类**：`zhihu_search_skills.zip` / `global_search_skills.zip` /
+     `zhida_skills.zip` / `hot_list_skills.zip`（4 个都实测可下载，PK 头校验通过）。
+     **没有**问题发现、**没有**用户数据。
+  3. **OAuth 只能走 API**：官方 Skill 包 `references/hackathon-oauth.md` 与 `references/oauth.md` 明确：
+     CLI **不接受 OAuth Token、不发起 OAuth**；只有 API 支持 `X-OAuth-Token` 切到被授权用户。
+     我们要读「登录的那个人」的数据，只有 API 这一条路。
+  4. **现有 9 个接口与官方文档 100% 对齐**：路径、参数名、必填项逐条核对无误
+     （`ContentType=all` 必填、`FavlistUrlToken` 必填、`Query` 大小写敏感等实测坑也都已抹平）→ **零返工**，
+     改接入方式只会白干。
+- **顺带确认的 OAuth 凭证路径（B4 的答案）**：
+  - 官方原文：**「项目创建后，赛事页面分配 App ID 和 App Key。」** 且 **「不走通用邮件申请流程」**、
+    **「不要编造提前领取入口」**。
+    → **之前准备的「发邮件申请 OAuth」那套作废，不要发。** 正确动作是 12-05 提报入口开放后去赛事页面取。
+  - ⚠️ **窗口风险（推断，非实测）**：提报入口 12-05 10:00 才开 → **OAuth 真联调窗口可能只有 12-05 → 12-07**。
+    → **Demo 必须不依赖 OAuth 也能跑**（Access Secret 读账号本人数据 + mock），OAuth 做成加分项。
+- **官方标了 6 条「协议待确认」，其中 3 条会咬人**（全部写进 `contracts/api.json` 的 `x-auth` 段）：
+  1. 回调参数是 `authorization_code`（**不是** `code`），但换 token 的表单字段又叫 `code` → 接收端两个都得收；
+  2. **回调不返 `state`** → 做不到标准登录 CSRF 校验，上线前必须问平台；
+  3. **只有 `access_token` + `expires_in=3600`，没有 refresh token** → 1 小时必过期；
+     且官方要求 Token 过期时**停止读取，不静默切回 Access Secret 所属账号**。
+- **契约变更**：新增 **4 个登录路径**（`GET /api/auth/profile`、`GET /api/auth/login`、
+  `GET /api/auth/callback`、`POST /api/auth/logout`）与 **5 个 schema**，
+  契约 9 → **13 个路径**，`contracts/api.json` 升 **v0.4**（`contract.json` 的 `api_contract` 同步 v0.4）。
+  `GET /api/auth/profile` **永远返回 200，但有两种模式**：`oauth`（用户授权过）与
+  `developer_account`（开发期自读，昵称字段为 null）。
+  **不许在 `developer_account` 模式下编昵称** —— 官方检查第 6、7 条查的就是假数据与假身份。
+- **顺带订正两处过时数据**（同一次提交）：
+  - `contracts/api.json` 的 `x-contract` 还写着「8 个路径全部冻结」、`frozen_endpoints` 也只有 8 条 → 已同步为 13 条、v0.4。
+  - `x-directions.demo_shape.minutes_15` 里还写着**已作废的 82%** → 已订正为 **67%**（6/9）。
+- **开发期（可选，不进产品）**：官方 `zhihu-cli` Skill 包可装进我们自己的 Agent
+  （`https://developer-cdn.zhihu.com/zhihu-cli/releases/stable/skill/zhihu-cli-skill.zip`，
+  v0.7.5，107 317 字节，Windows-x64 支持），用来让 Agent 直接查知乎数据；MCP 也可配进 Claude Code / Cursor。
+  **本机目前 `zhihu-cli` 未安装**（只有密钥文件在 `~/.zhihu-cli/`），要用再装。
+- **状态**：**已定**（用户 2026-11-18 拍板「全落：加接口 + 改 B4 + 记 D34」）
+

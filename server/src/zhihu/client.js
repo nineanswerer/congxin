@@ -12,6 +12,7 @@
  */
 
 import { config } from '../config.js';
+import { authContext } from '../lib/auth-session.js';
 import { ApiError } from '../lib/errors.js';
 
 const MAX_ATTEMPTS = 4;
@@ -24,8 +25,11 @@ function buildHeaders() {
     'X-Request-Timestamp': `${Math.floor(Date.now() / 1000)}`,
     'Content-Type': 'application/json',
   };
-  // OAuth 阶段：额外带上 OAuth Token，读的是登录用户的数据
-  if (config.oauthToken) headers['X-OAuth-Token'] = config.oauthToken;
+  // OAuth 身份：**优先用当前登录会话里的 token**（每个登录用户读自己的数据）；
+  // 没有会话时才退回开发期的全局 token（config.oauthToken）。
+  // ⚠️ 官方要求：Token 过期或鉴权失败时**停止读取**，不静默切回 Access Secret 所属账号。
+  const oauthToken = authContext.getStore()?.accessToken || config.oauthToken;
+  if (oauthToken) headers['X-OAuth-Token'] = oauthToken;
   return headers;
 }
 

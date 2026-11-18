@@ -524,3 +524,103 @@ auth:       configured=false，next_action=request_access_secret
 
 **本项目一律按 `/api/v1/quota` 的实时返回做设计**——不管宣传口径是多少，接口返回多少就按多少算；额度查询接口本身不消耗业务额度。
 
+## 十五、接入方式三选一与 OAuth（2026-11-18 实测复核）
+
+### 15.1 官方开发者站的文档是怎么组织的
+
+`https://developer.zhihu.com/docs?key=<能力>` 是 **SPA**，直接抓 HTML 只会拿到 **1238 字节的空壳**（`<div id="root">` + 一个 umi bundle）。
+**真正的文档数据在 `https://developer.zhihu.com/console/api/v3/docs`**——一个 JSON，含 **10 个大节 / 31 篇文档**。
+`?key=` 无效时页面会**回落到默认的 `authorization`（鉴权）页**——所以「抓到了一篇文档」不等于「这个 key 存在」。
+
+已确认存在的文档 key（2026-11-18 实测）：
+
+| 大节 | 文档 key |
+| --- | --- |
+| 开始使用 | `authorization` / `zhihu_cli` / `unified_mcp` / `quota` / `billing_price` |
+| 知乎搜索 | `zhihu_search` / `zhihu_search_skill` |
+| 全网搜索 | `global_search` / `global_search_skill` |
+| 直答 | `zhida` / `zhida_skill` |
+| 热榜 | `hot_list` / `hot_list_skill` |
+| **问题发现** | `question_recommendations` / `question_answers`——**只有 API，没有 Skill、没有 MCP** |
+| 创作能力 | `user_content_detail` / `user_content_comments` / `creator_account_stats` / `creator_content_stats` |
+| 知识库 | `knowledge_bases` / `knowledge_base_items` / `knowledge_file_upload` / `knowledge_search` |
+| 小工具 | `pdf_parse` / `ppt_generation` |
+| 知乎用户数据 | `zhihu_oauth_integrated` / `user_contents` / `user_followees` / `user_collections` / `user_favlists` / `favlist_contents` |
+
+> 此前记的「`billing_price` 是占位页」**已过时**：那是因为只抓到 SPA 空壳。
+> 现在按 `/console/api/v3/docs` 取，`billing_price` **有实质内容**（服务价格表）。
+
+### 15.2 MCP 实测：只有 4 个工具
+
+直连 `https://developer.zhihu.com/api/mcp/v1`（Streamable HTTP，`Authorization: Bearer <Access Secret>`）：
+`initialize` 成功（`serverInfo` = 「知乎开放平台 1.0.0」，协议版本 `2025-03-26`），`tools/list` 返回**恰好 4 个**：
+
+| 工具 | 说明 |
+| --- | --- |
+| `global_search` | 可信全网搜索 |
+| `hot_list` | 知乎热榜 |
+| `zhida` | 知乎直答 |
+| `zhihu_search` | 知乎搜索 |
+
+→ **D15 今天由实测坐实**：MCP 覆盖不到主路径的「问题发现」，更覆盖不到「用户数据」。
+MCP 的定位是**给 Codex / Claude Code / Cursor / WorkBuddy 这类 AI 客户端装**（官方文档给了这四家的配置示例），
+**不是给我们后端当依赖**。
+
+### 15.3 Skill 实测：4 个包，全是搜索类
+
+| 包 | 实测结果 |
+| --- | --- |
+| `developer.zhihu.com/download/zhihu_search_skills.zip` | 200 / 206，PK 头校验通过 |
+| `developer.zhihu.com/download/global_search_skills.zip` | 同上 |
+| `developer.zhihu.com/download/zhida_skills.zip` | 同上 |
+| `developer.zhihu.com/download/hot_list_skills.zip` | 同上 |
+| `developer-cdn.zhihu.com/zhihu-cli/releases/stable/skill/zhihu-cli-skill.zip` | 200，**107 317 字节**，v0.7.5，min_cli 0.6.1，支持 windows-amd64 |
+
+前 4 个是**搜索能力包**（参数只有 `query` + `count`）；**`zhihu-cli-skill.zip` 才是全量包**——
+内含 `references/hackathon-oauth.md`、`references/hackathon.md`、`references/user-api.md`、
+`references/oauth.md` 等，**已含黑客松 OAuth 接入与 S3 开发者手册摘要**。
+（本仓库 `docs/sources/zhihu-cli-skill/` 存的是旧版 0.6.3，**可更新**。）
+
+### 15.4 OAuth：凭证从哪来 + 官方标的 6 条协议坑
+
+- **凭证**：官方原文「**项目创建后，赛事页面分配 App ID 和 App Key**」，且「**不走通用邮件申请流程**」、
+  「**尚无凭证时不要编造提前领取入口**」。→ **不要发邮件申请。**
+- **授权页**：`GET https://openapi.zhihu.com/authorize?redirect_uri={redirect_uri}&app_id={app_id}&response_type=code`
+- **回调**：参数名是 **`authorization_code`**（不是 `code`），但换 token 的表单字段又叫 `code` → 接收端两个都要收。
+- **换 token**：`POST https://openapi.zhihu.com/access_token`（`application/x-www-form-urlencoded`），
+  响应 `{ access_token, token_type, expires_in }`，**`expires_in` = 3600 秒，且没有 refresh token**。
+- **授权用户基础信息**：`GET https://openapi.zhihu.com/user`，
+  **只需 `Authorization: Bearer <OAuth access_token>`**（不要 Access Secret、不要 `X-Request-Timestamp`）。
+  返回 `uid` / `hash_id` / `fullname` / `gender` / `headline` / `description` / `avatar_path` / `url` / `email` / `phone_no`。
+  ⚠️ **`uid` 超过 JavaScript 安全整数范围，必须无损解析**（前后端都用字符串传递）。
+- **官方自己标的 6 条待确认**：回调不返 `state`（做不到标准 CSRF 校验）/ 无 PKCE / 无 scope /
+  无 refresh token / 无撤销解绑 / `app_key` 能否直接表单传输。
+- **`code: 20000` 表示成功**（`/access_token` 与 `/user` 都是），别当错误。
+- **创作能力四项不支持 OAuth 身份切换**（我的全文 / 评论 / 账号统计 / 单篇统计）。
+- **只做知乎登录 + 取基础信息时不需要 Access Secret**；要读授权用户的创作/关注/收藏才需要两个凭证同时带。
+- **Token 过期或鉴权失败时停止读取**，**不静默切回 Access Secret 所属账号**（官方明确要求）。
+
+### 15.5 额度实测（2026-11-18 21:00）
+
+| 额度组 | 总额 | 已用 | 剩余 |
+| --- | ---: | ---: | ---: |
+| **问题发现**（问题推荐 + 回答摘要共用） | 100 | 19 | **81** |
+| 直答 | 100 | 3 | 97 |
+| 热榜 | 100 | 0 | 100 |
+| 创作能力 | 500 | 17 | 483 |
+| 用户数据 | 10000 | 89 | 9911 |
+| 知乎搜索 / 全网搜索 | 5000 | 0 | 5000 |
+| 小工具 | 10 | 0 | 10 |
+| 知识库 | 500 | 0 | 500 |
+
+**问题发现 100 次/天是主路径的硬瓶颈**（Demo 演练 + 3—5 人试用 + 决赛现场都从这里扣）。
+每日额度按**北京时间 00:00 重置，不结转**。超额单价（`billing_price` 实抓）：问题回答 **20 元/千次**、
+知乎搜索 20 元/千次、热榜 10 元/千次、直答 Agent 20 元/千次、用户数据三项各 10 元/千次。
+
+### 15.6 两条能直接写进计划书的官方口径
+
+- **赛道原文**：「AI × 陪伴与交互」明确写了 **数字桌宠**、**可结合刘看山 IP**
+  → 我们的方向有官方原文背书，不再是推断。
+- **官方手册原文**：「本人关注列表通过 `zhihu-cli me followees` 查询，仅返回当前 Access Secret 所属账号关注的用户，
+  **不提供关注动态流**」→ 我们的「关注」信号只能是**列表快照**，文案不许写成「动态」。
+

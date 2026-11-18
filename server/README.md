@@ -26,8 +26,18 @@ node src/index.js
 | GET | `/api/behavior/favorites` | 收藏信号（收藏跨度 + 主题分布） | `contracts/api.json` |
 | GET | `/api/behavior/followees` | 关注信号（关注对象类型分布） | `contracts/api.json` |
 | GET | `/api/behavior/contents` | 创作信号（论证结构 + 活跃度） | `contracts/api.json` |
+| POST | `/api/behavior/tension` | 张力信号：自述 vs 行为 → 断层 | `contracts/api.json` |
+| POST | `/api/situation/question` | 情境题生成（每题必带知乎出处） | `contracts/api.json` |
+| GET | `/api/terrain` | 三层认知地形 + 断层 + 桥 | `contracts/api.json` |
+| POST | `/api/terrain/answer` | 提交情境题回答 → 地形生长 | `contracts/api.json` |
+| GET | `/api/tone` | 桌宠语气目录 + 全部台词 | `contracts/api.json` |
+| GET | `/api/auth/profile` | 当前登录用户资料（两种模式） | `contracts/api.json` |
+| GET | `/api/auth/login` | 发起知乎授权（302 跳转） | `contracts/api.json` |
+| GET | `/api/auth/callback` | 授权回调：换 token、建会话 | `contracts/api.json` |
+| POST | `/api/auth/logout` | 退出登录、清会话（幂等） | `contracts/api.json` |
 
-**还没实现**（P4 阶段）：`POST /api/behavior/tension`、`POST /api/situation/question`、`GET /api/terrain`、`POST /api/terrain/answer`。
+**契约里的 13 个路径全部有代码**（`contracts/api.json` v0.4）。
+其中 9 个已实跑真知乎；4 个登录路径由 `scripts/smoke-auth.js` 覆盖（不耗额度、不需要凭证）。
 
 ## 目录
 
@@ -37,6 +47,7 @@ server/
   package.json
   scripts/
     smoke.js              冒烟：真调知乎，看四个接口的输出
+    smoke-auth.js         登录自检：不耗额度、不需要 OAuth 凭证
     classify-check.js     分类回归：比对人工标注基线
   src/
     index.js              入口 + 统一错误出口
@@ -75,6 +86,19 @@ server/
 | | 鉴权 | 读谁的数据 |
 | --- | --- | --- |
 | 开发期（现在） | `Authorization: Bearer <Access Secret>` + `X-Request-Timestamp` | **Access Secret 所属的那个账号**（自己） |
-| 上线后（12-05 起） | 上面这套 **+ `X-OAuth-Token`** | **任意登录用户**（谁登录就读谁） |
+| 上线后（12-05 起） | 上面这套 **+ `X-OAuth-Token`**（来自**当前登录会话**） | **任意登录用户**（谁登录就读谁） |
 
 **接口形状完全相同** → 12-05 拿到 App ID / App Key 换上就行，**不返工**。
+
+登录身份用 `AsyncLocalStorage` 带进上游调用层（`src/lib/auth-context` 见 `src/lib/auth-session.js`），
+所以**每个登录用户读的是自己的数据**，不用给每个 service 函数传一遍 token。
+
+### OAuth 的三条底线
+
+1. **App ID / App Key 由赛事页面在项目创建后分配**，**不走通用邮件申请流程**——没到手就别找入口。
+2. **OAuth Token 只留服务端**：浏览器只拿一个随机 session id（`HttpOnly` + `SameSite=Lax` Cookie）。
+3. **Token 过期就停止读取**（官方 `expires_in=3600`，**没有 refresh token**），
+   **不静默切回 Access Secret 所属账号**。
+
+凭证没到位时，`/api/auth/login` 与 `/api/auth/callback` **诚实返回 401 `OAUTH_REQUIRED`**，
+**不伪造跳转**；`/api/auth/profile` 走 `developer_account` 模式，昵称字段为 null——**不编昵称**。
