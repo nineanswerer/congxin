@@ -91,6 +91,33 @@ function deriveTopic(titles) {
   return ranked[0]?.[0] ?? String(titles[0] ?? '知乎').slice(0, 8);
 }
 
+/**
+ * 情境题的主题词候选——**按可靠性排序，从上往下试**。
+ *
+ * 为什么要有候选：后端把主题词原样当 `question_recommendations` 的 `Query`，
+ * 搜不到就诚实返回空 +「换个说法再试一次」→ 前端就得**真的换个说法再试**，
+ * 而不是把一个空面板留给观众。
+ *
+ * 候选全部来自真实数据，没有一个是写死的：
+ *   1. **问卷自述里的特质词**（用户自己选的：「长期主义」「体系化」…）
+ *      ——最贴近这道题要问的东西（断层问的就是「你说的那个特质」）。
+ *   2. **已经用过的 `state.topic`**（收藏标题推出来的）。
+ *   3. **收藏标题 n-gram**（兜底；可能不准，所以排最后）。
+ */
+function topicCandidates() {
+  const out = [];
+  const push = (t) => {
+    const s = String(t ?? '').trim();
+    if (!s || s.length < 2 || s.length > 12) return;
+    if (out.includes(s)) return;
+    out.push(s);
+  };
+  for (const t of scoreQuiz(state.quizPicked).traits ?? []) push(t);
+  push(state.topic);
+  push(deriveTopic((state.favorites?.items ?? []).map((i) => i.title)));
+  return out;
+}
+
 // ---------------------------------------------------------------- 顶栏
 
 function renderToneSwitch() {
@@ -480,18 +507,45 @@ async function loadSituation() {
   const btn = $('#btn-situation');
   btn.disabled = true;
   try {
-    const topic = state.topic || deriveTopic((state.favorites?.items ?? []).map((i) => i.title));
-    state.topic = topic;
     pet.setState('thinking');
     pet.say('question');
     box.innerHTML = noticeBox('正在出题……');
 
-    const data = await getSituation({ topic, count: 1, selfReport: state.tension?.self_reported });
-    if (data.empty || !(data.questions ?? []).length) {
-      box.innerHTML = noticeBox(escapeHtml(data.empty_notice ?? '这次没出到题。'), 'warn');
+    // 主题词按可靠性挨个试（见 topicCandidates 的注释）。
+    // 单个主题词失败**不算整段失败**：换个说法再来一次。
+    const candidates = topicCandidates();
+    if (!candidates.length) {
+      box.innerHTML = noticeBox('还没有主题词。先答完上面的问卷，或者喂点收藏给它。', 'warn');
       pet.setState('idle');
       return;
     }
+
+    let data = null;
+    let usedTopic = '';
+    let lastNotice = '';
+    let lastErr = null;
+    for (const topic of candidates.slice(0, 3)) {
+      try {
+        const res = await getSituation({ topic, count: 1, selfReport: state.tension?.self_reported });
+        if (!res.empty && (res.questions ?? []).length) {
+          data = res;
+          usedTopic = topic;
+          break;
+        }
+        lastNotice = res.empty_notice ?? lastNotice;
+      } catch (err) {
+        // 这个主题词翻车了 —— 记下来，换下一个；全试完还不行就把真错误抛出去
+        lastErr = err;
+      }
+    }
+
+    if (!data) {
+      if (lastErr) throw lastErr;
+      box.innerHTML = noticeBox(escapeHtml(lastNotice || '这次没出到题。'), 'warn');
+      pet.setState('idle');
+      return;
+    }
+    state.situationTopic = usedTopic;
     const q = data.questions[0];
     state.situation = q;
 
@@ -564,8 +618,10 @@ async function loadTerrain() {
       );
     });
     if (data.empty_notice) {
-      wrap.insertAdjacentHTML('beforeend',
-        `<div class="notice warn" style="position:absolute;left:14px;top:14px;right:14px">
+      // 塞进 `.terrain-wrap`（它才是定位上下文），否则会锚到 `.stage` 上飘到别处
+      const tw = wrap.querySelector('.terrain-wrap');
+      (tw ?? wrap).insertAdjacentHTML('beforeend',
+        `<div class="notice warn" style="position:absolute;left:14px;top:14px;right:14px;z-index:3">
            ${escapeHtml(data.empty_notice)}</div>`);
     }
   } catch (err) {

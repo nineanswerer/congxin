@@ -73,9 +73,17 @@ export async function runDemo(ctx) {
     await wait(1500);
     await answerSituation(q, q.options[0].key);
   } else {
-    step(7, '这次没出到题，跳过作答');
+    // **不许静默跳过**：面板上已经有后端给的真提示（空数据 ≠ 失败），
+    // 这里补一句让观众知道「不是卡住了」，然后照样把地形拉出来。
+    step(7, '这次没出到题（面板上是真提示），地形照常看');
+    await wait(600);
   }
 
-  step(8, '完');
+  // ---- 8. 地形 ----
+  step(8, '看地形');
+  await wait(900);
+  await loadTerrain();
+
+  step(9, '完');
   return true;
 }

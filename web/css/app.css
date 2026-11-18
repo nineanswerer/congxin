@@ -302,7 +302,7 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* ---------------------------------------------------------------- 2.5D 地形 */
 .terrain-wrap {
-  position: relative; height: 460px; border: 1px solid var(--line); border-radius: var(--radius);
+  position: relative; height: 600px; border: 1px solid var(--line); border-radius: var(--radius);
   background: radial-gradient(900px 500px at 50% 0%, rgba(74,158,255,.10), transparent 70%), rgba(9,11,16,.5);
   overflow: hidden; perspective: 1500px;
 }
@@ -311,11 +311,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   transition: transform .8s cubic-bezier(.2,.8,.2,1);
 }
 .terrain.is-zoom { transform: scale(1.42) translateY(-24px); }
+/* 居中用 `translate(-50%,-50%)`（transform 的百分比按元素自身算），
+   **不能用 margin 百分比** —— 绝对定位的 margin 百分比是按包含块宽度算的，会错位。
+   宽度跟着容器走（max-width 760），窄屏才不会横向溢出盖住旁边的问卷。 */
 .layer {
-  position: absolute; left: 50%; top: 50%; width: 760px; height: 300px;
-  margin-left: -380px; margin-top: -150px;
+  position: absolute; left: 50%; top: 50%;
+  width: 94%; max-width: 720px; aspect-ratio: 760 / 220;
   transform-origin: 50% 50%; transform-style: preserve-3d;
 }
+.layer-overlay { pointer-events: none; }
 .layer svg { width: 100%; height: 100%; overflow: visible; }
 .layer .lname { font-size: 13px; fill: var(--ink2); letter-spacing: 2px; }
 .layer .lblock { font-size: 11px; fill: var(--ink); }

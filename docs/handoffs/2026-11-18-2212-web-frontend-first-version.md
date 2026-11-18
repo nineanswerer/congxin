@@ -15,8 +15,12 @@
 - **后端**：14 个路径全部实现并实跑通过（并行会话 11-18 提交 `10d2714`）。
 - **前端**：接了契约 14 个路径中的 **12 个**；未接的 3 个是 OAuth 登录（`/api/auth/login`、`/api/auth/callback`、`/api/auth/logout`）——**凭证 12-05 才由赛事页面分配**（B4），现在接了也只会拿到 `401 OAUTH_REQUIRED`。**Demo 主路径不依赖 OAuth**（已用真实进程验过）。
 - **两个服务当前还开着**：后端 `http://localhost:18787`（task `bg_078ab4ae`）、前端 `http://localhost:18788/web/`（task `bg_6be0d855`）。
-- **自检**：`PASS 13 / WARN 0 / FAIL 0`（含第 4 项密钥扫描——它用 `git ls-files --cached --others --exclude-standard`，**未跟踪的新文件也进扫描**，所以 `web/` 9 个文件是被扫过的）。
-- **额度**：问题发现 **74/100**、用户数据 9846/10000、直答 96/100。
+- **演练模式全链路实跑 9/9 步通过**（内置浏览器，`?demo=1`，真实知乎数据、无 mock）：
+  喂收藏 → 知乎补观点（11 张真实卡片）→ 照镜子 → 6 题问卷 → 断层（67% / 置信度 60% / 3 个信号）
+  → 出情境题（带原回答 URL + A/B 选项）→ 作答（地形长出一块 + 新桥）→ 三层认知地图 → 完。
+  **这一轮实跑揪出并修掉了 4 个真 bug**（见第 3.1 节）—— **只看首屏截图是发现不了这 4 个的。**
+- **自检**：`PASS 13 / WARN 0 / FAIL 0`（含第 4 项密钥扫描——它用 `git ls-files --cached --others --exclude-standard`，**未跟踪的新文件也进扫描**，所以 `web/` 全部文件是被扫过的）。
+- **额度**：问题发现 **56/100**、用户数据 9777/10000、直答 95/100。**这一轮验证花了约 18 次问题发现。**
 
 ---
 
@@ -35,6 +39,11 @@
 | `web/js/demo.js` | `?demo=1` 演练模式（自动跑一遍 Demo 脚本骨架） | 决赛只有 5 分钟，中途点错一下就断节奏 → 提前演练 |
 | `web/README.md` | 跑法 / 目录结构 / 接了哪些接口 / **交接给队友时必须分清的两类东西** / 已知问题 | 目录归属已临时移交，队友回来要接手 → 交接说明必须落盘 |
 | `web/docs-shot-1.png` | 无头 Chrome 实拍（1600×900） | 交付证据 |
+| `web/docs-shot-terrain.png` | 内置浏览器实拍（1920×1080，2.5D 地形 + 断层标记） | 交付证据 |
+| `web/js/app.js` | **修 4 个 bug**：① 情境题主题词改成**按可靠性排序挨个试**（问卷自述特质词 → 已有 topic → n-gram 兜底，最多 3 个；单个失败不算整段失败）② 断层空提示塞进 `.terrain-wrap`（原来锚到 `.stage` 上飘走） | 见第 3 节 |
+| `web/js/terrain.js` | **修 4 个 bug**：① 补 `.terrain-wrap` 定位上下文 ② 断层 overlay 改成和图层**同一个盒子**（同 viewBox、同 transform）③ 画布 300→220px、层间距 ±190、摘要截断 7 字、块宽 104 ④ 「（这层还是空的）」从裸 `<text>` 挪进 SVG | 见第 3 节 |
+| `web/js/demo.js` | 出题失败时**不许静默跳过**：照样把地形拉出来，console 明说「面板上是真提示」 | 决赛只有 5 分钟，静默跳过 = 观众以为卡住了 |
+| `web/css/app.css` | `.terrain-wrap` 真正启用（`height:600px`）；`.layer` 宽度跟着容器走 + `aspect-ratio`；居中改用 `translate(-50%,-50%)` | 绝对定位的 margin 百分比按**包含块宽度**算，会错位 |
 | `docs/协作规范.md` | 目录所有权：`web/` 改给 `nineanswerer`，记了原因 + 5 条边界 | BOOTSTRAP 第 4 条：改别人负责的目录要先在协作规范里确认 |
 | `docs/status.md` | 同步前端里程碑、额度现状（74/100）、B16 交接阻塞项、下一步重排 | 文档纪律 |
 
@@ -74,6 +83,54 @@
   **结果**：无 BOM 的 UTF-8 被按 ANSI 读 → **中文乱码**，一度以为文件被改坏。
   **结论**：中文输出走 Node 或写文件后再读；`.ps1` 必须是 **UTF-8 with BOM**。
 
+### 3.1 实跑之后才暴露的 4 个 bug（**都不是假想，是跑出来才发现的**）
+
+> 这 4 个 bug **只在真浏览器里跑完整流程才看得见**。只截图首屏、或只跑 `smoke-*.js`，
+> 全部都发现不了 —— **下一个 AI 别省这一步**。
+
+- **尝试**：用无头 Chrome `--screenshot` + `--virtual-time-budget` 截「照镜子」那一段。
+  **结果**：两次（budget 30000 / 120000）截出来的图**字节数完全一样**，都停在问卷阶段，
+  断层的字都还没渲出来。**虚拟时间在真实网络请求挂起时照样飞奔**，budget 一到就截图，
+  根本等不到上游返回。
+  **结论**：**要观察异步链路，用内置 Browser（`mcp_browser`）真跑真等**，别指望无头截图。
+  无头 Chrome 只适合截**首屏**这种「页面加载完就定型」的图。
+
+- **尝试**：用 `mcp_browser` 的 `run_script` + `page.evaluate` 读 DOM。
+  **结果**：`pageEvaluate.calls: 0`、返回值和 `console.log` 都取不到（脚本文件落在工作区，
+  但 `page.evaluate` 的结果没有回传通道）。
+  **结论**：读页面状态用 `query(kind: "text", selector: ...)`；查报错用 `query(kind: "console")`；
+  看请求用 `query(kind: "network")`。**这三个都好用**，`run_script` 在这个 provider 上不靠谱。
+
+- **Bug ①（真 bug）情境题永远空**。
+  **现象**：演练第 7 步打的是「这次没出到题，跳过作答」；面板上显示后端给的
+  「知乎上暂时没有跟「ubuntu」相关的问题。换个说法再试一次。」
+  **根因**：主题词是从收藏标题里切 n-gram 猜出来的，**猜出了 `ubuntu`** ——
+  `question_recommendations` 拿 `Query=ubuntu` 自然搜不到。**后端没毛病，是前端喂错了词。**
+  **修法**：`topicCandidates()` 按可靠性排序挨个试 —— ① 问卷自述的特质词（「长期主义」…
+  实测能出真题）② 已有的 `state.topic` ③ n-gram 兜底；最多试 3 个，**单个失败不算整段失败**。
+  **教训**：后端返回空并提示「换个说法再试一次」时，**换的是前端的事**。
+
+- **Bug ②（真 bug）地形盖住整屏**。
+  **现象**：地形的三层和断层标记压在问卷、桌宠、材料盘上面，文字全叠在一起。
+  **根因**：`app.css` 里写了 `.terrain-wrap { position: relative; … }`，
+  **但 `terrain.js` 从来没创建这个元素** → `.terrain` 的 `inset:0` 找不到定位上下文，
+  锚到了整个 `.stage`（`position: relative`）。
+  **教训**：**写 CSS 的时候记得回头确认对应的 DOM 真的存在**；一条没人用的样式规则
+  会安静地等着，直到某天用别的方式把它「继承」给别的东西。
+
+- **Bug ③（真 bug）断层标记错位**。
+  **现象**：红色的「断层 · 强度 67%」跑到地图外面（甚至跑到桌宠那一列）。
+  **根因**：断层 overlay 自己撑满整个容器（`inset:0;width:100%;height:100%`），
+  而图层是 760×300 的固定盒子 —— **两套坐标系**，标记当然对不上。
+  **修法**：overlay 改成和图层**同一个盒子**（同 viewBox、同 transform）。
+
+- **Bug ④（真 bug）三层互相压 + 文字糊成一片**。
+  **现象**：层的矩形框互相重叠，块的摘要文字（「你是内倾思维 | 你是外倾直觉 | …」）糊成一条。
+  **根因**：画布高 300px、层间距只有 ±104，而块的下沿摘要写到了块宽之外。
+  **修法**：画布 300→220px、层间距 ±190、摘要截断 16→7 字、块宽 118→104。
+  **教训**：**层间距要按「内容带高度」算，不是按「盒子高度」算** —— 内容带 = 画布高 − 上下留白。
+
+
 ---
 
 ## 4. 下一个 AI 接手前必须知道的事
@@ -105,11 +162,19 @@ cd 'C:\Users\steam\Desktop\从心\server'; node scripts/smoke-auth.js   # 25 项
 # 自检（期望 PASS 13 / WARN 0 / FAIL 0）
 powershell -ExecutionPolicy Bypass -File 'C:\Users\steam\Desktop\从心\scripts\check-contract.ps1'
 
-# 无头 Chrome 截图（已验证可用）
+# 无头 Chrome 截图（已验证可用）—— **只适合截首屏**
 & 'C:\Program Files\Google\Chrome\Application\chrome.exe' --headless=new --disable-gpu --hide-scrollbars `
   --force-device-scale-factor=1 --window-size=1600,900 --virtual-time-budget=9000 `
   --screenshot='C:\Users\steam\Desktop\从心\web\docs-shot-1.png' 'http://localhost:18788/web/'
+
+# 观察异步链路 → 用内置 Browser（先加载 browser-use:control-in-app-browser 技能）
+#   mcp_browser: open_tab { url } → wait { kind: 'timeout' } → query { kind: 'console' | 'network' }
+#   → query { kind: 'text', selector: '#mirror-terrain' } → screenshot
 ```
+
+> ⚠️ **无头 Chrome 的 `--virtual-time-budget` 截不到异步阶段**：
+> 真实网络请求挂起时虚拟时间照样飞奔，budget 一到就截图 → 截出来停在半路。
+> 两次不同 budget 截出来的图字节数完全一样就是这个原因。**要用 Browser 真跑真等。**
 
 ### 4.3 坑
 
@@ -128,7 +193,9 @@ powershell -ExecutionPolicy Bypass -File 'C:\Users\steam\Desktop\从心\scripts\
 
 ## 5. 下一步（按优先级）
 
-1. 🔴 **人亲手把 P3 闭环点一遍**（真实数据、不 mock）：拖入资料 → 咀嚼 → 吐卡片 → 点开原文 → 追问 → 知乎补观点 → 卡片列表 → 照镜子 → 断层 → 情境题 → 作答 → 地形长块。**重点看失败态提示是不是真的、节奏对不对**——这一步不需要再写功能。
+1. 🔴 **人亲手把 P3 闭环点一遍**（真实数据、不 mock）：拖入资料 → 咀嚼 → 吐卡片 → 点开原文 → 追问 → 知乎补观点 → 卡片列表 → 照镜子 → 断层 → 情境题 → 作答 → 地形长块。
+   **AI 已经用演练模式把这条路径跑通 9/9**（真实数据、无 mock），但**人还没手动点过**——
+   重点看**节奏**（5 分钟够不够）和**失败态提示是不是真的**。这一步不需要再写功能。
 2. 🟡 **补 `web/README.md`「已知问题」的 4 条**：OAuth 登录入口（等 12-05 凭证）/ 卡片正文截断折叠（上游 `content` 可能 200+ 字带 `[图片]` 标记）/ 三层地形 / 追问链。
 3. 🟡 **零 G / 零 K 的接口数从 13 改成 14**（契约现为 14 个路径），零 K 再补一条「卡片必须走 `/api/cards`，收藏推不出出处」。**由用户自己发。**
 4. 🟡 **P1 台词 14 句逐句审**（`contracts/tone.json` 与 `docs/P1-三件产出.md` §二），**只能人拍板**。

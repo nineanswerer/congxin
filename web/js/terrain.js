@@ -21,16 +21,16 @@ const KIND_COLOR = {
 };
 
 const LAYER_STYLE = [
-  { key: 'self_reported', dy: -104, dz: 70 },
+  { key: 'self_reported', dy: -190, dz: 110 },
   { key: 'behavioral', dy: 0, dz: 0 },
-  { key: 'situational', dy: 104, dz: -70 },
+  { key: 'situational', dy: 190, dz: -110 },
 ];
 
 const W = 760;
-const H = 300;
+const H = 220;
 
 function px(x) { return 34 + x * (W - 78); }
-function py(y) { return 34 + y * (H - 92); }
+function py(y) { return 34 + y * (H - 96); }
 
 /** 截断中文标题，别把块撑破。 */
 function clip(s, n) {
@@ -42,10 +42,10 @@ function blockSvg(b) {
   const c = KIND_COLOR[b.kind] ?? KIND_COLOR.core;
   const x = px(b.position?.x ?? 0.5);
   const y = py(b.position?.y ?? 0.5);
-  const h = 14 + (b.height ?? 0.4) * 34;
-  const w = 118;
+  const h = 30 + (b.height ?? 0.4) * 24;
+  const w = 104;
   const rx = x - w / 2;
-  const ry = y - h;
+  const ry = Math.max(8, y - h);
 
   const lines = clip(b.label, 10).split('');
   const half = Math.ceil(lines.length / 2);
@@ -58,21 +58,25 @@ function blockSvg(b) {
             fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.2"/>
       <text class="lblock" x="${x}" y="${ry + 15}" text-anchor="middle" fill="${c.text}">${escapeHtml(l1)}</text>
       ${l2 ? `<text class="lblock" x="${x}" y="${ry + 27}" text-anchor="middle" fill="${c.text}">${escapeHtml(l2)}</text>` : ''}
-      <text class="lsub" x="${x}" y="${ry + h + 13}" text-anchor="middle">${escapeHtml(clip(b.summary, 16))}</text>
+      <text class="lsub" x="${x}" y="${ry + h + 12}" text-anchor="middle">${escapeHtml(clip(b.summary, 7))}</text>
     </g>`;
 }
 
 function layerSvg(layer, key) {
   const blocks = (layer?.blocks ?? []).map(blockSvg).join('');
   const name = layer?.label ?? key;
+  const emptyHint = (layer?.blocks ?? []).length
+    ? ''
+    : `<text class="lsub" x="380" y="118" text-anchor="middle" fill="#6d7689">（这层还是空的）</text>`;
   return `
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(name)}">
-      <rect x="18" y="16" width="${W - 36}" height="${H - 44}" rx="12"
+      <rect x="18" y="14" width="${W - 36}" height="${H - 42}" rx="12"
             fill="rgba(255,255,255,.028)" stroke="rgba(255,255,255,.10)"/>
-      <text class="lname" x="34" y="38">${escapeHtml(name)}${
+      <text class="lname" x="34" y="36">${escapeHtml(name)}${
         layer?.type ? `　·　${escapeHtml(layer.type)}` : ''
       }</text>
       ${blocks}
+      ${emptyHint}
     </svg>`;
 }
 
@@ -88,19 +92,18 @@ export function renderTerrain(wrap, data, onFracture) {
 
   const layerHtml = LAYER_STYLE.map((s) => {
     const layer = layers[s.key];
-    const blocks = (layer?.blocks ?? []).length;
     return `
       <div class="layer" data-layer="${s.key}"
-           style="transform: translateY(${s.dy}px) translateZ(${s.dz}px) rotateX(12deg);">
+           style="transform: translate(-50%,-50%) translateY(${s.dy}px) translateZ(${s.dz}px) rotateX(12deg);">
         ${layerSvg(layer, s.key)}
-        ${blocks === 0 ? `<text class="lsub" x="380" y="150" text-anchor="middle" fill="#6d7689">（这层还是空的）</text>` : ''}
       </div>`;
   }).join('');
 
   // 断层：画在「说的你」与「做的你」之间的裂口上
+  // （overlay 与中间层同盒子，所以这里用的是中间层的坐标系）
   const fractureHtml = fractures.map((f) => {
     const x = px(f.axis_x ?? 0.5);
-    const y = py(f.axis_y ?? 0.5) - 52;
+    const y = 34 + (f.axis_y ?? 0.5) * 14;
     const amp = 8 + (f.intensity ?? 0.5) * 12;
     const path = `M ${x - 26} ${y - amp} L ${x - 9} ${y + amp * 0.6} L ${x + 4} ${y - amp * 0.8}
                   L ${x + 15} ${y + amp * 0.4} L ${x + 28} ${y - amp * 0.5}`;
@@ -110,25 +113,32 @@ export function renderTerrain(wrap, data, onFracture) {
         <path class="fracture-line" d="${path}" fill="none" stroke="${color}"
               stroke-width="${2 + (f.intensity ?? 0.5) * 2}" stroke-linecap="round" opacity=".85"/>
         <circle cx="${x}" cy="${y}" r="4.5" fill="${color}"/>
-        <text class="lsub" x="${x}" y="${y - 22}" text-anchor="middle" fill="${color}">
+        <text class="lsub" x="${x}" y="${y - 16}" text-anchor="middle" fill="${color}">
           断层 · 强度 ${Math.round((f.intensity ?? 0) * 100)}%
         </text>
       </g>`;
   }).join('');
 
+  // 断层标记：**必须和图层同一个盒子**（同一个 viewBox、同一个 transform），
+  // 否则坐标对不上 —— 之前它自己撑满整个 wrap，标记跑到地图外面去了。
   const overlay = fractures.length
-    ? `<svg class="fracture-overlay" viewBox="0 0 ${W} ${H}"
-         style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;">
-         <g pointer-events="auto">${fractureHtml}</g>
-       </svg>`
+    ? `<div class="layer layer-overlay" style="transform: translate(-50%,-50%) translateY(0px) translateZ(0px) rotateX(12deg);">
+         <svg class="fracture-overlay" viewBox="0 0 ${W} ${H}" role="img" aria-label="断层标记">
+           <g pointer-events="auto">${fractureHtml}</g>
+         </svg>
+       </div>`
     : '';
 
+  // ⚠️ `.terrain-wrap` 是**定位上下文**（position:relative）——
+  // 没有它，`.terrain` 的 `inset:0` 会锚到整个 `.stage`，地图直接盖住整屏。
   wrap.innerHTML = `
-    <div class="terrain" data-terrain>
-      ${layerHtml}
-      ${overlay}
-    </div>
-    <div class="terrain-hint">${fractures.length ? '点断层标记 → 特写' : '还没有断层'}</div>`;
+    <div class="terrain-wrap">
+      <div class="terrain" data-terrain>
+        ${layerHtml}
+        ${overlay}
+      </div>
+      <div class="terrain-hint">${fractures.length ? '点断层标记 → 特写' : '还没有断层'}</div>
+    </div>`;
 
   wrap.querySelectorAll('[data-fracture-id]').forEach((g) => {
     g.addEventListener('click', () => {
