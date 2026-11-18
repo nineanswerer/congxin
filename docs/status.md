@@ -34,7 +34,9 @@
 - **产品级 API 契约 v0 已冻结**（11-17 晚）→ [contracts/api.json](../contracts/api.json)：**OpenAPI 3.1**。**方向拍板后扩到 v0.2 / 8 个路径**（`/api/behavior/favorites`、`/api/behavior/followees`、`/api/behavior/contents`、`POST /api/behavior/tension`、`POST /api/situation/question`、`GET /api/terrain`、`POST /api/terrain/answer`、`/api/quota`）。**队友现在就能起 mock 并行开工，不必等后端。** 三条硬规则（出处必填 / 空数据≠失败 / 失败说真话）+ 断层诚实底线（至少 2 个信号）已加进 `scripts/check-contract.ps1` 第 11 项，**改坏契约会被自检拦下**。详见 [decisions.md](decisions.md) D28 / D29、交付话术见 [队友对齐清单.md](队友对齐清单.md) 零 G。
 - **🔴 产品方向已拍板（B13 关闭，D29）**（11-17 19:05）：**桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节**——不是推翻重做，队友的构想完整保留为亮点模块。形态 **2.5D 分层认知地图 + 断层真 3D 推镜**；闭环位置 **桌宠主动发起的「照镜子」环节**（主流程的一段，不是并列第二条线）；行为对照 **三个信号都做，底线是至少 2 个独立可用**。**D14 原样成立、不需要修订**（原先"若换方向 D14 要修订"的警告作废）。制作阶段已按此重排（见下节 P1—P9）。
 - **✅ 分类体系 B14 初版已出（机器可读部分就绪）**（11-17 22:5x）：`contracts/taxonomy.json` = 主题 6 类 + 论证结构 5 类 + 关键词规则 + `unknown` 兜底；`docs/分类体系-B14.md` 是给人看的说明。**已加进自检第 12 项**（类目字段齐全、unknown 在位、阈值 ≥1）。回归脚本 `server/scripts/classify-check.js` **13/13 一致**（收藏 9 + 关注 3 + 创作 1）。详见 D30。
-- **✅ `server/` 后端骨架已跑通**（11-17 22:3x）：`server/src/**` = 鉴权 + 退避重试 + 限流处理 + TTL 缓存 + 请求去重 + 分类 + 归一化；**已实现 4 个接口**（`/api/health`、`/api/quota`、`/api/behavior/favorites`、`/api/behavior/followees`、`/api/behavior/contents`）。**真调知乎实跑通过**（`node server/scripts/smoke.js`），密钥只从环境变量读、**不入库**。契约里另外 4 个接口（`tension` / `situation` / `terrain` ×2）**尚未实现**。
+- **✅ `server/` 后端骨架已跑通**（11-17 22:3x）：`server/src/**` = 鉴权 + 退避重试 + 限流处理 + TTL 缓存 + 请求去重 + 分类 + 归一化；**已实现 4 个接口**（`/api/health`、`/api/quota`、`/api/behavior/favorites`、`/api/behavior/followees`、`/api/behavior/contents`）。**真调知乎实跑通过**（`node server/scripts/smoke.js`），密钥只从环境变量读、**不入库**。
+- **✅ 认知闭环的 4 个接口已实现并实跑通过**（11-17 23:0x）：`POST /api/behavior/tension`、`POST /api/situation/question`、`GET /api/terrain`、`POST /api/terrain/answer` —— **契约里的 8 个路径现在全部有代码了**。真调知乎跑通（`node server/scripts/smoke-cognition.js`）：断层标签实测输出「你说你重「长期主义」，但你收藏的 **67%（6/9 条）**是「怎么立刻上手」」（强度 0.67 / 置信度 0.6）；情境题题面由 `zhida-fast-1p5` 改写而**出处来自上游**；作答后长出地形块并连上「内倾情感」的桥；伪造 `question_id` 正确返回 404。详见 D31。
+- **✅ P1 三件产出已起草**（11-17 22:5x）：`docs/P1-三件产出.md`（一句话场景 ×2 + 5 分钟逐秒脚本 + 静帧说明），静帧 ×2 已出图（`docs/p1-frames/*.png`，1600×900，HTML 稿可改）。**场景与口径已拍板**（主流程 A / 照镜子 A / 口径 67%），台词与镜头仍待逐句审。
 - **✅ 自检扩到 12 项**（11-17 22:4x）：新增第 12 项（taxonomy 完整性）；同时修正了密钥扫描对 `process.env.` 读取的误报，**并做了规则回归确认真实泄露仍能抓到**。实跑 **PASS 12 / WARN 0 / FAIL 0**。
 
 ## 三、阻塞项
@@ -171,12 +173,12 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 
 ## 五、下一步（按依赖顺序）
 
-1. 🔴 **P1 三件产出**：一句话场景 ×2（主流程 + 照镜子环节）+ 5 分钟 Demo 逐秒脚本 + 静帧 ×2（桌宠 + 2.5D 认知地图）。**AI 起草，人拍板**（B15）。**方向已定，现在可以动手做视觉稿了。**
-2. ✅ **方向已拍板（B13 关闭，D29）**｜✅ **零 I 已发**｜零 G / 零 H 由用户自己发。
-3. ✅ **`server/` 骨架已跑通**（4 个接口 + 真调知乎）→ 队友可以对着 `contracts/api.json` 起 mock 前端了。
+1. 🔴 **P1 的台词与镜头仍待逐句审**（B15）：场景与口径已拍板（主流程 A / 照镜子 A / 67%），剩下 4 件事在 `docs/P1-三件产出.md` 第四节。
+2. 🔴 **零 J 待发**（修正 82% → 67%）：已写好 `docs/队友对齐清单.md` 的零 J，**由用户自己发**。零 G / 零 H 同样用户自己发。
+3. 🔴 **前端 `web/` 还没开始**（P3 主线）：后端 8 个接口全通了，队友可以对着 `contracts/api.json` 开工；**认知闭环的渲染（2.5D 地图 + 3D 推镜 + 问卷）完全在他手上**。
 4. 🟡 **定死分类体系**（B14）：初版已出，**等队友有空确认三件事**；未确认前不算冻结。
 5. **确认 App ID / App Key 是否已可获取**（B4）：账号实名 + 手机号前提已满足，官方取密钥路径 `https://www.zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p3`。
-6. **契约里还差 4 个接口**（`tension` / `situation` / `terrain` ×2）——P4 的认知闭环全靠它们，**不能拖到 P4 才开始**。
+6. ✅ **方向已拍板（B13 关闭，D29）**｜✅ **零 I 已发**｜✅ **契约 8 接口全部实现并实跑**。
 7. **P1—P9 按总表推进**，每阶段结束必须拿到"能给人看的东西"才算过。
 8. **P7 的审核时间是外部依赖**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**（总表已把 P7 排到 11-30，别拖）。
 9. **人时是紧的**：总表合计 55 人时贴着上限（可用 28—56）。若到 11-24 发现落后，按「保命砍法」从上往下砍，**最后才砍真 3D 推镜**。

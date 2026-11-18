@@ -904,7 +904,7 @@
               "method": "GET",
               "query": { "Query": "string", "Count": "int" },
               "maps_to": "candidates[]",
-              "note": "上游字段只有 Title 与 Url；**没有 Paging**。"
+              "note": "上游字段只有 Title 与 Url；**没有 Paging**。⚠️ 实测（2026-11-17）上游对**全大写英文词召回不稳**：`Query=MBTI` 连续 3 次返回 0 条，`Query=mbti` 稳定 5 条，额度充足——**不是额度问题，是字面匹配对大小写敏感**。后端的处理：主查一次，查不到才降级到小写再试一次，并写 `query_lowercase_fallback` 警告。"
             },
             {
               "path": "/api/v1/content/question_answers",
