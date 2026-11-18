@@ -109,10 +109,10 @@
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
-    "version": "v0.4",
+    "version": "v0.5",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "方向已定（桌宠主体 + 认知闭环）；**13 个路径冻结**：9 个已实现并实跑 + 4 个登录路径待 12-05 OAuth 凭证到位",
+    "status": "方向已定（桌宠主体 + 认知闭环）；**14 个路径冻结，全部已实现**（4 个登录路径的 OAuth 真联调待 12-05 凭证到位，开发期走 developer_account 模式）",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
@@ -126,7 +126,8 @@
       "GET /api/auth/profile",
       "GET /api/auth/login",
       "GET /api/auth/callback",
-      "POST /api/auth/logout"
+      "POST /api/auth/logout",
+      "POST /api/cards"
     ],
     "rules": [
       "出处必填：source 缺失即报错，不生成无出处的内容",
@@ -139,7 +140,9 @@
       "登录态只有两种：oauth（用户授权过知乎）与 developer_account（开发期自读）；后者不许编昵称、不许假装拿到了用户资料",
       "OAuth Token 只留服务端，浏览器只拿 HttpOnly + Secure Cookie 里的随机 session id",
       "OAuth Token 过期或鉴权失败时停止读取，不静默切回 Access Secret 所属账号",
-      "App ID / App Key 由赛事页面在项目创建后分配，不走通用邮件申请流程；拿不到就不编造领取入口"
+      "App ID / App Key 由赛事页面在项目创建后分配，不走通用邮件申请流程；拿不到就不编造领取入口",
+      "每张卡片必须带出处三件套：问题标题 + 问题 URL + 原回答 URL；缺任何一个就不生成这张卡",
+      "卡片与情境题共用 SourceCard，用 kind 区分；前端一套渲染逻辑，不许新造一套"
     ],
     "auth": {
       "credential_source": "赛事页面在项目创建后分配 App ID / App Key；黑客松不走通用邮件申请流程",

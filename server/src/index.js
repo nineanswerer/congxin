@@ -4,7 +4,7 @@
  * 技术底座（D22）：前端 + Node 单进程，**零数据库、零中间件**，
  * 会话放进程内 Map。部署走知乎 AI Works 源码发布。
  *
- * 当前实现的接口（对应 contracts/api.json v0.4 的 **13 个路径**，**全部已实现**）：
+ * 当前实现的接口（对应 contracts/api.json v0.5 的 **14 个路径**，**全部已实现**）：
  *   GET  /api/quota
  *   GET  /api/behavior/favorites
  *   GET  /api/behavior/followees
@@ -18,6 +18,7 @@
  *   GET  /api/auth/login
  *   GET  /api/auth/callback
  *   POST /api/auth/logout
+ *   POST /api/cards
  */
 
 import express from 'express';
@@ -29,6 +30,7 @@ import { behaviorRouter } from './routes/behavior.js';
 import { cognitionRouter } from './routes/cognition.js';
 import { toneRouter } from './routes/tone.js';
 import { authRouter } from './routes/auth.js';
+import { cardsRouter } from './routes/cards.js';
 import { loadTaxonomy } from './taxonomy.js';
 import { loadTone } from './tone.js';
 import { sessionStats } from './session.js';
@@ -91,6 +93,7 @@ app.use(behaviorRouter);
 app.use(cognitionRouter);
 app.use(toneRouter);
 app.use(authRouter);
+app.use(cardsRouter);
 
 app.use((req, res) => {
   res.status(404).json({

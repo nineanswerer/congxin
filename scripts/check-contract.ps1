@@ -17,7 +17,7 @@
       8. 是否已有交接记录（WARN）
       9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
      10. post-checkout hook 是否带开工清单
-     11. API 契约 api.json 是否存在、可解析、13 个核心接口齐全、出处与 user_hint 必填、登录两模式齐全
+     11. API 契约 api.json 是否存在、可解析、14 个核心接口齐全、出处三件套与 user_hint 必填、登录两模式齐全、卡片沿用 SourceCard
      12. 分类体系 taxonomy.json 是否存在、可解析、类目字段齐全、unknown 兜底在位
      13. 语气契约 tone.json 是否存在、可解析、**默认语气是不是 gentle**、两个语气台词是否齐全
 
@@ -284,7 +284,8 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
             '/api/auth/profile',
             '/api/auth/login',
             '/api/auth/callback',
-            '/api/auth/logout'
+            '/api/auth/logout',
+            '/api/cards'
         )
         $missingPaths = @()
         foreach ($rp in $requiredPaths) {
@@ -304,6 +305,15 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         $authModeOk = ($authRequired -contains 'mode') -and ($authRequired -contains 'fullname') -and ($authRequired -contains 'empty')
         $authModes = @($apiDoc.components.schemas.AuthMode.enum)
         $authEnumOk = ($authModes -contains 'oauth') -and ($authModes -contains 'developer_account')
+        # 出处三件套：问题标题 + 问题 URL + **原回答 URL** 必须齐（官方检查第 6/7 条查的就是没有出处的卡片）
+        $sourceTriple = (@($apiDoc.components.schemas.SourceRef.required) -contains 'answer_url') -and
+                         ($apiDoc.components.schemas.SourceRef.properties.answer_url.type -eq 'string')
+        # 卡片与情境题必须共用 SourceCard，不许新造一套
+        $cardKinds = @($apiDoc.components.schemas.SourceCard.properties.kind.enum)
+        $cardKindOk = ($cardKinds -contains 'knowledge_card') -and ($cardKinds -contains 'situation_question')
+        # 卡片数据：cards / empty / empty_notice 必填（空数据≠失败）
+        $cardsRequired = @($apiDoc.components.schemas.CardsData.required)
+        $cardsOk = ($cardsRequired -contains 'cards') -and ($cardsRequired -contains 'empty') -and ($cardsRequired -contains 'empty_notice')
 
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
@@ -314,9 +324,12 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         if ($toneDefault -ne 'gentle') { $why += "ToneId.default 不是 gentle（实际 '$toneDefault'）——用户拍板过默认是温和陪伴" }
         if (-not $authModeOk) { $why += 'AuthProfileData 未把 mode / fullname / empty 设为必填（前端分不清「没登录」与「登录了」）' }
         if (-not $authEnumOk) { $why += 'AuthMode 枚举缺 oauth / developer_account 两种模式' }
+        if (-not $sourceTriple) { $why += 'SourceRef 未把 answer_url（原回答 URL）设为必填非空——卡片会缺出处' }
+        if (-not $cardKindOk) { $why += 'SourceCard.kind 枚举缺 knowledge_card / situation_question——卡片不许新造一套' }
+        if (-not $cardsOk) { $why += 'CardsData 未把 cards / empty / empty_notice 设为必填（空数据与失败分不开）' }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle / 登录两模式齐全"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处三件套必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle / 登录两模式齐全 / 卡片沿用 SourceCard"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }

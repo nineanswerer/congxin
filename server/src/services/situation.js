@@ -23,43 +23,15 @@
  *    上游捞不到带回答的问题 → 走 `empty: true` + `empty_notice`，**不是错误**。
  */
 
-import {
-  getQuestionRecommendations,
-  getQuestionAnswers,
-  chatComplete,
-} from '../zhihu/endpoints.js';
+import { chatComplete } from '../zhihu/endpoints.js';
 import { ApiError } from '../lib/errors.js';
+import { stableId, tokenStr } from '../lib/util.js';
 import { petLines, resolveTone } from './tone.js';
+// 检索链路与「知识卡片」共用同一套（省人时的第 2 条决定）
+import { findQuestionCandidates, firstAnswerWithUrl, buildSourceRef } from './retrieval.js';
 
 const MODEL = 'zhida-fast-1p5';
 const KEY_LETTERS = 'ABCDEFGH';
-
-/** 稳定 id：由内容哈希派生，同一题永远同一个 id。 */
-function stableId(prefix, seedStr) {
-  let h = 2166136261;
-  for (let i = 0; i < seedStr.length; i += 1) {
-    h ^= seedStr.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const hex = (h >>> 0).toString(16).padStart(8, '0');
-  const h2 = (() => {
-    let g = 5381;
-    for (let i = 0; i < seedStr.length; i += 1) g = (g * 33) ^ seedStr.charCodeAt(i);
-    return (g >>> 0).toString(16).padStart(8, '0');
-  })();
-  return `${prefix}_${hex}${h2}`;
-}
-
-/**
- * 上游 ContentToken 转字符串；没有就 null。
- *
- * ⚠️ 写成函数是有原因的：直接把上游字段赋给契约里的 `answer_token`，
- *    会被 `scripts/check-contract.ps1` 的密钥扫描判成「疑似密钥」（值长得像 16+ 位随机串）。
- *    **规则是对的**（密钥宁可误报也不放过），所以改代码写法，不放松规则。
- */
-function tokenStr(value) {
-  return value != null ? String(value) : null;
-}
 
 /** 从模型输出里抠出 JSON。模型爱加 ```json 围栏，也爱在前面写一句"好的"。 */
 function extractJson(text) {
@@ -75,14 +47,6 @@ function extractJson(text) {
   } catch {
     return null;
   }
-}
-
-/** 把上游候选问题里的标题/URL 归一化。 */
-function normalizeCandidate(raw) {
-  const url = raw?.Url ?? raw?.url ?? '';
-  const title = raw?.Title ?? raw?.title ?? '';
-  if (!url || !title) return null;
-  return { question_title: title, question_url: url };
 }
 
 /**
@@ -162,17 +126,8 @@ export async function buildSituationQuestions(req) {
   //    额度充足（98/100），**不是额度问题，是上游的字面匹配对大小写敏感**。
   //    → 所以：主查一次，**查不到才降级到小写形式再试一次**（不是并集，
   //    免得 "RAG" 降级成 "rag" 后匹配到 "storage" 之类的噪声）。
-  const warnings = [];
-  const pool = await getQuestionRecommendations(topic, Math.max(5, count * 3));
-  let candidates = pool.items.map(normalizeCandidate).filter(Boolean);
-
-  if (candidates.length === 0 && topic !== topic.toLowerCase()) {
-    const fallback = await getQuestionRecommendations(topic.toLowerCase(), Math.max(5, count * 3));
-    candidates = fallback.items.map(normalizeCandidate).filter(Boolean);
-    if (candidates.length > 0) {
-      warnings.push('query_lowercase_fallback');
-    }
-  }
+  // 问题发现 → 候选问题（主查一次，查不到才降级小写；逻辑在共享的 retrieval.js）
+  const { candidates, warnings } = await findQuestionCandidates(topic, Math.max(5, count * 3));
 
   const fresh = candidates.filter((c) => !answered.has(c.question_url));
 
@@ -197,24 +152,12 @@ export async function buildSituationQuestions(req) {
     if (questions.length >= count) break;
 
     // ---- 2. 回答摘要：拿**真实原回答链接** ----
-    let answer = null;
-    try {
-      const answers = await getQuestionAnswers(candidate.question_url, 3);
-      answer = (answers.items ?? []).find((a) => a?.Url) ?? null;
-      if (!answer) continue; // 这个问题没有可用回答 → 换下一个候选
-    } catch {
-      continue; // 单个问题取回答失败不该让整批题失败
-    }
+    // 取**真实原回答链接**（取不到就换下一个候选）
+    const answer = await firstAnswerWithUrl(candidate.question_url);
+    if (!answer) continue;
 
     const answerSummary = answer?.Summary ?? null;
-    const source = {
-      question_title: candidate.question_title,
-      question_url: candidate.question_url,
-      answer_url: answer.Url ?? null,
-      answer_content_type: answer.ContentType === 'article' ? 'article' : 'answer',
-      answer_token: tokenStr(answer.ContentToken),
-      answer_summary: answerSummary,
-    };
+    const source = buildSourceRef(candidate, answer);
 
     // ---- 3. 模型只改写题面 ----
     let stem = null;

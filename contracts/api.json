@@ -2,9 +2,9 @@
   "openapi": "3.1.0",
   "info": {
     "title": "从心 · 产品级 API 契约",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "summary": "知乎黑客松 S3 参赛项目「从心」的前后端接口契约（方向已定：桌宠主体 + 认知闭环）。",
-    "description": "## 这份文档是干什么的\n\n它是**我们自己的后端**对外的接口形状。前端只对着这份文档开发，**不需要知道知乎开放平台的任何细节**（字段名大小写混用、NextOffset 可能是字符串、缺参数返回 Code=10001 等等，全部在后端抹平）。\n\n## 产品结构（2026-11-17 方向已定）\n\n**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，不是另一个产品。两条线共用同一批知乎原料接口。\n\n```\n主流程：资料 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点\n                                            │\n                        桌宠主动发起 ↓（同一个后端进程）\n                                            ▼\n「照镜子」环节：自述 → 行为对照 → 断层 → 情境题 → 答完长出一块地形\n```\n\n## 覆盖的接口\n\n| 接口 | 作用 | 归属 |\n| --- | --- | --- |\n| `GET /api/behavior/favorites` | 收藏信号 | 原料（两线共用） |\n| `GET /api/behavior/followees` | 关注信号 | 原料（两线共用） |\n| `GET /api/behavior/contents` | 创作信号 | 原料（两线共用） |\n| `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | 原料（两线共用） |\n| `POST /api/behavior/tension` | 自述 vs 行为的张力信号 → 断层 | 认知闭环 |\n| `GET /api/terrain` | 三层认知地形结构（说的你 / 做的你 / 情境下的你）+ 断层 + 桥 | 认知闭环 |\n| `POST /api/terrain/answer` | 提交情境题回答 → 地形生长 | 认知闭环 |\n| `GET /api/quota` | 额度透传 | 平台 |\n| `GET /api/tone` | **桌宠语气目录 + 全部台词**（语气切换器用） | 平台 |\n| `GET /api/auth/profile` | 当前登录用户资料（昵称 / 头像 / 一句话介绍） | 登录 |\n| `GET /api/auth/login` | 发起知乎授权（302 跳转） | 登录 |\n| `GET /api/auth/callback` | 授权回调（换 token、建会话） | 登录 |\n| `POST /api/auth/logout` | 退出登录、清会话 | 登录 |\n\n## 三条硬规则（写进实现，别绕过）\n\n1. **不生成没有出处的内容。** 情境题与知识卡片的 `source` 字段必填。拿不到知乎真实问题标题 + URL + 原回答链接，就**报错**，绝不编一条题。\n2. **空数据 ≠ 失败。** 空数据返回 HTTP 200 + `items: []` + `empty: true` + `empty_notice`，前端要显示真实提示（比如「你还没有收藏内容」），不能显示错误弹窗，更不能塞假数据。\n3. **失败必须是真话。** 4xx/5xx 一律走统一错误信封，带 `user_hint`（中文、给人看的），且带上游原始 `code`/`message`。官方提交前检查第 7 条查的就是这个。\n\n## 登录（OAuth）：两种模式，一个接口\n\n`GET /api/auth/profile` 永远返回 200，但有两种模式，看 `data.mode`：\n\n- `mode: oauth` —— 用户授权过知乎（12-05 拿到 App ID / App Key 之后），昵称、头像、一句话介绍都是真的。\n- `mode: developer_account` —— 开发期没有 OAuth 会话。上游没有「读自己昵称」的接口，所以昵称等字段为 null，前端显示通用称呼。\n\n**不许在 `developer_account` 模式下编一个昵称。** 官方提交前检查第 6、7 条查的就是假数据与假身份。\n\n`login` / `callback` / `logout` 三个接口在 12-05 拿到赛事分配的 App ID / App Key 之前**不可用**（见各自的 `x-availability`）。\n\nOAuth 的协议坑（回调参数叫 `authorization_code`、`state` 不回传、token 1 小时过期且没有 refresh token）记在 `x-auth` 段。\n\n## 渲染责任划分（**别搞反**）\n\n**后端只给参数，不做渲染决策。** 认知地形由前端用 SVG + CSS `perspective` 渲染成 2.5D 分层地图，断层特写处用 Three.js 做一次真实推镜。后端给的是**归一化坐标、高度、强度、置信度**这类参数。\n\n→ 这样后端不依赖任何渲染库，前端也不需要理解后端的算法。"
+    "description": "## 这份文档是干什么的\n\n它是**我们自己的后端**对外的接口形状。前端只对着这份文档开发，**不需要知道知乎开放平台的任何细节**（字段名大小写混用、NextOffset 可能是字符串、缺参数返回 Code=10001 等等，全部在后端抹平）。\n\n## 产品结构（2026-11-17 方向已定）\n\n**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，不是另一个产品。两条线共用同一批知乎原料接口。\n\n```\n主流程：资料 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点\n                                            │\n                        桌宠主动发起 ↓（同一个后端进程）\n                                            ▼\n「照镜子」环节：自述 → 行为对照 → 断层 → 情境题 → 答完长出一块地形\n```\n\n## 覆盖的接口\n\n| 接口 | 作用 | 归属 |\n| --- | --- | --- |\n| `GET /api/behavior/favorites` | 收藏信号 | 原料（两线共用） |\n| `GET /api/behavior/followees` | 关注信号 | 原料（两线共用） |\n| `GET /api/behavior/contents` | 创作信号 | 原料（两线共用） |\n| `POST /api/situation/question` | 情境题生成（**每题必带知乎出处**） | 原料（两线共用） |\n| `POST /api/behavior/tension` | 自述 vs 行为的张力信号 → 断层 | 认知闭环 |\n| `GET /api/terrain` | 三层认知地形结构（说的你 / 做的你 / 情境下的你）+ 断层 + 桥 | 认知闭环 |\n| `POST /api/terrain/answer` | 提交情境题回答 → 地形生长 | 认知闭环 |\n| `GET /api/quota` | 额度透传 | 平台 |\n| `GET /api/tone` | **桌宠语气目录 + 全部台词**（语气切换器用） | 平台 |\n| `GET /api/auth/profile` | 当前登录用户资料（昵称 / 头像 / 一句话介绍） | 登录 |\n| `GET /api/auth/login` | 发起知乎授权（302 跳转） | 登录 |\n| `GET /api/auth/callback` | 授权回调（换 token、建会话） | 登录 |\n| `POST /api/auth/logout` | 退出登录、清会话 | 登录 |\n| `POST /api/cards` | **知识卡片产出**（咀嚼 → 吐带出处的卡片） | 主流程 |\n\n## 三条硬规则（写进实现，别绕过）\n\n1. **不生成没有出处的内容。** 情境题与知识卡片的 `source` 字段必填。拿不到知乎真实问题标题 + URL + 原回答链接，就**报错**，绝不编一条题。\n2. **空数据 ≠ 失败。** 空数据返回 HTTP 200 + `items: []` + `empty: true` + `empty_notice`，前端要显示真实提示（比如「你还没有收藏内容」），不能显示错误弹窗，更不能塞假数据。\n3. **失败必须是真话。** 4xx/5xx 一律走统一错误信封，带 `user_hint`（中文、给人看的），且带上游原始 `code`/`message`。官方提交前检查第 7 条查的就是这个。\n\n## 登录（OAuth）：两种模式，一个接口\n\n`GET /api/auth/profile` 永远返回 200，但有两种模式，看 `data.mode`：\n\n- `mode: oauth` —— 用户授权过知乎（12-05 拿到 App ID / App Key 之后），昵称、头像、一句话介绍都是真的。\n- `mode: developer_account` —— 开发期没有 OAuth 会话。上游没有「读自己昵称」的接口，所以昵称等字段为 null，前端显示通用称呼。\n\n**不许在 `developer_account` 模式下编一个昵称。** 官方提交前检查第 6、7 条查的就是假数据与假身份。\n\n`login` / `callback` / `logout` 三个接口在 12-05 拿到赛事分配的 App ID / App Key 之前**不可用**（见各自的 `x-availability`）。\n\nOAuth 的协议坑（回调参数叫 `authorization_code`、`state` 不回传、token 1 小时过期且没有 refresh token）记在 `x-auth` 段。\n\n## 渲染责任划分（**别搞反**）\n\n**后端只给参数，不做渲染决策。** 认知地形由前端用 SVG + CSS `perspective` 渲染成 2.5D 分层地图，断层特写处用 Three.js 做一次真实推镜。后端给的是**归一化坐标、高度、强度、置信度**这类参数。\n\n→ 这样后端不依赖任何渲染库，前端也不需要理解后端的算法。"
   },
   "servers": [
     {
@@ -17,7 +17,8 @@
     { "name": "situation", "description": "情境题生成" },
     { "name": "terrain", "description": "认知闭环：三层认知地形与断层" },
     { "name": "platform", "description": "平台状态（额度）" },
-    { "name": "auth", "description": "登录与会话（知乎 OAuth）：资料 / 发起授权 / 回调 / 退出" }
+    { "name": "auth", "description": "登录与会话（知乎 OAuth）：资料 / 发起授权 / 回调 / 退出" },
+    { "name": "cards", "description": "知识卡片产出（主流程：咀嚼 → 吐带出处的卡片）" }
   ],
   "paths": {
     "/api/behavior/favorites": {
@@ -1283,6 +1284,151 @@
           "rule": "无会话时幂等返回 200。"
         }
       }
+    },
+    "/api/cards": {
+      "post": {
+        "tags": ["cards"],
+        "operationId": "postCards",
+        "summary": "知识卡片产出（主流程：咀嚼 → 吐带出处的卡片）",
+        "description": "主流程那条链的接口：**拖入资料 → 咀嚼 → 吐卡片 → 点开原文 → 追问 → 知乎补观点**。\n\n**一张卡片 = 一个知乎上真实存在的问题 + 它下面一条真实回答的官方摘要 + 原回答链接。**\n形状沿用已有的 `SourceCard`（`kind: knowledge_card`），**不新造一套**——卡片与情境题共用同一个对象，前端一套渲染逻辑。\n\n**三条硬规则**：\n1. **出处必填**：问题标题 + 问题 URL + **原回答 URL**，**全部来自上游，一个字段都不由模型生成**。拿不到出处就**不生成这张卡**（官方提交前检查第 6、7 条查的就是这个）。\n2. **不写死素材**：主题来自请求参数，每次跑出来的都是**实时**知乎数据。\n3. **空数据 ≠ 失败**：上游捞不到 → `empty: true` + 中文 `empty_notice`，**不是错误**。\n\n**为什么卡片只能走「问题发现」链路**（2026-11-18 实测）：原回答 URL **只有** `content/question_answers` 的 `Url` 字段能给。收藏接口给不了——实测该账号 9 条收藏里 **8 条是专栏文章**（`zhuanlan.zhihu.com/p/...`），剩下 1 条的 URL 是 `zhihu.com/answer/xxx`，**推不出问题 URL，也没有原回答 URL**。\n\n**额度**：走「问题发现」额度组（100 次/天，问题推荐与回答摘要共用）。一次 `question_recommendations` 出最多 20 个问题（**1 次调用**），每个问题再花 **1 次** `question_answers` → **N 张卡 ≈ 1 + N 次**。后端**按主题缓存 5 分钟**，同一主题重复演不再打上游。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CardsRequest" },
+              "examples": {
+                "ok": {
+                  "summary": "按主题吐卡片",
+                  "value": { "topic": "开源项目", "count": 3, "tone": "gentle" }
+                },
+                "with_seen": {
+                  "summary": "带上「已经吐过哪些」，避免重复",
+                  "value": {
+                    "topic": "开源项目",
+                    "count": 2,
+                    "seen_sources": ["https://www.zhihu.com/question/661168384"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "卡片（空数据时 cards 为空数组 + empty=true）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CardsResponse" },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "cards": [
+                          {
+                            "id": "card_1a2b3c4d5e6f7081",
+                            "kind": "knowledge_card",
+                            "title": "有哪些值得长期关注的开源项目？",
+                            "content": "这是知乎上的**官方服务摘要**（不是 AI 生成）。前端不要标成「AI 总结」。",
+                            "stem": null,
+                            "options": [],
+                            "difficulty": null,
+                            "layer": null,
+                            "source": {
+                              "question_title": "有哪些值得长期关注的开源项目？",
+                              "question_url": "https://www.zhihu.com/question/661168384",
+                              "answer_url": "https://www.zhihu.com/question/661168384/answer/2222222222",
+                              "answer_content_type": "answer",
+                              "answer_token": "2222222222",
+                              "answer_summary": "这是知乎上的**官方服务摘要**（不是 AI 生成）。前端不要标成「AI 总结」。"
+                            },
+                            "created_at": 1766229000,
+                            "generated_by": null
+                          }
+                        ],
+                        "topic": "开源项目",
+                        "empty": false,
+                        "empty_notice": null,
+                        "total_candidates": 5,
+                        "tone": "gentle",
+                        "pet_lines": {
+                          "opening": "这周的报告材料还在桌面上摆着，我看着都晃。",
+                          "chew": "唔…有点硬，我再嚼嚼。",
+                          "digest": "嚼出来了。这几张，每张都能点回原文。"
+                        }
+                      },
+                      "meta": {
+                        "source": "zhihu:question_discovery",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "空数据（不是失败）",
+                    "value": {
+                      "data": {
+                        "cards": [],
+                        "topic": "量子计算",
+                        "empty": true,
+                        "empty_notice": "知乎上暂时没有跟「量子计算」相关的问题。换个说法再试一次。",
+                        "total_candidates": 0,
+                        "tone": "gentle",
+                        "pet_lines": {
+                          "opening": "这周的报告材料还在桌面上摆着，我看着都晃。",
+                          "chew": "唔…有点硬，我再嚼嚼。",
+                          "digest": "嚼出来了。这几张，每张都能点回原文。"
+                        }
+                      },
+                      "meta": {
+                        "source": "zhihu:question_discovery",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "参数不合法（比如 topic 为空）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        },
+        "x-upstream": {
+          "calls": [
+            {
+              "path": "/api/v1/user/question_recommendations",
+              "method": "GET",
+              "query": { "Query": "<topic>", "Count": "N" },
+              "maps_to": "cards[].source.question_title / cards[].source.question_url"
+            },
+            {
+              "path": "/api/v1/content/question_answers",
+              "method": "GET",
+              "query": { "QuestionUrl": "<完整URL>", "Offset": "0", "Limit": "3" },
+              "maps_to": "cards[].source.answer_url / cards[].source.answer_summary"
+            }
+          ],
+          "quota_class": "问题发现（100 次/天，与情境题共用同一组）",
+          "cost_per_request": "1 + N 次（N = 卡片数）",
+          "cache": "按主题缓存 5 分钟（lib/cache.js 的 cached()，顺带做请求去重）",
+          "verified": "2026-11-18 实测"
+        }
+      }
     }  },
   "components": {
     "responses": {
@@ -1511,7 +1657,7 @@
       },
       "SourceRef": {
         "type": "object",
-        "required": ["question_title", "question_url"],
+        "required": ["question_title", "question_url", "answer_url"],
         "description": "出处。AGENTS.md 第 3 节第 4 条：「每张生成的知识卡片都要能回溯到原文出处，不可回溯的内容不生成卡片。」→ **这个对象必填，缺出处就是错误，不是降级。**",
         "properties": {
           "question_title": {
@@ -1525,8 +1671,8 @@
             "examples": ["https://www.zhihu.com/question/661168384"]
           },
           "answer_url": {
-            "type": ["string", "null"],
-            "description": "原回答链接，来自 `question_answers` 的 `Url` 字段。**这是回跳出处的关键**——直答给不了这个。"
+            "type": "string",
+            "description": "原回答链接，来自 `question_answers` 的 `Url` 字段。**这是回跳出处的关键**——直答给不了这个。**必填且不能为空**：拿不到原回答链接就**不生成这张卡**（官方提交前检查第 6、7 条查的就是没有出处的卡片）。"
           },
           "answer_content_type": {
             "type": ["string", "null"],
@@ -2384,6 +2530,57 @@
           "meta": { "$ref": "#/components/schemas/ResponseMeta" }
         }
       },
+      "CardsRequest": {
+        "type": "object",
+        "required": ["topic"],
+        "description": "吐卡片的入参。**主题来自用户拖进来的那份资料**，不许前端写死内容。",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "主题词，来自用户拖入的那份资料是关于什么的。**必填**，空字符串会返回 400。"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3,
+            "description": "要几张卡。默认 3，最多 5。**每多一张就多花 1 次问题发现额度**。"
+          },
+          "tone": { "$ref": "#/components/schemas/ToneId" },
+          "seen_sources": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "已经吐过的卡片出处（问题 URL）。后端会跳过它们，避免吐重复卡。"
+          }
+        }
+      },
+      "CardsData": {
+        "type": "object",
+        "required": ["cards", "topic", "empty", "empty_notice", "total_candidates", "tone", "pet_lines"],
+        "description": "卡片列表。**空数据走 200 + `empty: true` + 中文 `empty_notice`**（`cards` 是空数组，不是 null），与失败严格区分。",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SourceCard" },
+            "description": "带出处的卡片。**每张的 `source` 都必须有 `question_title` / `question_url` / `answer_url`。**"
+          },
+          "topic": { "type": "string", "description": "本次用的主题（原样回显）。" },
+          "empty": { "type": "boolean", "description": "没捞到内容时为 true。**空数据 ≠ 失败。**" },
+          "empty_notice": { "type": ["string", "null"], "description": "中文真实提示，前端直接显示。" },
+          "total_candidates": { "type": "integer", "description": "这个主题下上游一共给了多少个候选问题。" },
+          "tone": { "$ref": "#/components/schemas/ToneId" },
+          "pet_lines": { "$ref": "#/components/schemas/PetLines" }
+        }
+      },
+      "CardsResponse": {
+        "type": "object",
+        "required": ["data", "meta"],
+        "properties": {
+          "data": { "$ref": "#/components/schemas/CardsData" },
+          "meta": { "$ref": "#/components/schemas/ResponseMeta" }
+        }
+      },
       "ErrorResponseEnvelope": {
         "deprecated": true,
         "description": "已废弃：与 `ErrorResponse` 完全重复，保留仅为兼容早期草稿。**新代码一律用 `ErrorResponse`。**",
@@ -2392,12 +2589,12 @@
     }
   },
   "x-contract": {
-    "version": "v0.4",
+    "version": "v0.5",
     "frozen_at": "2026-11-18",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "**方向已定**（2026-11-17）：桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。**13 个路径全部冻结**（9 个已实现 + 4 个登录路径待 12-05 OAuth 凭证到位）。",
-    "frozen_scope": "三个行为对照接口 + 情境题生成接口 + 张力 / 地形 / 地形生长三个认知闭环接口 + 通用信封 + 桌宠状态机 + 额度透传 + 语气目录 + 登录与会话（OAuth）四个路径",
+    "status": "**方向已定**（2026-11-17）：桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。**14 个路径全部冻结，全部已实现**（其中 4 个登录路径的 OAuth 真联调待 12-05 凭证到位，开发期走 developer_account 模式）。",
+    "frozen_scope": "三个行为对照接口 + 情境题生成接口 + 张力 / 地形 / 地形生长三个认知闭环接口 + 通用信封 + 桌宠状态机 + 额度透传 + 语气目录 + 登录与会话（OAuth）四个路径 + 知识卡片产出",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
@@ -2411,10 +2608,10 @@
       "GET /api/auth/profile",
       "GET /api/auth/login",
       "GET /api/auth/callback",
-      "POST /api/auth/logout"
+      "POST /api/auth/logout",
+      "POST /api/cards"
     ],
     "open_scope": [
-      "知识卡片产出物接口（主流程那条「资料 → 带出处的卡片」）——大概率复用 `SourceCard` + `kind=knowledge_card`，是否独立成 `/api/card` 待定，**不阻塞**。",
       "桌宠在「照镜子」环节的**台词生成**：先用模板 + 张力数据拼（稳定、零成本），有余力再接直答生成（`zhida-fast-1p5`）。**默认走模板**，不做也能演。"
     ],
     "change_rule": "接口形状变了，先改本文件，再改 `contracts/CONTRACTS.md`，同一次提交；改完跑 `scripts/check-contract.ps1`。"

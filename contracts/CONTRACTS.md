@@ -21,7 +21,7 @@
 | `zhihu_api` | 主路径 / 兜底 / 首版不做 | 低频 |
 | `red_lines` | 合规红线，**不可放宽** | 不变 |
 | `governance` | 协作机制参数（上下文四层、commit 规范） | 中频 |
-| [`api.json`](api.json) | **产品级接口契约**（OpenAPI 3.1）：三个行为对照接口 + 情境题生成接口 + 通用信封 + 桌宠状态机 + **登录与会话四个路径** | 中频，方向无关部分已冻结 |
+| [`api.json`](api.json) | **产品级接口契约**（OpenAPI 3.1）：三个行为对照接口 + 情境题生成接口 + 通用信封 + 桌宠状态机 + **登录与会话四个路径** + **知识卡片产出** | 中频，方向无关部分已冻结 |
 | [`taxonomy.json`](taxonomy.json) | **分类体系**（主题 6 类 + 论证结构 5 类 + 关键词规则）：后端算、前端显示，跨两人的唯一真源 | 低频，改关键词表要跑回归 |
 | [`tone.json`](tone.json) | **桌宠语气目录**（2 个语气 × 13 句台词）：文案由后端给，前端只渲染 | 低频，改台词要跑 `server/scripts/smoke-tone.js` |
 
@@ -45,6 +45,7 @@
 | `GET /api/auth/login` | 发起知乎授权（302 跳转） | `openapi.zhihu.com/authorize` |
 | `GET /api/auth/callback` | 授权回调：换 token、建会话（302 回前端） | `openapi.zhihu.com/access_token` |
 | `POST /api/auth/logout` | 退出登录、清会话（幂等） | 不调上游 |
+| `POST /api/cards` | **知识卡片产出**（咀嚼 → 吐带出处的卡片） | `user/question_recommendations` + `content/question_answers` |
 
 **产品结构（2026-11-17 方向已定）**：**桌宠是交互主体**，「认·清」认知闭环是桌宠里的**一个功能环节**，
 不是另一个产品。两条线共用同一批知乎原料接口 —— 认知闭环的后端代码与主流程是同一份。
@@ -86,6 +87,34 @@
 6. 创作能力四项（我的全文 / 评论 / 账号统计 / 单篇统计）**不支持 OAuth 身份切换**。
 
 **`uid` 超过 JavaScript 安全整数范围**：后端按字符串返回，前端按字符串处理，不要先转 Number 再转字符串。
+
+## 知识卡片（`POST /api/cards`）
+
+**主流程那条链的第一块砖**：拖入资料 → 咀嚼 → 吐卡片 → 点开原文 → 追问 → 知乎补观点 → 卡片列表。
+
+**一张卡片 = 一个知乎上真实存在的问题 + 它下面一条真实回答的官方摘要 + 原回答链接。**
+形状沿用已有的 `SourceCard`（`kind: knowledge_card`），**不新造一套**——卡片与情境题共用同一个对象，
+前端一套渲染逻辑。
+
+**出处三件套是硬约束**（`SourceRef` 契约层已经把它写成必填）：
+
+| 字段 | 来自哪个上游 | 说明 |
+| --- | --- | --- |
+| `question_title` | `user/question_recommendations` | 知乎真实问题标题 |
+| `question_url` | `user/question_recommendations` | 知乎问题完整 URL |
+| `answer_url` | `content/question_answers` | **原回答链接**——回跳出处的关键 |
+| `answer_summary` | `content/question_answers` | 官方服务摘要（**不是 AI 生成**，前端别标成「AI 总结」） |
+
+**拿不到原回答链接就不生成这张卡**（官方提交前检查第 6、7 条查的就是没有出处的卡片）。
+主题来自请求参数（用户拖进来那份资料是关于什么的），**前端不内置任何素材**，每次跑出来都是实时知乎数据。
+
+**为什么只能走问题发现链路**（2026-11-18 实测）：原回答 URL **只有** `content/question_answers` 能给。
+收藏接口给不了——实测该账号 9 条收藏里 **8 条是专栏文章**（`zhuanlan.zhihu.com/p/...`），
+剩下 1 条的 URL 是 `zhihu.com/answer/xxx`，**推不出问题 URL，也没有原回答 URL**。
+
+**额度**：走「问题发现」额度组（100 次/天，与情境题共用）。
+一次 `question_recommendations` 出最多 20 个问题（1 次调用），每个问题再花 1 次 `question_answers`
+→ **N 张卡 ≈ 1 + N 次**。后端**按主题缓存 5 分钟**，同一主题重复演不再打上游。
 
 ## 分类体系（`taxonomy.json`）
 
