@@ -19,6 +19,7 @@
      10. post-checkout hook 是否带开工清单
      11. API 契约 api.json 是否存在、可解析、核心接口齐全、出处与 user_hint 必填
      12. 分类体系 taxonomy.json 是否存在、可解析、类目字段齐全、unknown 兜底在位
+     13. 语气契约 tone.json 是否存在、可解析、**默认语气是不是 gentle**、两个语气台词是否齐全
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File scripts/check-contract.ps1
@@ -274,7 +275,8 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
             '/api/situation/question',
             '/api/terrain',
             '/api/terrain/answer',
-            '/api/quota'
+            '/api/quota',
+            '/api/tone'
         )
         $missingPaths = @()
         foreach ($rp in $requiredPaths) {
@@ -287,6 +289,8 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         # 认知闭环底线：断层必须带 signal_count 与 insufficient（信号不足时不能硬撑断层）
         $tensionRequired = @($apiDoc.components.schemas.TensionData.required)
         $tensionFlag = ($tensionRequired -contains 'signal_count') -and ($tensionRequired -contains 'insufficient')
+        # 语气默认值也是拍板过的（用户 2026-11-18），契约层必须写死 gentle
+        $toneDefault = $apiDoc.components.schemas.ToneId.default
 
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
@@ -294,9 +298,10 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         if (-not $hintRequired) { $why += '错误信封未把 user_hint 设为必填' }
         if (-not $emptyFlag) { $why += '信号结构未把 empty 设为必填（空数据与失败无法区分）' }
         if (-not $tensionFlag) { $why += 'TensionData 未把 signal_count / insufficient 设为必填（断层会失去诚实底线）' }
+        if ($toneDefault -ne 'gentle') { $why += "ToneId.default 不是 gentle（实际 '$toneDefault'）——用户拍板过默认是温和陪伴" }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }
@@ -331,6 +336,48 @@ if (-not (Test-Path -LiteralPath $taxPath)) {
         }
     } catch {
         Add-Result 'FAIL' '分类体系 taxonomy.json' ('解析失败：' + $_.Exception.Message)
+    }
+}
+
+# ---------------------------------------------------------------- 13. 语气契约完整性
+# 语气目录是跨两个人的接口：后端给文案，前端渲染。
+# **默认值是用户拍板过的**——有人手滑把默认改成活泼的，自检必须拦下来。
+$tonePath = Join-Path $Root 'contracts\tone.json'
+if (-not (Test-Path -LiteralPath $tonePath)) {
+    Add-Result 'FAIL' '语气契约 tone.json' '文件缺失'
+} else {
+    try {
+        $toneDoc = ([System.IO.File]::ReadAllText($tonePath)) | ConvertFrom-Json
+        $toneOptions = @($toneDoc.options)
+        $toneKeys = @($toneDoc.line_keys)
+        $why = @()
+        if ($toneDoc.default -ne 'gentle') {
+            $why += "默认语气不是 gentle（实际 '$($toneDoc.default)'）——用户 2026-11-18 拍板：默认就是温和陪伴，别改成活泼的"
+        }
+        if ($toneOptions.Count -lt 2) { $why += "语气不足 2 个（实际 $($toneOptions.Count)）" }
+        if ($toneKeys.Count -lt 10) { $why += "台词 key 不足 10 个（实际 $($toneKeys.Count)）" }
+        # 每个语气都必须给全部台词：前端按 key 取，缺 key 会静默变空
+        foreach ($opt in $toneOptions) {
+            $lines = $toneDoc.lines.($opt.id)
+            if (-not $lines) { $why += "语气 $($opt.id) 没有台词"; continue }
+            $missing = @($toneKeys | Where-Object { -not $lines.PSObject.Properties[$_] })
+            if ($missing.Count -gt 0) { $why += "语气 $($opt.id) 缺 $($missing -join '、')" }
+        }
+        # 台词里不许出现数字：数字归数据陈述（断层 label / confidence_note），两个真相源必漂
+        foreach ($opt in $toneOptions) {
+            $lines = $toneDoc.lines.($opt.id)
+            if (-not $lines) { continue }
+            foreach ($p in $lines.PSObject.Properties) {
+                if ([string]$p.Value -match '\d') { $why += "语气 $($opt.id) 的台词 '$($p.Name)' 带了数字" }
+            }
+        }
+        if ($why.Count -eq 0) {
+            Add-Result 'PASS' '语气契约 tone.json' "$($toneOptions.Count) 个语气 / $($toneKeys.Count) 句台词；默认 gentle"
+        } else {
+            Add-Result 'FAIL' '语气契约 tone.json' ($why -join ' | ')
+        }
+    } catch {
+        Add-Result 'FAIL' '语气契约 tone.json' ('解析失败：' + $_.Exception.Message)
     }
 }
 

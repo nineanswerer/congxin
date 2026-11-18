@@ -4,7 +4,7 @@
  * 技术底座（D22）：前端 + Node 单进程，**零数据库、零中间件**，
  * 会话放进程内 Map。部署走知乎 AI Works 源码发布。
  *
- * 当前实现的接口（对应 contracts/api.json v0.2 的 8 个路径，**全部已实现**）：
+ * 当前实现的接口（对应 contracts/api.json v0.3 的 9 个路径，**全部已实现**）：
  *   GET  /api/quota
  *   GET  /api/behavior/favorites
  *   GET  /api/behavior/followees
@@ -13,6 +13,7 @@
  *   POST /api/situation/question
  *   GET  /api/terrain
  *   POST /api/terrain/answer
+ *   GET  /api/tone
  */
 
 import express from 'express';
@@ -22,7 +23,9 @@ import { cacheStats } from './lib/cache.js';
 import { quotaRouter } from './routes/quota.js';
 import { behaviorRouter } from './routes/behavior.js';
 import { cognitionRouter } from './routes/cognition.js';
+import { toneRouter } from './routes/tone.js';
 import { loadTaxonomy } from './taxonomy.js';
+import { loadTone } from './tone.js';
 import { sessionStats } from './session.js';
 
 const app = express();
@@ -53,6 +56,20 @@ app.get('/api/health', (req, res) => {
         return null;
       }
     })(),
+    tone_version: (() => {
+      try {
+        return loadTone().version;
+      } catch {
+        return null;
+      }
+    })(),
+    tone_default: (() => {
+      try {
+        return loadTone().default;
+      } catch {
+        return null;
+      }
+    })(),
     upstream_mode: config.oauthToken ? 'oauth' : 'access_secret',
     time: new Date().toISOString(),
   });
@@ -61,6 +78,7 @@ app.get('/api/health', (req, res) => {
 app.use(quotaRouter);
 app.use(behaviorRouter);
 app.use(cognitionRouter);
+app.use(toneRouter);
 
 app.use((req, res) => {
   res.status(404).json({

@@ -27,6 +27,7 @@
 import { buildTension } from './tension.js';
 import { findQuestion, listAnswers, rememberAnswer, getSelfReport } from '../session.js';
 import { ApiError } from '../lib/errors.js';
+import { petLines, resolveTone } from './tone.js';
 
 const DIMENSION_LABELS = {
   Fi: '内倾情感', Fe: '外倾情感',
@@ -184,10 +185,11 @@ function buildBridges(selfLayer, situLayer) {
  * 组装完整地形。
  *
  * @param {object} selfReport
- * @param {{sessionId?:string, includeGeometry?:boolean}} options
+ * @param {{sessionId?:string, includeGeometry?:boolean, tone?:string}} options
  */
-export async function buildTerrain(selfReport, { sessionId = 'dev', includeGeometry = true } = {}) {
-  const tension = await buildTension(selfReport ?? {}, { limit: 20 });
+export async function buildTerrain(selfReport, { sessionId = 'dev', includeGeometry = true, tone } = {}) {
+  const toneId = resolveTone(tone).id;
+  const tension = await buildTension(selfReport ?? {}, { limit: 20, tone: toneId });
 
   const selfLayer = buildSelfLayer(selfReport);
   const behavioralLayer = buildBehavioralLayer(tension);
@@ -225,6 +227,11 @@ export async function buildTerrain(selfReport, { sessionId = 'dev', includeGeome
     empty_notice: missing.length
       ? `这层还是空的：${missing.join('、')}。缺的部分不会用假数据补上。`
       : null,
+    tone: toneId,
+    pet_lines: petLines(toneId, {
+      signalCount: tension.signal_count,
+      hasFracture: fractures.length > 0,
+    }),
     _tension: {
       has_tension: tension.has_tension,
       signal_count: tension.signal_count,
@@ -237,9 +244,10 @@ export async function buildTerrain(selfReport, { sessionId = 'dev', includeGeome
 /**
  * 提交作答 → 地形长出一块。
  *
- * @param {{sessionId:string, questionId:string, answerKey?:string, freeText?:string}} input
+ * @param {{sessionId:string, questionId:string, answerKey?:string, freeText?:string, tone?:string}} input
  */
-export async function applyTerrainAnswer({ sessionId = 'dev', questionId, answerKey = null, freeText = null }) {
+export async function applyTerrainAnswer({ sessionId = 'dev', questionId, answerKey = null, freeText = null, tone } = {}) {
+  const toneId = resolveTone(tone).id;
   const qid = String(questionId ?? '');
   const question = findQuestion(sessionId, qid);
   if (!question) {
@@ -293,7 +301,7 @@ export async function applyTerrainAnswer({ sessionId = 'dev', questionId, answer
 
   // 重新组装地形，然后算出这次新增的块与桥
   const selfReport = getSelfReport(sessionId);
-  const terrain = await buildTerrain(selfReport, { sessionId });
+  const terrain = await buildTerrain(selfReport, { sessionId, tone: toneId });
 
   const newBridges = terrain.bridges.filter((b) => b.links.includes(block.id));
 
@@ -325,5 +333,10 @@ export async function applyTerrainAnswer({ sessionId = 'dev', questionId, answer
     terrain,
     empty: false,
     empty_notice: null,
+    tone: toneId,
+    pet_lines: petLines(toneId, {
+      signalCount: terrain?._tension?.signal_count ?? 0,
+      hasFracture: (terrain?.fractures?.length ?? 0) > 0,
+    }),
   };
 }

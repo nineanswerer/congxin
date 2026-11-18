@@ -81,13 +81,30 @@
       "上游摘要会被截断：基于摘要的分类只覆盖原文一部分，提示里必须说明这一点"
     ]
   },
+  "tone": {
+    "path": "contracts/tone.json",
+    "version": "v0.1",
+    "owner": "nineanswerer",
+    "reviewer": "5zdz5",
+    "status": "初版 —— 默认语气已由用户拍板（温和陪伴）；台词逐句待用户在 P1 脚本上审",
+    "default": "gentle",
+    "options": ["gentle", "lively"],
+    "rules": [
+      "语气是可选项，默认 gentle（用户 2026-11-18 拍板，别把默认改成活泼的）",
+      "文案写在契约层，后端与前端读同一份；前端不许自己抄一份台词",
+      "语气只影响桌宠自己说的话：断层 label / 证据 / 置信度说明是数据陈述句，不随语气变",
+      "台词里不许写数字结论——数字由后端按真实数据生成",
+      "不认识的语气值回落到 default，不报错",
+      "改台词后跑 node server/scripts/smoke-tone.js（不消耗知乎额度）"
+    ]
+  },
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
-    "version": "v0.2",
+    "version": "v0.3",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "方向已定（桌宠主体 + 认知闭环），8 个路径全部冻结",
+    "status": "方向已定（桌宠主体 + 认知闭环），9 个路径全部有代码",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
@@ -96,7 +113,8 @@
       "POST /api/situation/question",
       "GET /api/terrain",
       "POST /api/terrain/answer",
-      "GET /api/quota"
+      "GET /api/quota",
+      "GET /api/tone"
     ],
     "rules": [
       "出处必填：source 缺失即报错，不生成无出处的内容",

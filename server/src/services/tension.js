@@ -24,6 +24,7 @@
 
 import { buildFavoritesSignal, buildFolloweesSignal, buildContentsSignal } from './behavior.js';
 import { loadTaxonomy } from '../taxonomy.js';
+import { petLines, resolveTone } from './tone.js';
 
 /** 深度型自述词：出现即认为"自述"主张的是长期 / 体系 / 原理层面。 */
 const DEPTH_TRAIT_WORDS = [
@@ -140,9 +141,11 @@ async function collectSignals(limit) {
 /**
  * 主入口。
  * @param {{type?:string, dimension_scores?:object, traits?:string[]}} selfReport
+ * @param {{limit?:number, tone?:string}} options `tone` 决定桌宠台词的口语度（默认温和陪伴）
  */
-export async function buildTension(selfReport, { limit = 20 } = {}) {
+export async function buildTension(selfReport, { limit = 20, tone } = {}) {
   const taxonomy = loadTaxonomy();
+  const toneId = resolveTone(tone).id;
 
   // 分类分布里只有**类目名**（`category`），没有 id —— 所以要靠 taxonomy 把 id 翻成名字。
   const nameOf = (ids) =>
@@ -201,6 +204,8 @@ export async function buildTension(selfReport, { limit = 20 } = {}) {
       behavioral,
       fractures: [],
       bridge_hint: null,
+      tone: toneId,
+      pet_lines: petLines(toneId, { signalCount, hasFracture: false, insufficient: true }),
       empty,
       empty_notice: empty
         ? '没有读到任何知乎行为信号。授权知乎账号后再来看看。'
@@ -332,6 +337,8 @@ export async function buildTension(selfReport, { limit = 20 } = {}) {
     bridge_hint: hasTension
       ? `答下面这道题，能看出你在「${traits[0] ?? '你的说法'}」和「你实际在做的事」之间先顾哪一个。`
       : null,
+    tone: toneId,
+    pet_lines: petLines(toneId, { signalCount, hasFracture: hasTension, insufficient: false }),
     empty: false,
     empty_notice: null,
     warnings,

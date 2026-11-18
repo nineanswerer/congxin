@@ -33,6 +33,7 @@ try {
   info('信号数', tension.signal_count);
   info('信号不足', tension.insufficient ? `是 —— ${tension.insufficient_reason}` : '否');
   info('有断层', tension.has_tension);
+  info('语气', `${tension.tone}（默认应为 gentle）`);
   info('行为侧分类', (tension.behavioral?.categories || []).map((c) => `${c.category} ${c.count}`).join(' / ') || '（无）');
   for (const f of tension.fractures || []) {
     info('断层', `[${f.axis}] ${f.label}`);
@@ -44,9 +45,34 @@ try {
   }
   info('桥接提示', tension.bridge_hint ?? '（无）');
 
+  // ------------------------------------------------- 1.5 语气：说法变，事实不变
+  //
+  // 这是拍板结论（2026-11-18）：语气是**可选项**，只改桌宠自己说的话；
+  // 断层 label / 强度 / 置信度 / 信号数一个都不许动。
+  const lively = await buildTension(selfReport, { limit: 20, tone: 'lively' });
+  ok('语气切换（gentle → lively）');
+  info('台词 mirror', tension.pet_lines.mirror);
+  info('        ', lively.pet_lines.mirror);
+  info('台词 fracture', tension.pet_lines.fracture);
+  info('            ', lively.pet_lines.fracture);
+  const sameFacts =
+    tension.signal_count === lively.signal_count &&
+    tension.fractures.length === lively.fractures.length &&
+    (tension.fractures[0]?.label ?? '') === (lively.fractures[0]?.label ?? '') &&
+    (tension.fractures[0]?.intensity ?? -1) === (lively.fractures[0]?.intensity ?? -2) &&
+    (tension.fractures[0]?.confidence ?? -1) === (lively.fractures[0]?.confidence ?? -2);
+  if (sameFacts && tension.pet_lines.fracture !== lively.pet_lines.fracture) {
+    ok('语气只改说法、不改事实（label / 强度 / 置信度 / 信号数逐字相同）');
+  } else {
+    console.log('\n❌ 语气切换越界了：要么事实变了，要么台词没变');
+    process.exit(1);
+  }
+
   // ---------------------------------------------------------------- 2. terrain
-  const terrain = await buildTerrain(selfReport, { sessionId: SESSION });
+  const terrain = await buildTerrain(selfReport, { sessionId: SESSION, tone: 'lively' });
   ok('GET /api/terrain');
+  info('语气', terrain.tone);
+  info('台词 fracture', terrain.pet_lines.fracture ?? '（null）');
   for (const [k, layer] of Object.entries(terrain.layers)) {
     info(`层 ${k}`, `${layer.label} · ${layer.blocks.length} 块`);
     for (const b of layer.blocks) {
@@ -68,8 +94,11 @@ try {
     answered_sources: [],
     self_report: { type: 'INTJ' },
     difficulty: 'medium',
+    tone: 'lively',
   });
   ok('POST /api/situation/question');
+  info('语气', sit.tone);
+  info('台词 question', sit.pet_lines?.question ?? '（无）');
   info('候选池', `${sit.candidates.length} 个问题`);
   for (const c of sit.candidates.slice(0, 4)) info('  候选', `${c.question_title} ← ${c.question_url}`);
   info('出题数', sit.questions.length);
@@ -98,8 +127,11 @@ try {
       questionId: q.id,
       answerKey,
       freeText: null,
+      tone: 'lively',
     });
     ok('POST /api/terrain/answer');
+    info('语气', ans.tone);
+    info('台词 bridge', ans.pet_lines?.bridge ?? '（无）');
     info('长出的块', `${ans.block.id} ${ans.block.label}`);
     info('  摘要', ans.block.summary);
     info('  坐标', `(${ans.block.position.x}, ${ans.block.position.y}) h=${ans.block.height}`);

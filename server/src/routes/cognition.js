@@ -17,6 +17,7 @@ import { Router } from 'express';
 import { buildTension } from '../services/tension.js';
 import { buildSituationQuestions } from '../services/situation.js';
 import { buildTerrain, applyTerrainAnswer } from '../services/terrain.js';
+import { resolveTone } from '../services/tone.js';
 import { cached } from '../lib/cache.js';
 import { config } from '../config.js';
 import { ApiError } from '../lib/errors.js';
@@ -67,8 +68,13 @@ cognitionRouter.post('/api/behavior/tension', async (req, res, next) => {
     const sessionId = sessionIdOf(req);
     rememberSelfReport(sessionId, selfReport);
 
-    const key = `tension:${sessionId}:${selfReport.type ?? ''}:${(selfReport.traits ?? []).join('|')}`;
-    const result = await cached(key, config.cacheTtlMs, () => buildTension(selfReport, { limit: 20 }));
+    // ⚠️ 缓存键**必须带语气**：同一份自述在 gentle / lively 下返回的台词不同。
+    //    不带语气的话，活泼请求会命中温和语气的缓存，拿到一整套不对味的台词。
+    const toneId = resolveTone(req.body?.tone).id;
+    const key = `tension:${sessionId}:${selfReport.type ?? ''}:${(selfReport.traits ?? []).join('|')}:${toneId}`;
+    const result = await cached(key, config.cacheTtlMs, () =>
+      buildTension(selfReport, { limit: 20, tone: toneId })
+    );
 
     const warnings = [...(result.warnings ?? [])];
     res.json({
@@ -102,6 +108,8 @@ cognitionRouter.post('/api/situation/question', async (req, res, next) => {
         candidates: result.candidates ?? [],
         empty: result.empty,
         empty_notice: result.empty_notice ?? null,
+        tone: result.tone,
+        pet_lines: result.pet_lines,
       },
       meta: meta({
         source:
@@ -125,7 +133,7 @@ cognitionRouter.get('/api/terrain', async (req, res, next) => {
     const includeGeometry = req.query.include_geometry !== 'false';
     const selfReport = req.body?.self_report ?? getSelfReport(sessionId);
 
-    const result = await buildTerrain(selfReport, { sessionId, includeGeometry });
+    const result = await buildTerrain(selfReport, { sessionId, includeGeometry, tone: req.query?.tone });
 
     res.json({
       data: {
@@ -134,6 +142,8 @@ cognitionRouter.get('/api/terrain', async (req, res, next) => {
         bridges: result.bridges,
         empty: result.empty,
         empty_notice: result.empty_notice ?? null,
+        tone: result.tone,
+        pet_lines: result.pet_lines,
       },
       meta: meta({
         source: 'derived:tension+answers',
@@ -165,6 +175,7 @@ cognitionRouter.post('/api/terrain/answer', async (req, res, next) => {
       questionId: body.question_id,
       answerKey: body.answer_key ?? null,
       freeText: body.free_text ?? null,
+      tone: body.tone ?? null,
     });
 
     res.json({
@@ -176,6 +187,8 @@ cognitionRouter.post('/api/terrain/answer', async (req, res, next) => {
         terrain: result.terrain,
         empty: result.empty,
         empty_notice: result.empty_notice ?? null,
+        tone: result.tone,
+        pet_lines: result.pet_lines,
       },
       meta: meta({
         source: 'derived:answers',

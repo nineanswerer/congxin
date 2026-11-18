@@ -29,6 +29,7 @@ import {
   chatComplete,
 } from '../zhihu/endpoints.js';
 import { ApiError } from '../lib/errors.js';
+import { petLines, resolveTone } from './tone.js';
 
 const MODEL = 'zhida-fast-1p5';
 const KEY_LETTERS = 'ABCDEFGH';
@@ -130,7 +131,7 @@ function normalizeOptions(rawOptions) {
  *
  * @param {object} req
  * @param {{topic:string, layer?:string, count?:number, answered_sources?:string[],
- *          self_report?:object, difficulty?:string, seed?:string}} req
+ *          self_report?:object, difficulty?:string, seed?:string, tone?:string}} req
  */
 export async function buildSituationQuestions(req) {
   const topic = String(req.topic ?? '').trim();
@@ -146,6 +147,7 @@ export async function buildSituationQuestions(req) {
   }
 
   const count = Math.min(3, Math.max(1, Number(req.count) || 1));
+  const toneId = resolveTone(req.tone).id;
   const layer = ['self_reported', 'behavioral', 'situational'].includes(req.layer)
     ? req.layer
     : 'situational';
@@ -183,6 +185,8 @@ export async function buildSituationQuestions(req) {
         candidates.length === 0
           ? `知乎上暂时没有跟「${topic}」相关的问题。换个说法再试一次。`
           : '这个主题下能用的题都答过了。换个主题，或者直接答下一道。',
+      tone: toneId,
+      pet_lines: petLines(toneId),
       warnings,
     };
   }
@@ -272,6 +276,8 @@ export async function buildSituationQuestions(req) {
       candidates,
       empty: true,
       empty_notice: `知乎上跟「${topic}」相关的问题都还没有可用的回答。换一个说法再试一次。`,
+      tone: toneId,
+      pet_lines: petLines(toneId),
       warnings,
     };
   }
@@ -281,6 +287,8 @@ export async function buildSituationQuestions(req) {
     candidates,
     empty: false,
     empty_notice: null,
+    tone: toneId,
+    pet_lines: petLines(toneId),
     warnings,
   };
 }
