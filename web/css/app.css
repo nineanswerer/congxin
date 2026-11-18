@@ -130,6 +130,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .pet[data-state="chew"] .petfigure img { animation: chew .55s ease-in-out infinite; }
 .pet[data-state="emitting"] .petfigure img { animation: emit .5s ease-out; }
 .pet[data-state="error"] .petfigure img { filter: grayscale(.55) brightness(.8); }
+/* 把收藏拖到桌宠身上 → 它张嘴（脚本 0:15–0:30） */
+.pet.is-drop .petfigure img { transform: scale(1.07); filter: drop-shadow(0 0 20px rgba(74,158,255,.5)); }
+.pet.is-drop .bubble { border-color: rgba(74,158,255,.55); }
 @keyframes chew {
   0%, 100% { transform: scale(1) translateY(0); }
   50% { transform: scale(.955) translateY(5px); }
@@ -180,6 +183,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   font-size: 12.5px; color: var(--ink2); cursor: pointer; transition: .15s;
 }
 .mat:hover { border-color: rgba(74,158,255,.45); color: var(--ink); }
+.mat { cursor: grab; }
+.mat:active { cursor: grabbing; }
 .mat .ic { width: 16px; height: 20px; border-radius: 2px; flex: none; background: linear-gradient(180deg,#e7ecf5,#b9c3d4); position: relative; }
 .mat .ic::after { content: ""; position: absolute; right: 0; top: 0; width: 6px; height: 6px; background: linear-gradient(225deg, var(--ink3) 50%, transparent 50%); }
 .mat .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -321,6 +326,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 }
 .layer-overlay { pointer-events: none; }
 .layer svg { width: 100%; height: 100%; overflow: visible; }
+/* 桥：跨层连接，画在 z=0 的整图 overlay 上（坐标按块在屏幕上的实际位置算） */
+.bridge-overlay { position: absolute; inset: 0; pointer-events: none; }
 .layer .lname { font-size: 13px; fill: var(--ink2); letter-spacing: 2px; }
 .layer .lblock { font-size: 11px; fill: var(--ink); }
 .layer .lsub { font-size: 9.5px; fill: var(--ink3); }

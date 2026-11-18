@@ -81,8 +81,70 @@ function layerSvg(layer, key) {
 }
 
 /**
+ * 把「桥」画在地图上。
+ *
+ * ⚠️ **桥是跨层的**（自述层 ↔ 情境层），所以**不能**画在任何一层的坐标系里 ——
+ * 那样两端会对不上。必须按每个块**在屏幕上的实际位置**连：
+ * `getBoundingClientRect()` 取到的位置已经含了 `perspective` 投影和 `translateZ` 位移，
+ * 连出来的线正好搭在两个块之间。
+ *
+ * 桥画在 z=0（覆盖整张地图的 overlay），语义上就是「从上面那层连到下面那层」。
+ */
+const MAX_BRIDGES = 4;
+
+function drawBridges(terrainEl, bridges) {
+  if (!bridges?.length) return;
+  const rect = terrainEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const posOf = (id) => {
+    if (!id) return null;
+    const el = terrainEl.querySelector(`[data-block-id="${CSS.escape(id)}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (!r.width && !r.height) return null;
+    return { x: r.left - rect.left + r.width / 2, y: r.top - rect.top + r.height / 2 };
+  };
+
+  // 桥会**随作答累积**（每答一题多一座）——全画出来会变成一团乱麻。
+  // 只画最近的几座，但**如实写出总数**，不假装只有一座。
+  const total = bridges.length;
+  const shown = bridges.slice(-MAX_BRIDGES);
+  const paths = [];
+  for (const br of shown) {
+    const a = posOf(br.links?.[0]);
+    const b = posOf(br.links?.[1]);
+    if (!a || !b) continue;
+    const mx = (a.x + b.x) / 2;
+    const my = (a.y + b.y) / 2 - 30;
+    paths.push(`
+      <path d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"
+            fill="none" stroke="rgba(93,211,158,.8)" stroke-width="2" stroke-dasharray="5 4"/>
+      <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>
+      <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>`);
+  }
+  if (!paths.length) return;
+
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'bridge-overlay');
+  svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+  svg.setAttribute('width', rect.width);
+  svg.setAttribute('height', rect.height);
+  svg.innerHTML = paths.join('');
+  terrainEl.appendChild(svg);
+
+  if (total > shown.length) {
+    const hint = document.createElement('div');
+    hint.className = 'terrain-hint';
+    hint.style.bottom = '30px';
+    hint.textContent = `共 ${total} 座桥，这里画最近 ${shown.length} 座`;
+    terrainEl.appendChild(hint);
+  }
+}
+
+/**
  * 渲染地形。
- * @param {HTMLElement} wrap 外层（带 perspective）
+ * @param {HTMLElement} wrap 外层（`.terrain-wrap` 由这里创建）
  * @param {object} data `GET /api/terrain` 的 data
  * @param {(fracture:object)=>void} onFracture 点击断层标记时回调
  */
@@ -146,30 +208,14 @@ export function renderTerrain(wrap, data, onFracture) {
       if (f && onFracture) onFracture(f);
     });
   });
+
+  // 桥最后画（要在 DOM 落定之后量位置）
+  const terrainEl = wrap.querySelector('[data-terrain]');
+  if (terrainEl) drawBridges(terrainEl, data?.bridges ?? []);
 }
 
 /** 断层特写（CSS 强视差版）。 */
 export function zoomFracture(wrap, on) {
   const t = wrap.querySelector('[data-terrain]');
   if (t) t.classList.toggle('is-zoom', on);
-}
-
-/** 桥：自述块 ↔ 新长出的块，画成一条曲线。 */
-export function bridgePath(bridges, layers) {
-  const posOf = (id) => {
-    for (const layer of Object.values(layers ?? {})) {
-      const b = (layer?.blocks ?? []).find((x) => x.id === id);
-      if (b) return { x: px(b.position?.x ?? 0.5), y: py(b.position?.y ?? 0.5) - 30 };
-    }
-    return null;
-  };
-  return (bridges ?? []).map((br) => {
-    const a = posOf(br.links?.[0]);
-    const b = posOf(br.links?.[1]);
-    if (!a || !b) return '';
-    const mx = (a.x + b.x) / 2;
-    const my = (a.y + b.y) / 2 - 26;
-    return `<path d="M ${a.x} ${a.y} Q ${mx} ${my} ${b.x} ${b.y}" fill="none"
-                  stroke="rgba(93,211,158,.6)" stroke-width="1.6" stroke-dasharray="4 4"/>`;
-  }).join('');
 }

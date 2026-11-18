@@ -92,30 +92,117 @@ function deriveTopic(titles) {
 }
 
 /**
- * 情境题的主题词候选——**按可靠性排序，从上往下试**。
+ * 从收藏标题里切出「像主题词」的短语。
  *
- * 为什么要有候选：后端把主题词原样当 `question_recommendations` 的 `Query`，
- * 搜不到就诚实返回空 +「换个说法再试一次」→ 前端就得**真的换个说法再试**，
- * 而不是把一个空面板留给观众。
+ * 为什么需要：知乎问题发现用的是 `question_recommendations(Query=<主题>)`，
+ * Query 太具体就搜不到、太泛就没营养。
+ * 文章标题里混着「笔记 / 总结 / 教程 / 装机」这类**体裁词** ——
+ * 把它剥掉，剩下的才是能当 Query 的主题（「软件测试笔记」→「软件测试」）。
+ *
+ * ⚠️ 这里切出来的**不一定能用**（例如「比官方文档还细致…」）——
+ * 所以它们只是**候选**，按顺序挨个试，搜不到就换下一个。
+ */
+const TITLE_NOISE = /(笔记|总结|教程|步骤|方法|攻略|指南|分享|记录|梳理|汇总|安装|装机|配置|实践|对比|哪个好|怎么样|好不好)$/;
+
+function titlePhrases(title) {
+  const s = String(title ?? '')
+    .replace(/[（(][^)）]*[)）]/g, ' ')
+    .replace(/[【】\[\]]/g, ' ');
+  const frags = s.split(/[：:？?！!，,、。;；·|—\-–/\\\n\r]+/);
+  const out = [];
+  for (let f of frags) {
+    f = f.replace(/^\s*\d{1,4}\s*年?\s*/, '').replace(/\s+/g, ' ').trim();
+    if (f.length > 10) f = f.slice(0, 10);
+    if (f.length < 2) continue;
+    for (let i = 0; i < 4; i += 1) {
+      const next = f.replace(TITLE_NOISE, '');
+      if (next === f || next.length < 2) break;
+      f = next;
+    }
+    out.push(f);
+  }
+  return out;
+}
+
+/**
+ * 主题词候选（材料侧）——**按可靠性排序，从上往下试**。
+ *
+ * 为什么要候选：后端把主题词原样当 `question_recommendations` 的 `Query`，
+ * 搜不到就诚实返回空 +「换个说法再试一次」→ 前端必须**真的换个说法再试**。
  *
  * 候选全部来自真实数据，没有一个是写死的：
- *   1. **问卷自述里的特质词**（用户自己选的：「长期主义」「体系化」…）
- *      ——最贴近这道题要问的东西（断层问的就是「你说的那个特质」）。
- *   2. **已经用过的 `state.topic`**（收藏标题推出来的）。
- *   3. **收藏标题 n-gram**（兜底；可能不准，所以排最后）。
+ *   1. **收藏里 `content_type=answer` 的条目标题** —— 它**本身就是知乎问题标题**，
+ *      拿它当 Query 一定能召回到相关问题（2026-11-18 实测：20 个候选）。
+ *   2. **收藏标题剥掉体裁词后的短语**（「软件测试笔记」→「软件测试」）。
+ *   3. **标题 n-gram**（兜底；可能不准，所以排最后）。
+ */
+function materialTopicCandidates() {
+  const out = [];
+  const push = (t) => {
+    const s = String(t ?? '').trim();
+    if (!s || s.length < 2 || s.length > 24) return;
+    if (out.includes(s)) return;
+    out.push(s);
+  };
+  const items = state.favorites?.items ?? [];
+
+  // 1. answer 型收藏的标题 = 知乎问题标题，最可靠
+  for (const it of items) {
+    if ((it.content_type ?? '') === 'answer') push(it.title);
+  }
+  // 2. 标题里的主题短语
+  for (const it of items) {
+    for (const frag of titlePhrases(it.title)) push(frag);
+  }
+  // 3. n-gram 兜底
+  push(deriveTopic(items.map((i) => i.title)));
+  return out;
+}
+
+/**
+ * 主题词候选（情境题侧）—— 问卷自述的特质词排在最前。
+ *
+ * 断层问的就是「你说的那个特质」，所以出题的主题词应该就是那个特质
+ * （「长期主义」「体系化」…，实测能出带出处的真题）。
  */
 function topicCandidates() {
   const out = [];
   const push = (t) => {
     const s = String(t ?? '').trim();
-    if (!s || s.length < 2 || s.length > 12) return;
+    if (!s || s.length < 2 || s.length > 24) return;
     if (out.includes(s)) return;
     out.push(s);
   };
   for (const t of scoreQuiz(state.quizPicked).traits ?? []) push(t);
-  push(state.topic);
-  push(deriveTopic((state.favorites?.items ?? []).map((i) => i.title)));
+  for (const t of materialTopicCandidates()) push(t);
   return out;
+}
+
+/**
+ * 取**真卡片**：知乎问题 + 真实回答 + 原回答链接（契约 `SourceCard`）。
+ *
+ * 主题词按可靠性挨个试 —— **单个主题词失败不算整段失败**，换个说法再来。
+ * `seen_sources` 用来避开已经吐过的卡片。
+ *
+ * @returns {{topic:string, cards:Array, emptyNotice:string}}
+ */
+async function fetchCards({ count = 3, seenSources = [] } = {}) {
+  let lastNotice = '';
+  let lastErr = null;
+  for (const topic of materialTopicCandidates().slice(0, 4)) {
+    try {
+      const res = await getCards({ topic, count, seenSources, tone: state.tone?.tone });
+      if (!res.empty && (res.cards ?? []).length) {
+        state.topic = topic;
+        return { topic, cards: res.cards, emptyNotice: '' };
+      }
+      lastNotice = res.empty_notice ?? lastNotice;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return { topic: '', cards: [], emptyNotice: lastNotice || '知乎上这次没捞到东西。' };
 }
 
 // ---------------------------------------------------------------- 顶栏
@@ -301,14 +388,14 @@ function renderMaterials() {
     return;
   }
   box.innerHTML = items.map((it, i) => `
-    <div class="mat" data-idx="${i}" title="${escapeHtml(it.title ?? '')}">
+    <div class="mat" draggable="true" data-idx="${i}" title="拖到桌宠身上，它就开嚼">
       <span class="ic"></span>
       <span class="t">${escapeHtml(it.title ?? '(无标题)')}</span>
       <span class="k">${escapeHtml(it.content_type ?? '')}</span>
     </div>`).join('');
 }
 
-/** 喂它：真实收藏 → 卡片。 */
+/** 喂它：真实收藏 → 咀嚼 → 吐出**知乎真卡片**（问题 + 真实回答 + 原回答链接）。 */
 async function feed() {
   const btn = $('#btn-feed');
   btn.disabled = true;
@@ -331,12 +418,20 @@ async function feed() {
     pet.setState('emitting');
     pet.say('digest', { note: '每张卡片的出处都能点回知乎原文' });
 
-    state.cards = (state.favorites.items ?? []).map((it) => ({
-      kicker: `卡片 · 来自你的收藏（${it.content_type ?? 'content'}）`,
-      title: it.title ?? '(无标题)',
-      summary: (it.summary ?? '').slice(0, 160),
-      meta: it.author?.name ? `收藏者看到的作者：${it.author.name}` : null,
-      source: { url: it.url, kicker: '知乎原文' },
+    // ⚠️ **真卡片**：不是把你的收藏摆出来，是知乎上的真实问题 + 真实回答。
+    //    出处是 `answer_url`（原回答链接）—— 契约层强制必填，缺了就不给这张卡。
+    const { cards, emptyNotice } = await fetchCards({ count: 3 });
+    if (!cards.length) {
+      pet.setState('idle');
+      $('#flow-cards').innerHTML = noticeBox(escapeHtml(emptyNotice), 'warn');
+      return;
+    }
+    state.cards = cards.map((c) => ({
+      kicker: '知乎 · 真实问题与回答',
+      title: c.source?.question_title ?? c.title ?? '（知乎上的一个真实问题）',
+      summary: c.content ?? c.source?.answer_summary ?? '',
+      meta: c.source?.answer_content_type === 'answer' ? '这条是知乎上的真实回答' : null,
+      source: { ...(c.source ?? {}), kicker: '知乎原回答' },
     }));
     renderCards();
     renderList();
@@ -349,31 +444,54 @@ async function feed() {
   }
 }
 
-/** 知乎补观点：同主题下真实存在的问题与回答。 */
+/** 知乎补观点：同主题下真实存在的**另一种说法**（两张卡，中间一条 VS 分界线）。 */
 async function loadViewpoints() {
   const btn = $('#btn-views');
   btn.disabled = true;
   const box = $('#flow-views');
   try {
-    const topic = state.topic || deriveTopic((state.favorites?.items ?? []).map((i) => i.title));
-    if (!topic) throw new ApiFail('NO_TOPIC', '没有主题词', '先把材料喂给它，我才知道去知乎翻什么。');
-    state.topic = topic;
+    // 主题词：优先用**已经吐过卡片的那个**（同一件事的两种说法），
+    // 不行再按可靠性换别的说法。`seen_sources` 让它避开已经吐过的卡片。
+    const candidates = [];
+    const push = (t) => {
+      const s = String(t ?? '').trim();
+      if (s && !candidates.includes(s)) candidates.push(s);
+    };
+    push(state.topic);
+    for (const t of materialTopicCandidates()) push(t);
 
+    const seen = state.cards.map((c) => c.source?.question_url).filter(Boolean);
+
+    // 脚本 1:45–2:15：桌宠又切电波，去知乎把「吵起来的两边」带回来。
     pet.setState('thinking');
     pet.say('viewpoints');
-    box.innerHTML = noticeBox('正在去知乎翻这一题……');
 
-    const data = await getCards({ topic, count: 2, tone: state.tone?.tone });
-    if (data.empty) {
-      box.innerHTML = noticeBox(escapeHtml(data.empty_notice ?? '知乎上这次没捞到东西。'), 'warn');
+    let res = null;
+    let lastNotice = '';
+    let lastErr = null;
+    for (const topic of candidates.slice(0, 4)) {
+      try {
+        const r = await getCards({ topic, count: 2, seenSources: seen, tone: state.tone?.tone });
+        if (!r.empty && (r.cards ?? []).length) {
+          res = r;
+          break;
+        }
+        lastNotice = r.empty_notice ?? lastNotice;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    if (!res) {
+      if (lastErr) throw lastErr;
+      box.innerHTML = noticeBox(escapeHtml(lastNotice || '知乎上这次没捞到东西。'), 'warn');
       pet.setState('idle');
       return;
     }
-    state.viewpoints = data.cards ?? [];
+    state.viewpoints = res.cards ?? [];
     renderViews();
     renderList();
     pet.setState('cheer');
-    pet.say('viewpoints', { note: '这些是知乎上真实存在的问题和回答，链接都在卡片上' });
+    pet.say('disagree', { note: '原话，附链接' });
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '去知乎翻失败'), 'err');
     pet.setState('error');
@@ -596,6 +714,7 @@ async function answerSituation(q, key) {
       </div>`;
     pet.setState('play');
     pet.say('bridge');
+    await sleep(1500);
     await loadTerrain();
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '作答失败'), 'err');
@@ -624,6 +743,8 @@ async function loadTerrain() {
         `<div class="notice warn" style="position:absolute;left:14px;top:14px;right:14px;z-index:3">
            ${escapeHtml(data.empty_notice)}</div>`);
     }
+    // 收尾一句（脚本 4:30–4:50：全景地图 + 这一句）
+    pet.say('closing', { note: '三层都有了，断层上多了一座桥' });
   } catch (err) {
     wrap.innerHTML = noticeBox(showFail(err, '读地形失败'), 'err');
   }
@@ -685,6 +806,9 @@ async function init() {
     state.favorites = await getFavorites(9);
     renderMaterials();
     renderStrip();
+    // 脚本 0:15：材料摊开了，桌宠转头问一句「要不我先啃一口？」
+    pet.setState('greet');
+    pet.say('offer', { note: '拖一条到它身上，或者点下面的按钮' });
   } catch (err) {
     $('#materials').innerHTML = noticeBox(showFail(err, '读收藏失败'), 'err');
   }
@@ -692,6 +816,16 @@ async function init() {
   // 事件
   $('#btn-feed').addEventListener('click', feed);
   $('#btn-views').addEventListener('click', loadViewpoints);
+
+  // 脚本 1:15：看第一条 → 桌宠说一句「这是知乎上真有人写过的」
+  // 挂在**卡片**上（点标题或点出处都算「看这条」）；
+  // ⚠️ 没有出处的卡（本地拖进来的材料）**不说这句** —— 那不是知乎上写的。
+  document.addEventListener('click', (e) => {
+    const card = e.target?.closest?.('.card');
+    if (!card) return;
+    if (!card.querySelector('a.src[href]')) return;
+    pet.say('source', { note: '每张卡片的出处都能点回知乎原回答' });
+  });
 
   const dz = $('#dropzone');
   dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('is-over'); });
@@ -715,6 +849,30 @@ async function init() {
     pet.say('digest', { note: '这条是你自己的材料，没有知乎出处' });
   });
 
+  // 脚本 0:15–0:30：把收藏**拖到桌宠身上** → 它张嘴嚼。
+  const petEl = $('#pet');
+  petEl.addEventListener('dragover', (e) => {
+    // 只有拖的是收藏条目（text/plain）才接；拖本地文件走 dropzone 那条路
+    if (!e.dataTransfer?.types?.includes('text/plain')) return;
+    e.preventDefault();
+    petEl.classList.add('is-drop');
+  });
+  petEl.addEventListener('dragleave', () => petEl.classList.remove('is-drop'));
+  petEl.addEventListener('drop', (e) => {
+    petEl.classList.remove('is-drop');
+    const txt = e.dataTransfer?.getData?.('text/plain') ?? '';
+    if (!txt) return;
+    e.preventDefault();
+    e.stopPropagation();
+    feed();
+  });
+  // 收藏条目的拖拽源
+  document.addEventListener('dragstart', (e) => {
+    const mat = e.target?.closest?.('.mat');
+    if (!mat) return;
+    e.dataTransfer?.setData('text/plain', mat.textContent ?? '');
+  });
+
   // 阶段切换
   $$('#tabs button').forEach((b) => {
     b.addEventListener('click', () => {
@@ -723,7 +881,15 @@ async function init() {
       const tab = b.dataset.tab;
       $('#panel-flow').classList.toggle('hidden', tab !== 'flow');
       $('#panel-mirror').classList.toggle('hidden', tab !== 'mirror');
-      if (tab === 'mirror') pet.setState('greet');
+      if (tab === 'mirror') {
+        pet.setState('greet');
+        // 脚本 3:00：桌宠**主动**发起照镜子
+        pet.say('mirror', { note: '你收藏的这些，跟你刚才说的不太一样' });
+      } else {
+        // 脚本 2:45：卡片先收进右侧栏
+        pet.setState('idle');
+        pet.say('park', { note: '卡片先收进右边那栏' });
+      }
     });
   });
 
