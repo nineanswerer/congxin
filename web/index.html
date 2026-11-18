@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>从心 · 桌宠</title>
+<link rel="stylesheet" href="css/app.css" />
+</head>
+<body>
+<div class="grain"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">从<em>心</em></div>
+    <div class="track">AI × 陪伴与交互 · 知乎黑客松 S3</div>
+  </div>
+  <div class="topright">
+    <div class="pill" id="pill-profile"><span class="dot"></span><span id="profile-text">连接中…</span></div>
+    <div class="pill" id="pill-quota">额度 —</div>
+    <div class="tone-switch" id="tone-switch"></div>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="flow" class="is-on">主流程 · 它在陪你干活</button>
+  <button data-tab="mirror">照镜子 · 认知闭环</button>
+</nav>
+
+<main class="stage">
+
+  <!-- ============================ 桌宠 ============================ -->
+  <section class="pet" id="pet">
+    <div class="bubble" data-pet-bubble><span class="muted">（安静看着你）</span></div>
+    <div class="petfigure">
+      <img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" />
+    </div>
+    <div class="petstate"><span class="b"></span><span data-pet-state>待机</span></div>
+
+    <div class="tray">
+      <div class="trayhead">
+        <h3>材料</h3>
+        <span class="hint">来自你知乎收藏里的真实内容</span>
+      </div>
+      <div class="dropzone" id="dropzone">
+        <b>把资料拖进来</b>
+        拖进来的文本没有知乎出处，卡片出处只来自知乎真实内容
+      </div>
+      <div class="trayactions">
+        <button class="btn primary" id="btn-feed">用我的收藏喂它</button>
+        <button class="btn ghost" id="btn-views">知乎上大家怎么说</button>
+      </div>
+      <div class="materials" id="materials"></div>
+    </div>
+  </section>
+
+  <!-- ============================ 主流程 ============================ -->
+  <section class="panel" id="panel-flow">
+    <div id="flow-cards"></div>
+    <div id="flow-views"></div>
+    <div id="flow-list"></div>
+  </section>
+
+  <!-- ============================ 照镜子 ============================ -->
+  <section class="panel hidden" id="panel-mirror">
+    <div id="mirror-quiz"></div>
+    <div id="mirror-fracture"></div>
+    <div id="mirror-situation"></div>
+    <div id="mirror-terrain"></div>
+  </section>
+
+</main>
+
+<footer class="strip" id="strip"></footer>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
