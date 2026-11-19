@@ -1,0 +1,18 @@
+{
+  "name": "congxin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "「从心」——以桌宠为主体的学习搭子。知乎黑客松 S3 参赛作品（前端 + Node 单进程，零数据库）。",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server/src/index.js",
+    "dev:server": "node server/src/index.js",
+    "dev:web": "node web/serve.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

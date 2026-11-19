@@ -24,6 +24,23 @@ cd 'C:\Users\steam\Desktop\从心\web'; node serve.js
 
 打开 **<http://localhost:18788/web/>**。
 
+### 部署形态：**一个进程 = 完整作品**（D42，11-19 补上）
+
+后端进程会**同进程**挂上前端静态，所以不用起第二个服务也能玩：
+
+| 地址 | 是什么 |
+| --- | --- |
+| `http://localhost:18787/web/` | **后端自己发的页面**（部署形态，开发期也能开） |
+| `http://localhost:18787/` | 302 → `/web/` |
+| `http://localhost:18787/assets/kanshan/*.webp` | 素材（刘看山 WebP） |
+| `http://localhost:18787/api/*` | 14 个接口（**同源**，前端不用改一行） |
+
+- **只挂 `/web/` 与 `/assets/` 两个目录**，不挂仓库根 —— `docs/`、`server/` 源码、`.ctx/` **不暴露**。
+- 仓库根**自动探测**；`WEB_STATIC_ROOT` 可显式指定，`WEB_STATIC=off` 可关掉（退回「只发 API」）。
+- 挂载顺序有讲究：**接口路由之后、404 兜底之前**——反了 `/api/*` 会被静态吃掉。
+- 部署到知乎 AI Works（源码发布）时就是 `npm install && npm start`（仓库根有 `package.json`），
+  **密钥只走环境变量，不进源码**（官方提交检查第 6 条）。
+
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `WEB_PORT` | `18788` | 前端端口 |

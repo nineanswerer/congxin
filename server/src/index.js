@@ -35,6 +35,7 @@ import { loadTaxonomy } from './taxonomy.js';
 import { loadTone } from './tone.js';
 import { sessionStats } from './session.js';
 import { authContextMiddleware, authSessionStats } from './lib/auth-session.js';
+import { mountWeb } from './lib/web-static.js';
 
 const app = express();
 app.disable('x-powered-by');
@@ -95,6 +96,11 @@ app.use(toneRouter);
 app.use(authRouter);
 app.use(cardsRouter);
 
+// 前端页面与素材挂到**同一个进程**（D22 部署形态：前端 + Node 单进程）。
+// ⚠️ 顺序有讲究：必须在上面所有接口路由**之后**（不然 /api/* 会被静态吃掉）、
+//    在下面的 404 兜底**之前**（不然静态永远轮不到）。
+const web = mountWeb(app);
+
 app.use((req, res) => {
   res.status(404).json({
     error: {
@@ -128,6 +134,7 @@ try {
 
 app.listen(config.port, () => {
   console.log(`[server] 「从心」后端已启动：http://localhost:${config.port}`);
+  console.log(`[server] 前端页面：${web.mounted ? 'http://localhost:' + config.port + '/web/' : '未挂载（只发 API）'}`);
   console.log(`[server] 上游鉴权模式：${config.oauthToken ? 'OAuth（登录用户）' : 'Access Secret（开发期自读）'}`);
   console.log(`[server] 知乎登录入口：${config.oauthAppId && config.oauthAppKey && config.oauthRedirectUri ? '已就绪' : '未就绪（App ID / App Key 由赛事页面在项目创建后分配）'}`);
   console.log(`[server] 缓存 TTL：${config.cacheTtlMs}ms`);
