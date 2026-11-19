@@ -244,6 +244,11 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .src::before { content: "↗"; font-size: 13px; }
 
 .cardrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+/* 同题两答：问题标题只出现一次，放在两张卡上面 */
+.pairq {
+  font-size: 14px; color: var(--ink2); line-height: 1.55; margin-top: 10px;
+  padding: 2px 0 2px 11px; border-left: 2px solid rgba(255,107,107,.42);
+}
 .split { position: relative; }
 .vs {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);

@@ -36,7 +36,7 @@ node src/index.js
 | GET | `/api/auth/callback` | 授权回调：换 token、建会话 | `contracts/api.json` |
 | POST | `/api/auth/logout` | 退出登录、清会话（幂等） | `contracts/api.json` |
 
-**契约里的 13 个路径全部有代码**（`contracts/api.json` v0.4）。
+**契约里的 14 个路径全部有代码**（`contracts/api.json` v0.6）。
 其中 9 个已实跑真知乎；4 个登录路径由 `scripts/smoke-auth.js` 覆盖（不耗额度、不需要凭证）。
 
 ## 目录

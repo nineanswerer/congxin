@@ -329,31 +329,61 @@ function renderCards() {
     <div class="cardlist" style="margin-top:12px">${state.cards.map(cardHtml).join('')}</div>`;
 }
 
+/**
+ * 「知乎上吵起来的两边」——**同题两答**。
+ *
+ * 后端 `POST /api/cards` 传了 `same_question: true`，所以拿到的两张卡是
+ * **同一个知乎问题下的两条不同回答**（`source.question_url` 相同、`source.answer_url` 不同）。
+ * → 问题标题**只出现一次**，两张卡并排，中间一条 VS。
+ *
+ * ⚠️ **没得比就不装**：万一只取到一条、或两张不是同一个问题，
+ *    **不画 VS**，并把实话写在标题栏上。
+ */
 function renderViews() {
   const box = $('#flow-views');
   if (!state.viewpoints.length) {
     box.innerHTML = '';
     return;
   }
-  const vs = state.viewpoints.map((c) => cardHtml({
+  const items = state.viewpoints.map((c) => ({
     kicker: '知乎 · 真实问题与回答',
     title: c.source?.question_title ?? c.title ?? '（知乎上的一个真实问题）',
     summary: c.content ?? c.source?.answer_summary ?? '',
     meta: c.source?.answer_content_type === 'answer' ? '这条是知乎上的真实回答' : null,
     source: { ...(c.source ?? {}), kicker: '知乎原回答' },
-  })).join('');
+  }));
 
-  box.innerHTML = `
+  const sameQuestion = items.length > 1
+    && items.every((x) => x.source?.question_url && x.source.question_url === items[0].source?.question_url);
+
+  if (sameQuestion) {
+    // 问题标题只说一次；两张卡标成「回答 ① / 回答 ②」
+    const pair = items.map((x, i) => cardHtml({ ...x, title: `回答 ${['①', '②', '③'][i] ?? i + 1}` })).join('');
+    box.innerHTML = `
     <div class="sec-title" style="margin-top:6px">
-      <b>知乎上的两种说法</b>
-      <span class="tag">真实问题 · 真实回答</span>
+      <b>同一个问题的两条回答</b>
+      <span class="tag">同题 · 两条真实回答</span>
       <span class="rule"></span>
       <span>不是它编的，是知乎上有的</span>
     </div>
-    <div class="split" style="margin-top:12px">
-      <div class="cardrow">${vs}</div>
+    <div class="pairq">${escapeHtml(items[0].title)}</div>
+    <div class="split" style="margin-top:10px">
+      <div class="cardrow">${pair}</div>
       <div class="vs">VS</div>
     </div>`;
+    return;
+  }
+
+  // 兜底：不是同题 → **不画 VS**（没得比就不假装在比），并把实话写出来
+  const vs = items.map((x) => cardHtml(x)).join('');
+  box.innerHTML = `
+    <div class="sec-title" style="margin-top:6px">
+      <b>知乎上的真实回答</b>
+      <span class="tag">真实问题 · 真实回答</span>
+      <span class="rule"></span>
+      <span>${items.length > 1 ? '不是同一个问题，算不上「两边」' : '这次只取到一条'}</span>
+    </div>
+    <div class="cardlist" style="margin-top:12px">${vs}</div>`;
 }
 
 function renderList() {
@@ -473,7 +503,9 @@ async function loadViewpoints() {
     let lastErr = null;
     for (const topic of candidates.slice(0, 4)) {
       try {
-        const r = await getCards({ topic, count: 2, seenSources: seen, tone: state.tone?.tone });
+        // `sameQuestion: true` → **同一个知乎问题下的两条不同回答**（真正的「两边」）。
+        // 额度：只碰 1 个问题（≈2 次），比默认模式（1+N 次）还省。
+        const r = await getCards({ topic, count: 2, seenSources: seen, tone: state.tone?.tone, sameQuestion: true });
         if (!r.empty && (r.cards ?? []).length) {
           res = r;
           break;

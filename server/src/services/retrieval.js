@@ -104,6 +104,40 @@ export async function firstAnswerWithUrl(questionUrl) {
 }
 
 /**
+ * 取某个问题下**前 N 条带原回答链接**的回答（按上游返回顺序）。
+ *
+ * ## 为什么需要它（2026-11-19）
+ *
+ * 「知乎上吵起来的两边」如果只是「两个不同问题的各一条回答」，
+ * 那**数据层根本没验证过两边是对立的**——同题两答才是真正的「两边」：
+ * **同一个问题、不同的人写的不同回答**，摆在一起才有可比性。
+ *
+ * ## 额度：不多花
+ *
+ * 上游 `content/question_answers` **一次调用就返回最多 3 条回答**（`Limit=3`），
+ * 而 `firstAnswerWithUrl` 本来就调了 3 条、只用了第 1 条。
+ * → **「同题两答」和「两个不同问题的卡」花一样的额度**，
+ *   同题两答甚至**少花 1 次**（只要 1 个问题，不用 2 个）。
+ *
+ * ⚠️ 上游回答对象**只有 4 个字段**（`ContentType` / `ContentToken` / `Url` / `Summary`，
+ *   2026-11-19 实测）——**没有作者名，也没有立场**。
+ *   → 所以「同题两答」是**结构上可证的**（同题、不同回答）；
+ *     「作者是谁」「观点是否相反」**数据层给不出**，不许在文案里假装有。
+ *
+ * @param {string} questionUrl
+ * @param {number} limit 要几条（上游一次最多给 3 条，所以至少请求 3）
+ * @returns {Promise<Array<object>>} 带 `Url` 的回答对象数组；失败返回空数组
+ */
+export async function answersWithUrls(questionUrl, limit = 3) {
+  try {
+    const answers = await getQuestionAnswers(questionUrl, Math.max(3, limit));
+    return (answers.items ?? []).filter((a) => a?.Url).slice(0, Math.max(1, limit));
+  } catch {
+    return [];
+  }
+}
+
+/**
  * 把「问题 + 回答」拼成契约里的 `SourceRef`（出处）。
  *
  * ⚠️ `question_title` / `question_url` 来自问题发现，`answer_url` / `answer_summary`

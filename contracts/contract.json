@@ -6,8 +6,14 @@
   "title_note": "作品名与队名均为「从心」。GitHub 仓库名不能是纯中文——非 ASCII 字符会被规范化成连字符（实测 从心x → -x，从心 → -），因此仓库用拼音名 congxin。",
   "repo": "https://github.com/nineanswerer/congxin",
   "team": [
-    { "login": "nineanswerer", "role": "主理 / 后端与知乎对接" },
-    { "login": "5zdz5", "role": "待与队友对齐" }
+    {
+      "login": "nineanswerer",
+      "role": "主理 / 后端与知乎对接"
+    },
+    {
+      "login": "5zdz5",
+      "role": "待与队友对齐"
+    }
   ],
   "track": {
     "id": "02",
@@ -47,8 +53,23 @@
     "_measured_2026_11_18": {
       "checked_at": "2026-11-18 21:00",
       "note": "当日已用/剩余快照。**每日额度按北京时间 00:00 重置，不结转。**",
-      "used": { "question_discovery": 19, "zhida_openai": 3, "creator": 17, "user_data": 89 },
-      "remaining": { "global_search": 5000, "zhihu_search": 5000, "hot_list": 100, "question_discovery": 81, "zhida_openai": 97, "tools": 10, "knowledge": 500, "user_data": 9911, "creator": 483 },
+      "used": {
+        "question_discovery": 19,
+        "zhida_openai": 3,
+        "creator": 17,
+        "user_data": 89
+      },
+      "remaining": {
+        "global_search": 5000,
+        "zhihu_search": 5000,
+        "hot_list": 100,
+        "question_discovery": 81,
+        "zhida_openai": 97,
+        "tools": 10,
+        "knowledge": 500,
+        "user_data": 9911,
+        "creator": 483
+      },
       "bottleneck": "**问题发现只有 100 次/天**（问题推荐与回答摘要共用），是主路径的硬瓶颈；Demo 演练、3—5 人试用、决赛现场全靠缓存与去重扛。",
       "overage_price": "问题回答 20 元/千次；知乎搜索 20 元/千次；用户创作内容摘要 / 关注列表 / 收藏夹内容各 10 元/千次"
     }
@@ -65,11 +86,18 @@
     "rationale": "官方 FAQ：前端+Node后端且不含数据库写入的全栈项目可用 AI Works 部署；平台暂不支持独立数据库托管"
   },
   "zhihu_api": {
-    "main_path": ["question_recommendations", "question_answers"],
+    "main_path": [
+      "question_recommendations",
+      "question_answers"
+    ],
     "main_path_reason": "question_answers 返回原始回答 Url，是卡片可回溯出处的唯一来源",
-    "fallback": ["zhida_openai"],
+    "fallback": [
+      "zhida_openai"
+    ],
     "fallback_reason": "直答用于快速解释与兜底；官方明确观点比较不要用直答替代搜索",
-    "not_in_v1": ["hot_list"],
+    "not_in_v1": [
+      "hot_list"
+    ],
     "not_in_v1_reason": "与“一个具体任务里的学习搭子”主线关联弱，预算要留给闭环"
   },
   "taxonomy": {
@@ -78,8 +106,21 @@
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
     "status": "初版（B14）——已用账号真实数据跑过并人工标注了基线，待与队友确认后冻结",
-    "topic_categories": ["tooling", "engineering", "ecosystem", "knowledge", "cognition", "career"],
-    "argument_structures": ["problem_solution", "definition", "contrast", "steps", "example"],
+    "topic_categories": [
+      "tooling",
+      "engineering",
+      "ecosystem",
+      "knowledge",
+      "cognition",
+      "career"
+    ],
+    "argument_structures": [
+      "problem_solution",
+      "definition",
+      "contrast",
+      "steps",
+      "example"
+    ],
     "rules": [
       "主题分类用于收藏与关注；论证结构分类用于创作——两套不要混",
       "命中 0 条落 unknown，是合法结果，不许硬塞",
@@ -96,7 +137,10 @@
     "reviewer": "5zdz5",
     "status": "初版 —— 默认语气已由用户拍板（温和陪伴）；台词逐句待用户在 P1 脚本上审",
     "default": "gentle",
-    "options": ["gentle", "lively"],
+    "options": [
+      "gentle",
+      "lively"
+    ],
     "rules": [
       "语气是可选项，默认 gentle（用户 2026-11-18 拍板，别把默认改成活泼的）",
       "文案写在契约层，后端与前端读同一份；前端不许自己抄一份台词",
@@ -109,7 +153,7 @@
   "api_contract": {
     "path": "contracts/api.json",
     "format": "OpenAPI 3.1",
-    "version": "v0.5",
+    "version": "v0.6",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
     "status": "方向已定（桌宠主体 + 认知闭环）；**14 个路径冻结，全部已实现**（4 个登录路径的 OAuth 真联调待 12-05 凭证到位，开发期走 developer_account 模式）",
@@ -142,7 +186,8 @@
       "OAuth Token 过期或鉴权失败时停止读取，不静默切回 Access Secret 所属账号",
       "App ID / App Key 由赛事页面在项目创建后分配，不走通用邮件申请流程；拿不到就不编造领取入口",
       "每张卡片必须带出处三件套：问题标题 + 问题 URL + 原回答 URL；缺任何一个就不生成这张卡",
-      "卡片与情境题共用 SourceCard，用 kind 区分；前端一套渲染逻辑，不许新造一套"
+      "卡片与情境题共用 SourceCard，用 kind 区分；前端一套渲染逻辑，不许新造一套",
+      "「吵起来的两边」必须是**同一个知乎问题下的不同回答**（`POST /api/cards` 传 `same_question: true`）：两张卡的 `source.question_url` 相同、`source.answer_url` 不同。不同问题的两张卡只是同主题，**不算两边**。"
     ],
     "auth": {
       "credential_source": "赛事页面在项目创建后分配 App ID / App Key；黑客松不走通用邮件申请流程",
@@ -167,9 +212,22 @@
     "no_published_or_awarded_project_reuse": true
   },
   "governance": {
-    "context_layers": ["L0-contract", "L1-identity", "L2-decision", "L3-handoff"],
+    "context_layers": [
+      "L0-contract",
+      "L1-identity",
+      "L2-decision",
+      "L3-handoff"
+    ],
     "agents_md_max_lines": 120,
-    "commit_message_required_lines": ["Context:", "Tried:", "Verify:"],
-    "handoff_required_before": ["切换 AI 平台", "结束一次会话", "开始新功能前"]
+    "commit_message_required_lines": [
+      "Context:",
+      "Tried:",
+      "Verify:"
+    ],
+    "handoff_required_before": [
+      "切换 AI 平台",
+      "结束一次会话",
+      "开始新功能前"
+    ]
   }
 }

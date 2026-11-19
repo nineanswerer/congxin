@@ -102,13 +102,23 @@ export const getSituation = ({ topic, count = 2, layer, difficulty, selfReport, 
  *
  * ⚠️ 额度：吃「问题发现」组，**1 张卡 ≈ 2 次**（1 次问题发现 + 1 次回答摘要），
  * N 张 ≈ 1 + N 次。同主题有 5 分钟缓存 + 按问题 URL 单独缓存，反复演同一主题基本不烧额度。
+ *
+ * @param {object} opts
+ * @param {string} opts.topic 主题词
+ * @param {number} [opts.count] 要几张（1—5）
+ * @param {string[]} [opts.seenSources] 已经吐过的出处（问题 URL），后端会跳过
+ * @param {string} [opts.tone] 语气 id
+ * @param {boolean} [opts.sameQuestion] **同题两答**：`true` 时返回**同一个知乎问题下的多条回答**
+ *        （两张卡 `source.question_url` 相同、`source.answer_url` 不同）——「吵起来的两边」要的就是这个。
+ *        不传 = 默认模式：N 个**不同问题**的卡片。
  */
-export const getCards = ({ topic, count = 2, seenSources, tone }) =>
+export const getCards = ({ topic, count = 2, seenSources, tone, sameQuestion }) =>
   apiPost('/api/cards', {
     topic,
     count,
     tone: tone ?? null,
     seen_sources: seenSources ?? [],
+    same_question: sameQuestion ? true : false,
   }).then((r) => r.data);
 
 /** 三层认知地形（后端只给参数，前端负责渲染）。 */

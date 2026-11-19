@@ -1,5 +1,5 @@
 /**
- * 知识卡片冒烟：**出��条真卡片**，链接能点回知乎。
+ * 知识卡片冒烟：**出一条真卡片**，链接能点回知乎。
  *
  * 用法：
  *   $env:ZHIHU_ACCESS_SECRET = "<你的 Access Secret>"
@@ -12,6 +12,11 @@
  * 第二次调用走进程内缓存（同一主题 5 分钟），**不额外消耗额度**——
  * 顺便验证了「缓存生效」这条。
  *
+ * 第 3.5 步的「同题两答」**通常也不额外花额度**：它复用同一个主题池，
+ * 且池子里**按问题 URL 缓存的是回答列表**——主流程刚取过那个问题的回答，
+ * 两边模式直接复用，**0 次额外上游调用**（万一那个问题只有 1 条回答，
+ * 换下一个问题才多花 1 次）。
+ *
  * 想换主题：`$env:CARDS_TOPIC = "某个主题"`。
  *
  * ## 验什么
@@ -20,7 +25,8 @@
  * 2. 真卡片的**出处三件套**齐全：问题标题 + 问题 URL + **原回答 URL**
  * 3. `kind=knowledge_card`，形状沿用已有的 `SourceCard`（没新造一套）
  * 4. 同一个主题再调一次 → **同一个 id** 且命中缓存（不重复打上游）
- * 5. 契约层对得上：`/api/cards` 在、`SourceRef.answer_url` 必填
+ * 5. **同题两答**（`same_question: true`）→ 两张卡**同一个问题**、**不同原回答**
+ * 6. 契约层对得上：`/api/cards` 在、`SourceRef.answer_url` 必填、`same_question` 在
  */
 
 import fs from 'node:fs';
@@ -116,6 +122,41 @@ if (result.empty) {
   else fail('再调一次没命中缓存——额度会被重复消耗');
 }
 
+// ---------------------------------------------------------------- 3.5 同题两答（吵起来的两边）
+// 契约：POST /api/cards 传 same_question: true → 同一个知乎问题下的两条不同回答
+{
+  const pair = await buildCards({ topic, count: 2, same_question: true });
+  if (pair.empty) {
+    fail(`同题两答没取到（empty_notice: ${pair.empty_notice}）`);
+  } else {
+    const [a, b] = pair.cards;
+    ok(`同题两答取到 ${pair.cards.length} 张卡`);
+    console.log('=== 同题两答 JSON ===');
+    console.log(JSON.stringify(pair.cards, null, 2));
+    console.log('');
+
+    if (a.source?.question_url === b.source?.question_url) {
+      ok(`两张卡是**同一个知乎问题**：${a.source.question_title}`);
+    } else {
+      fail(`两张卡不是同一个问题：${a.source?.question_url} vs ${b.source?.question_url}`);
+    }
+
+    if (a.source?.answer_url && b.source?.answer_url && a.source.answer_url !== b.source.answer_url) {
+      ok('两条是**不同的原回答**（各自的 answer_url 不同）');
+    } else {
+      fail(`两条卡指向同一条回答：${a.source?.answer_url}`);
+    }
+
+    if (a.id !== b.id) ok('两张卡 id 不同（不会互相覆盖）');
+    else fail('两张卡 id 相同');
+
+    // 两张卡都还得有出处三件套
+    const bad = pair.cards.filter((c) => !c.source?.question_title || !c.source?.question_url || !c.source?.answer_url);
+    if (bad.length === 0) ok('两张卡的出处三件套都齐全');
+    else fail(`有 ${bad.length} 张卡出处不全`);
+  }
+}
+
 // ---------------------------------------------------------------- 4. 链接能不能点回去（软校验）
 if (card?.source?.answer_url) {
   try {
@@ -148,6 +189,10 @@ if (card?.source?.answer_url) {
   const kinds = apiDoc.components?.schemas?.SourceCard?.properties?.kind?.enum ?? [];
   if (kinds.includes('knowledge_card')) ok('SourceCard.kind 枚举含 knowledge_card');
   else fail('SourceCard.kind 枚举缺 knowledge_card');
+
+  const sameQ = apiDoc.components?.schemas?.CardsRequest?.properties?.same_question;
+  if (sameQ && sameQ.type === 'boolean') ok('CardsRequest 有 same_question（可选布尔）');
+  else fail('CardsRequest 没有 same_question');
 }
 
 console.log('');
