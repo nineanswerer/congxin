@@ -126,6 +126,7 @@ cd 'C:\Users\steam\Desktop\从心\web'; node serve.js
 | 9 | 完 | — |
 
 截图：`web/docs-shot-1.png`（主流程首屏，1600×900）、`web/docs-shot-terrain.png`（2.5D 地形 + 断层标记 + **3 座跨层桥**，1280×975）。
+新增：`web/docs-shot-pair.png`（**同题两答**面板实拍，1410×1162：问题标题只出现一次 + 「回答 ①/②」+ 各自的知乎原回答链接）。
 
 **这一轮实跑揪出并修掉的 4 个真 bug**（都不是假想，是跑出来才发现的）：
 
