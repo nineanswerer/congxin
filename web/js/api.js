@@ -75,6 +75,9 @@ export const getFavorites = (limit = 9) => apiGet('/api/behavior/favorites', { l
 /** 关注信号。 */
 export const getFollowees = (limit = 9) => apiGet('/api/behavior/followees', { limit }).then((r) => r.data);
 
+/** 创作信号：用户自己写过什么（脚本 4:05 那句「你自己也写过一句」的原料）。 */
+export const getContents = (limit = 5) => apiGet('/api/behavior/contents', { limit }).then((r) => r.data);
+
 /** 自述 vs 行为 → 断层。 */
 export const getTension = (selfReport, tone) =>
   apiPost('/api/behavior/tension', { self_report: selfReport, tone }).then((r) => r.data);

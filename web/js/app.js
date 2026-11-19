@@ -16,7 +16,7 @@
  */
 
 import {
-  apiGet, getTone, getFavorites, getTension, getSituation, getCards, getTerrain, answerTerrain,
+  apiGet, getTone, getFavorites, getContents, getTension, getSituation, getCards, getTerrain, answerTerrain,
   getProfile, getQuota, ApiFail,
 } from './api.js';
 import { Pet, escapeHtml } from './pet.js';
@@ -35,6 +35,7 @@ const state = {
   terrain: null,
   quizPicked: {},
   topic: '',
+  ownQuote: null,
 };
 
 let pet = null;
@@ -490,8 +491,9 @@ async function feed() {
     pet.say('chew');
     await sleep(1400);
 
-    pet.setState('emitting');
-    pet.say('digest', { note: '每张卡片的出处都能点回知乎原文' });
+    // ⚠️ **台词不许早于事实**（11-19 16:3x 改）：原来这里就切 `emitting` 并说「嚼出来了」，
+    //    但真知乎调用要 3—6 秒 —— 台上会看到「桌宠说卡片好了，屏幕上却一张卡都没有」。
+    //    改成：**等卡片真的渲染出来**，再切状态、再说这句（见下方 renderCards 之后）。
 
     // ⚠️ **真卡片**：不是把你的收藏摆出来，是知乎上的真实问题 + 真实回答。
     //    出处是 `answer_url`（原回答链接）—— 契约层强制必填，缺了就不给这张卡。
@@ -511,6 +513,10 @@ async function feed() {
     renderCards();
     renderList();
     $$('.mat').forEach((el) => el.classList.add('is-eaten'));
+
+    // 卡片真的飞出来了，才说「嚼出来了」（台词与事实同一拍落地）。
+    pet.setState('emitting');
+    pet.say('digest', { note: '每张卡片的出处都能点回知乎原文' });
   } catch (err) {
     petSayFail(err, '读收藏失败');
     $('#flow-cards').innerHTML = noticeBox(showFail(err, '读收藏失败'), 'err');
@@ -538,8 +544,11 @@ async function loadViewpoints() {
     const seen = state.cards.map((c) => c.source?.question_url).filter(Boolean);
 
     // 脚本 1:45–2:15：桌宠又切电波，去知乎把「吵起来的两边」带回来。
+    // ⚠️ **台词不许早于事实**：原来「我都带来了」是在请求**之前**说的，
+    //    可这一步要 3—6 秒（主题词挨个试还可能更久）——
+    //    台上会看到「桌宠说带来了，右侧还是空的」。
+    //    改成：**卡片真的滑进来**，才说这句（见下方 renderViews 之后）。
     pet.setState('thinking');
-    pet.say('viewpoints');
 
     let res = null;
     let lastNotice = '';
@@ -567,6 +576,12 @@ async function loadViewpoints() {
     state.viewpoints = res.cards ?? [];
     renderViews();
     renderList();
+
+    // 两张观点卡真的并排了，才说「我都带来了」。
+    pet.say('viewpoints');
+    // ⚠️ `pet.say()` 是**替换**不是排队 —— 两句连着说，后一句会把前一句顶掉。
+    //    留 2 秒让观众看完「我都带来了」那一拍，再上「我不替你选」。
+    await sleep(2000);
     pet.setState('cheer');
     pet.say('disagree', { note: '原话，附链接' });
   } catch (err) {
@@ -630,6 +645,15 @@ async function runTension() {
     pet.setState('thinking');
     pet.say('mirror');
     box.innerHTML = noticeBox('正在把你的话和你收藏的东西放在一起看……');
+
+    // 创作信号：脚本 4:05 那一拍要用的「你自己也写过一句」。
+    // ⚠️ **在这里就取材**（断层这一拍，比 4:05 早半分钟）——
+    //    等到点「看地形」才取，主持一点得慢了就来不及（会降级成数据陈述）。
+    //    不 await、不阻塞；取不到就降级，**不报错、不编**。
+    state.ownQuote = null;
+    getContents(3)
+      .then((contents) => { state.ownQuote = pickOwnQuote(contents); })
+      .catch(() => { state.ownQuote = null; });
 
     const data = await getTension(report, state.tone?.tone);
     state.tension = data;
@@ -812,19 +836,55 @@ async function answerSituation(q, key) {
   }
 }
 
+/**
+ * 从「用户自己写过的内容」里挑一句能念的话 —— 脚本 4:05 那句「你自己也写过一句」的原料。
+ *
+ * ⚠️ **只取真实原文，不改写、不编**（契约规则：台词里不许写会变的引文，
+ *    要显示就从创作信号里取原文拼）。**只取第一句** —— 整篇 pin 念出来是灾难。
+ */
+function pickOwnQuote(contents) {
+  const items = contents?.items ?? [];
+  for (const it of items) {
+    const raw = String(it.summary ?? it.content ?? it.body ?? '').trim();
+    if (!raw) continue;
+    const m = raw.match(/^[\s\S]{0,80}?[。！？]/);
+    const s = (m ? m[0] : raw.slice(0, 40)).trim();
+    if (s.length >= 8) return s;
+  }
+  return null;
+}
+
 async function loadTerrain() {
   const wrap = $('#mirror-terrain');
   try {
     const data = await getTerrain(state.tone?.tone);
     state.terrain = data;
+
+    // 创作信号：脚本 4:05 那一拍备料（用户自己写过的那句话）。
+    // ⚠️ **不 await** —— 不阻塞地形渲染；取不到就降级成数据陈述，
+    //    **不报错、不编、也不拿假引文充数**。
+    //    （断层那一拍已经取过一次；这里再取一次是刷新，服务端有缓存，不额外烧额度。）
+    getContents(3)
+      .then((contents) => { state.ownQuote = pickOwnQuote(contents); })
+      .catch(() => { state.ownQuote = null; });
+
     renderTerrain(wrap, data, (f) => {
       zoomFracture(wrap, true);
       pet.setState('thinking');
-      pet.sayText(
-        `<b>${escapeHtml(f.label)}</b><br />强度 ${Math.round((f.intensity ?? 0) * 100)}% ·
+      // 脚本 4:05：**先说用户自己写过的那句**（真实原文，取自创作信号）。
+      // 没有创作内容就照实退回数据陈述 —— **不编、也不拿假引文充数**。
+      // （断层 label / 强度 / 置信度在上面的断层面板里已经给全了，这里不重复。）
+      if (state.ownQuote) {
+        pet.sayText(`你自己也写过一句——<br /><b>「${escapeHtml(state.ownQuote)}」</b>`, {
+          note: '这句是你自己写的',
+        });
+      } else {
+        pet.sayText(
+          `<b>${escapeHtml(f.label)}</b><br />强度 ${Math.round((f.intensity ?? 0) * 100)}% ·
          置信度 ${Math.round((f.confidence ?? 0) * 100)}%`,
-        { note: f.confidence_note ?? '' }
-      );
+          { note: f.confidence_note ?? '' }
+        );
+      }
     });
     if (data.empty_notice) {
       // 塞进 `.terrain-wrap`（它才是定位上下文），否则会锚到 `.stage` 上飘到别处
