@@ -143,11 +143,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* ---------------------------------------------------------------- 桌宠形象
  *
- * ⚠️ **官方素材是动画 WebP**（assets/kanshan/*.webp，VP8X ANIM=YES，每个 ~40 帧）。
+ * ⚠️ **官方素材是动画 WebP**（assets/kanshan/*.webp，VP8X ANIM=YES，每个 30—60 帧）。
  * 所以：**滤镜和 transform 动画一律不许作用在 <img> 上** ——
  * Chrome 会对动画 WebP 逐帧重新合成，filter 生成的投影被叠进下一帧 →
  * 「白边越来越重 + 上一帧的残影」（11-19 用户实拍）。
  * 做法：**动画和光晕一律做在外层 wrapper（.petfigure）上，<img> 保持干净**。
+ *
+ * ⚠️ 这条规则解决的是**运行时合成**那一层。
+ * 素材**自身**的封装缺陷（ffmpeg 写 `dispose=none` + 透明背景 → 逐帧累积）
+ * 已在素材层修掉，见 assets/kanshan/NOTICE.md 与 scripts/build-kanshan-assets.js
+ * （11-19 D39）。两层都得干净，画面才没有残影。
  */
 .petfigure {
   position: relative; margin-top: 6px;

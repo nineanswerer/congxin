@@ -21,9 +21,9 @@
 
 ## 本目录内容与本项目的处理
 
-| 文件 | 原始素材 | 处理 |
+| 文件 | 原始素材 | 本项目处理 |
 | --- | --- | --- |
-| `idle.webp` | 待机（100 帧） | 160×160，10fps，有损 WebP q78 |
+| `idle.webp` | 待机（100 帧） | 320×320，10fps，有损 WebP q92，**帧 dispose=background** |
 | `thinking.webp` | 电波：坐着看笔记本电脑、头顶亮起灯泡（120 帧） | 同上 |
 | `cheer.webp` | 弥撒（60 帧） | 同上 |
 | `greet.webp` | 打打滚 / 挥手（80 帧） | 同上 |
@@ -31,14 +31,39 @@
 | `play.webp` | 运球 / 踢足球（80 帧） | 同上 |
 | `three-view-1..3.webp` | 刘看山三视图（正面 / 侧面 / 背面） | 800px 宽静态图，用于展示页与设计底稿 |
 
-**转换工具链**：ffmpeg 8.1.1（`libwebp`）。原始 6 个 GIF 合计 **5692 KB**，转换后 6 个动画合计 **915 KB**，整目录 **942 KB**（约为原始的 1/6）。
+**转换工具链**：ffmpeg 8.1.1（`libwebp`）+ 本项目自写的容器补丁（`scripts/build-kanshan-assets.js`）。
+原始 6 个 GIF 合计 **5692 KB**，转换后 6 个动画合计 **1222 KB**。
 
-**转换命令**（可复现）：
+**转换命令**（可复现，两步；`scripts/build-kanshan-assets.js` 就是这两步）：
 
 ```bash
-ffmpeg -i <原始.gif> -vf "fps=10,scale=160:160:flags=lanczos" \
-  -c:v libwebp -lossless 0 -quality 78 -loop 0 -an <输出.webp>
+# ① 丢帧转码：20fps → 10fps，**纯丢帧不混合**
+ffmpeg -y -i <原始.gif> -vf "select=not(mod(n\,2)),setpts=N/(10*TB)" \
+  -c:v libwebp -lossless 0 -quality 92 -loop 0 -an <输出.webp>
+
+# ② 帧处置补丁：把每个 ANMF 头的 dispose 由 0（不还原）改成 1（还原到背景）
+#    （ffmpeg 没有对应开关，只能改容器里的标志位；只改标志位，**不动像素**）
 ```
+
+### 为什么参数是这样（11-19 实测取证，见 `docs/decisions.md` D39）
+
+| 参数 | 不能写成 | 原因 |
+| --- | --- | --- |
+| 丢帧方式 | `fps=10` | 恒定帧率滤镜会把**相邻两帧混合**成一帧 → 手臂拖影被烤进帧里 |
+| 时间戳 | `setpts=N/TB` | 会写成 1000ms/帧（慢 10 倍）并掩盖残影 |
+| 分辨率 | `scale=160:160` | 页面按 210px 显示，**保持原始 320×320** 更清晰 |
+| 质量 | `-quality 78` | q78 有损振铃会在边缘产生白边 → 提到 **q92** |
+| 帧处置 | ffmpeg 默认 | ffmpeg/libwebp 对动画一律写 `dispose=none + blend=alpha`，而素材是**透明背景** → 第 N 帧叠在第 N-1 帧上，**越播越重**（残留影像 + 白边）。改成 `dispose=background` 后浏览器每帧后清空画布 → 干净 |
+
+> **合规说明**：以上都是**格式转换与容器标志修正**，**没有改动任何画面内容**
+> （不改形、不改色、不加笔触、不改帧序），符合下面第 1 条「不做二次创作」。
+
+### 验收方式
+
+`scripts/build-kanshan-assets.js` 跑完会打印每个文件的帧数、帧矩形与 dispose 值；
+正确输出应为 `rect=320x320  dispose=1`。
+**视觉验收**：把官方原始 GIF 与本项目的 `.webp` 并排同起点播放、间隔连拍多帧，
+两者姿势必须逐帧一致，且**只能有一只手臂 / 一个黑球**（见 `docs/decisions.md` D39 的验证记录）。
 
 ## 使用约定
 
