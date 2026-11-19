@@ -109,12 +109,13 @@ app.use((req, res) => {
   });
 });
 
-// 统一错误出口：**只暴露契约里的字段，不透栈**
+// 统一错误出口：**只暴露契约里的字段，不透栈、不透服务器路径**
+//
+// ⚠️ `toApiError` 已经把内部异常连同**排查 id** 打进服务端日志了，
+//    这里只负责把契约里的错误信封发出去（2026-11-19 修：
+//    之前未处理异常的栈会顺着 `detail` 原样吐给浏览器）。
 app.use((err, req, res, next) => {
   const apiError = toApiError(err);
-  if (apiError.code === 'INTERNAL_ERROR') {
-    console.error('[server] 未处理异常：', err);
-  }
   res.status(apiError.httpStatus).json(apiError.toBody());
 });
 

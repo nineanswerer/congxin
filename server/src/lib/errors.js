@@ -56,6 +56,22 @@ export const ERROR_CATALOG = {
   },
 };
 
+/**
+ * 对外前把 `detail` 里可能含**服务器路径 / 栈帧**的片段洗掉。
+ *
+ * 安全网：正常路径上 `detail` 只放 `question_id=xxx` 这种**不含路径**的细节；
+ * 万一将来有人把路径或栈塞进来，这里兜住 —— 赛规要求密钥与内部信息不得出现在
+ * 前端响应里，这层不依赖每个人每次都记得。
+ */
+function scrubDetail(detail) {
+  if (detail === null || detail === undefined) return null;
+  return String(detail)
+    .replace(/[A-Za-z]:[\\/][^\s'"]*/g, '[已隐藏的服务器路径]')
+    .replace(/\/[\w.-]*\/node_modules\/[\w./-]*/g, '[已隐藏的依赖路径]')
+    .replace(/\s+at\s+[^\s(]+\([^)]*\)/g, '')
+    .slice(0, 400);
+}
+
 export class ApiError extends Error {
   constructor(code, message, options = {}) {
     super(message);
@@ -80,16 +96,30 @@ export class ApiError extends Error {
         retryable: this.retryable,
         retry_after_ms: this.retryAfterMs,
         upstream: this.upstream,
-        detail: this.detail,
+        detail: scrubDetail(this.detail),
       },
     };
   }
 }
 
-/** 把任意异常包成 ApiError。**不认识的异常一律 INTERNAL_ERROR，绝不把栈透给前端。 */
+/**
+ * 把任意异常包成 ApiError。
+ *
+ * ⚠️ **绝不把栈、绝对路径、原始报错透给客户端**（2026-11-19 修）。
+ *
+ * 之前这里把 `err.stack` 塞进 `detail`，于是一个 body-parser 的 500
+ * 会把 `C:\Users\steam\Desktop\从心\server\node_modules\body-parser\...`
+ * **原样吐给浏览器**——泄露服务器目录结构、依赖版本，还把英文原始报错
+ * 甩到界面上（违反「失败要给真话，但真话不是给用户看栈」）。
+ *
+ * 现在：响应里只留一个**短 id**，栈与原始报错**只进服务端日志**。
+ * 排查时拿 id 去日志里搜即可，对外一点路径都不漏。
+ */
 export function toApiError(err) {
   if (err instanceof ApiError) return err;
-  return new ApiError('INTERNAL_ERROR', err?.message || '内部错误', {
-    detail: process.env.NODE_ENV === 'production' ? null : String(err?.stack || err),
+  const ref = `err_${Math.random().toString(36).slice(2, 10)}`;
+  console.error(`[server] 未处理异常 ${ref}：`, err);
+  return new ApiError('INTERNAL_ERROR', '服务器内部错误', {
+    detail: ref,
   });
 }

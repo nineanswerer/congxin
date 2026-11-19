@@ -297,6 +297,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .src .link { color: var(--ink3); }
 .src::before { content: "↗"; font-size: 13px; }
 
+/* 出处：**完整链接露出来** —— 评委当场就能核，不用点开、也不用先信我们。 */
+.card .srcurl {
+  margin-top: 6px; font-size: 11.5px; line-height: 1.5; color: var(--ink3);
+  word-break: break-all;
+  font-family: ui-monospace, Consolas, "Courier New", monospace;
+}
+/* 知乎未登录会弹登录框 —— **把实话写出来**，别让它变成说不清的演示事故。 */
+.zhint { margin-top: 10px; font-size: 12px; line-height: 1.6; color: var(--ink3); }
+
 .cardrow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 /* 同题两答：问题标题只出现一次，放在两张卡上面 */
 .pairq {

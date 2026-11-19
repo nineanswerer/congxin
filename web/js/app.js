@@ -59,6 +59,22 @@ function showFail(err, where) {
   return html;
 }
 
+/**
+ * 失败 → **桌宠也要开口**。
+ *
+ * 之前 catch 里只写了面板提示，**气泡停在上一句台词** —— 看起来它没事，
+ * 其实是卡住了。赛规第 7 条要的是「失败要给真实提示」，那就让**它自己**说出来。
+ *
+ * ⚠️ 说的是**后端 `user_hint`**（契约层规定的那句中文），不是前端另编的台词
+ * —— 换句话说：它说的那句就是系统给出的那句，不多不少。
+ */
+function petSayFail(err, where) {
+  const hint = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
+  const code = err instanceof ApiFail ? err.code : 'UNKNOWN';
+  pet.setState('error');
+  pet.sayText(escapeHtml(hint), { note: `${where} · ${code}` });
+}
+
 function noticeBox(html, kind = '') {
   return `<div class="notice ${kind}">${html}</div>`;
 }
@@ -160,10 +176,21 @@ function materialTopicCandidates() {
 }
 
 /**
- * 主题词候选（情境题侧）—— 问卷自述的特质词排在最前。
+ * 主题词候选（情境题侧）——**材料优先，特质词兜底**。
  *
- * 断层问的就是「你说的那个特质」，所以出题的主题词应该就是那个特质
- * （「长期主义」「体系化」…，实测能出带出处的真题）。
+ * ## 为什么材料必须排在特质词前面（2026-11-19 修）
+ *
+ * 桌宠出题前那句是「那这道呢——**你打算怎么让它用上**」——
+ * 「它」指的是**你刚喂进去的那堆材料**。
+ * 如果主题词用问卷里的抽象特质词（「长期主义」），知乎的问题发现会按这个词
+ * 召回一批**跟材料毫无关系**的问题（实测：出题变成「基金 30 年定投」，
+ * 而收藏全是软件测试 / UML / Ubuntu）→ **台词悬空、题与材料不搭**。
+ *
+ * 所以顺序改成：
+ *   1. **`state.topic`** —— 这轮喂它、吐卡片时**实际用的那个主题**（材料侧来的，
+ *      且已经证明能捞到带回答的真问题）；
+ *   2. **材料侧候选**（answer 型收藏标题 = 真问题标题，最可靠）；
+ *   3. **问卷特质词** —— 只在前两个都没有时兜底。
  */
 function topicCandidates() {
   const out = [];
@@ -173,8 +200,9 @@ function topicCandidates() {
     if (out.includes(s)) return;
     out.push(s);
   };
-  for (const t of scoreQuiz(state.quizPicked).traits ?? []) push(t);
+  push(state.topic);
   for (const t of materialTopicCandidates()) push(t);
+  for (const t of scoreQuiz(state.quizPicked).traits ?? []) push(t);
   return out;
 }
 
@@ -281,12 +309,22 @@ function quoteHtml(text) {
     <div class="full">${escapeHtml(s)}</div></details></div>`;
 }
 
+/**
+ * 知乎对**未登录**用户会弹登录框盖住正文（2026-11-19 实测：回答页与专栏页都弹）。
+ * 正文就在遮罩后面，**关掉登录框就能读**。
+ *
+ * 所以把这件事**直接写出来**：别让评委以为是我们把出处做成了假链接，
+ * 也别让「点开是登录框」变成一个说不清的演示事故。
+ */
+const ZHIHU_LOGIN_HINT =
+  '<div class="zhint">知乎未登录会弹登录框，关掉就能看正文 —— 上面那条链接和摘要都来自知乎原页。</div>';
+
 function cardHtml(c) {
   const src = c.source ?? {};
   const hasSource = Boolean(src.question_url || src.answer_url || src.url);
   const link = src.answer_url || src.question_url || src.url;
   const srcLine = hasSource
-    ? `<a class="src" href="${escapeHtml(link)}" target="_blank" rel="noopener">
+    ? `<a class="src" href="${escapeHtml(link)}" target="_blank" rel="noopener" title="${escapeHtml(link)}">
          ${escapeHtml(src.kicker ?? '知乎原文')}
          <span class="link">${escapeHtml(shortHost(link))}</span>
        </a>`
@@ -301,6 +339,7 @@ function cardHtml(c) {
       ${quoteHtml(c.summary)}
       ${c.meta ? `<div class="meta">${escapeHtml(c.meta)}</div>` : ''}
       ${srcLine}
+      ${hasSource ? `<div class="srcurl">${escapeHtml(link)}</div>` : ''}
     </div>`;
 }
 
@@ -326,7 +365,8 @@ function renderCards() {
       <span class="rule"></span>
       <span>${state.cards.length} 张</span>
     </div>
-    <div class="cardlist" style="margin-top:12px">${state.cards.map(cardHtml).join('')}</div>`;
+    <div class="cardlist" style="margin-top:12px">${state.cards.map(cardHtml).join('')}</div>
+    ${ZHIHU_LOGIN_HINT}`;
 }
 
 /**
@@ -370,7 +410,8 @@ function renderViews() {
     <div class="split" style="margin-top:10px">
       <div class="cardrow">${pair}</div>
       <div class="vs">VS</div>
-    </div>`;
+    </div>
+    ${ZHIHU_LOGIN_HINT}`;
     return;
   }
 
@@ -383,7 +424,8 @@ function renderViews() {
       <span class="rule"></span>
       <span>${items.length > 1 ? '不是同一个问题，算不上「两边」' : '这次只取到一条'}</span>
     </div>
-    <div class="cardlist" style="margin-top:12px">${vs}</div>`;
+    <div class="cardlist" style="margin-top:12px">${vs}</div>
+    ${ZHIHU_LOGIN_HINT}`;
 }
 
 function renderList() {
@@ -407,7 +449,8 @@ function renderList() {
       <span class="rule"></span>
       <span>${all.length} 张</span>
     </div>
-    <div class="cardlist" style="margin-top:12px">${all.map(cardHtml).join('')}</div>`;
+    <div class="cardlist" style="margin-top:12px">${all.map(cardHtml).join('')}</div>
+    ${ZHIHU_LOGIN_HINT}`;
 }
 
 function renderMaterials() {
@@ -469,7 +512,7 @@ async function feed() {
     renderList();
     $$('.mat').forEach((el) => el.classList.add('is-eaten'));
   } catch (err) {
-    pet.setState('error');
+    petSayFail(err, '读收藏失败');
     $('#flow-cards').innerHTML = noticeBox(showFail(err, '读收藏失败'), 'err');
   } finally {
     btn.disabled = false;
@@ -528,7 +571,7 @@ async function loadViewpoints() {
     pet.say('disagree', { note: '原话，附链接' });
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '去知乎翻失败'), 'err');
-    pet.setState('error');
+    petSayFail(err, '去知乎翻失败');
   } finally {
     btn.disabled = false;
   }
@@ -648,7 +691,7 @@ async function runTension() {
     $('#btn-terrain').addEventListener('click', loadTerrain);
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '对照失败'), 'err');
-    pet.setState('error');
+    petSayFail(err, '对照失败');
   } finally {
     btn.disabled = false;
   }
@@ -676,9 +719,19 @@ async function loadSituation() {
     let usedTopic = '';
     let lastNotice = '';
     let lastErr = null;
+    // 避开卡片已经用过的知乎问题 —— 情境题得是**另一个**真问题，不是把卡片重讲一遍
+    const seen = [
+      ...state.cards.map((c) => c.source?.question_url),
+      ...state.viewpoints.map((c) => c.source?.question_url),
+    ].filter(Boolean);
     for (const topic of candidates.slice(0, 3)) {
       try {
-        const res = await getSituation({ topic, count: 1, selfReport: state.tension?.self_reported });
+        const res = await getSituation({
+          topic,
+          count: 1,
+          selfReport: state.tension?.self_reported,
+          answered: seen,
+        });
         if (!res.empty && (res.questions ?? []).length) {
           data = res;
           usedTopic = topic;
@@ -711,8 +764,11 @@ async function loadSituation() {
         <div class="title">${escapeHtml(q.source?.question_title ?? '')}</div>
         <div class="quote">${escapeHtml(q.source?.answer_summary ?? '')}</div>
         <a class="src" href="${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '#')}"
-           target="_blank" rel="noopener">知乎原回答<span class="link">${escapeHtml(shortHost(q.source?.answer_url ?? q.source?.question_url ?? ''))}</span></a>
+           target="_blank" rel="noopener"
+           title="${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '')}">知乎原回答<span class="link">${escapeHtml(shortHost(q.source?.answer_url ?? q.source?.question_url ?? ''))}</span></a>
+        <div class="srcurl">${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '')}</div>
       </div>
+      ${ZHIHU_LOGIN_HINT}
       <div class="choices" style="margin-top:12px">
         ${(q.options ?? []).map((o) => `
           <button class="choice" data-key="${escapeHtml(o.key)}">${escapeHtml(o.label)}</button>
@@ -724,7 +780,7 @@ async function loadSituation() {
     });
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '出题失败'), 'err');
-    pet.setState('error');
+    petSayFail(err, '出题失败');
   } finally {
     btn.disabled = false;
   }
@@ -752,7 +808,7 @@ async function answerSituation(q, key) {
     await loadTerrain();
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '作答失败'), 'err');
-    pet.setState('error');
+    petSayFail(err, '作答失败');
   }
 }
 
@@ -781,6 +837,7 @@ async function loadTerrain() {
     pet.say('closing', { note: '三层都有了，断层上多了一座桥' });
   } catch (err) {
     wrap.innerHTML = noticeBox(showFail(err, '读地形失败'), 'err');
+    petSayFail(err, '读地形失败');
   }
 }
 
