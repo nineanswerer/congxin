@@ -58,14 +58,15 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   background: rgba(10,12,17,.4);
 }
 .brand { display: flex; align-items: baseline; gap: 13px; }
-.logo { font-size: 23px; font-weight: 800; letter-spacing: 6px; }
+.logo { font-size: 23px; font-weight: 800; letter-spacing: 6px; white-space: nowrap; }
 .logo em { font-style: normal; color: var(--blue); }
-.track { font-size: 12px; color: var(--ink3); letter-spacing: 1px; }
+.track { font-size: 12px; color: var(--ink3); letter-spacing: 1px; white-space: nowrap; }
 .topright { display: flex; align-items: center; gap: 10px; }
 
 .pill {
   font-size: 12.5px; color: var(--ink2); padding: 6px 13px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--panel);
+  white-space: nowrap;
 }
 .pill.on { color: #cfe4ff; border-color: rgba(74,158,255,.55); background: var(--blue-dim); }
 .pill .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-right: 7px; vertical-align: 1px; }
@@ -73,13 +74,21 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 
 /* 语气切换 */
 .tone-switch { display: flex; align-items: center; gap: 6px; }
-.tone-switch label { font-size: 12px; color: var(--ink3); }
+.tone-switch label { font-size: 12px; color: var(--ink3); white-space: nowrap; }
 .tone-switch button {
   font-size: 12.5px; color: var(--ink2); padding: 6px 12px; border-radius: 999px;
   border: 1px solid var(--line); background: var(--panel); transition: .15s;
+  white-space: nowrap;
 }
 .tone-switch button:hover { border-color: rgba(74,158,255,.5); color: var(--ink); }
 .tone-switch button.is-on { color: #cfe4ff; border-color: rgba(74,158,255,.6); background: var(--blue-dim); }
+
+/* 窄屏顶栏：副标题和「语气」两个字先让位，别把 logo 和按钮挤到换行 */
+@media (max-width: 1180px) {
+  .topbar { padding: 0 20px; }
+  .track { display: none; }
+  .tone-switch label { display: none; }
+}
 
 /* 阶段切换 */
 .tabs { display: flex; gap: 4px; padding: 10px 32px 0; position: relative; z-index: 4; }
@@ -94,7 +103,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .stage {
   position: relative; z-index: 1;
   flex: 1; min-height: 0;
-  display: grid; grid-template-columns: 400px 1fr;
+  /* 左栏宽度跟着视口走：窄屏（940px 的侧栏/笔记本）别让左栏吃掉 42% */
+  display: grid; grid-template-columns: clamp(300px, 28vw, 400px) 1fr;
   /* ⚠️ 必须显式给行高：隐式行是 auto → 行高 = max-content = 左栏内容高度，
      左栏（桌宠+材料）一高就撑破 .stage，**溢出压到底栏统计行上**（11-19 实测）。
      minmax(0,1fr) 把行锁在容器高度内，两栏各自滚动（和右栏 .panel 一样）。 */
@@ -131,18 +141,37 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .bubble small { display: block; margin-top: 7px; font-size: 12px; color: #7a8496; font-weight: 400; }
 .bubble .muted { color: #8b95a8; font-weight: 500; }
 
-.petfigure { position: relative; margin-top: 6px; }
-.petfigure img {
-  width: 210px; height: 210px; object-fit: contain; display: block;
+/* ---------------------------------------------------------------- 桌宠形象
+ *
+ * ⚠️ **官方素材是动画 WebP**（assets/kanshan/*.webp，VP8X ANIM=YES，每个 ~40 帧）。
+ * 所以：**滤镜和 transform 动画一律不许作用在 <img> 上** ——
+ * Chrome 会对动画 WebP 逐帧重新合成，filter 生成的投影被叠进下一帧 →
+ * 「白边越来越重 + 上一帧的残影」（11-19 用户实拍）。
+ * 做法：**动画和光晕一律做在外层 wrapper（.petfigure）上，<img> 保持干净**。
+ */
+.petfigure {
+  position: relative; margin-top: 6px;
+  isolation: isolate;              /* 让光晕伪元素安全地留在自己这一层 */
   transition: transform .28s ease;
 }
-/* 自建过渡（D19：吞咽 / 吐卡片 / 失败，不自绘角色） */
-.pet[data-state="chew"] .petfigure img { animation: chew .55s ease-in-out infinite; }
-.pet[data-state="emitting"] .petfigure img { animation: emit .5s ease-out; }
-.pet[data-state="error"] .petfigure img { filter: grayscale(.55) brightness(.8); }
-/* 把收藏拖到桌宠身上 → 它张嘴（脚本 0:15–0:30） */
-.pet.is-drop .petfigure img { transform: scale(1.07); filter: drop-shadow(0 0 20px rgba(74,158,255,.5)); }
+.petfigure img {
+  width: 210px; height: 210px; object-fit: contain; display: block;
+}
+/* 拖到它身上 → 亮起。光晕用伪元素画（**不用 filter**，理由同上） */
+.petfigure::after {
+  content: ""; position: absolute; inset: -12% -4%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(74,158,255,.34), rgba(74,158,255,0) 72%);
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: -1;
+}
+.pet.is-drop .petfigure { transform: scale(1.07); animation: none; }
+.pet.is-drop .petfigure::after { opacity: 1; }
 .pet.is-drop .bubble { border-color: rgba(74,158,255,.55); }
+
+/* 自建过渡（D19：吞咽 / 吐卡片 / 失败，不自绘角色）——也都在 wrapper 上做 */
+.pet[data-state="chew"] .petfigure { animation: chew .55s ease-in-out infinite; }
+.pet[data-state="emitting"] .petfigure { animation: emit .5s ease-out; }
+/* 失败态原来是 grayscale/brightness 滤镜 → 同样会累积边缘，改用 opacity */
+.pet[data-state="error"] .petfigure img { opacity: .58; }
 @keyframes chew {
   0%, 100% { transform: scale(1) translateY(0); }
   50% { transform: scale(.955) translateY(5px); }
@@ -185,8 +214,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .btn.primary:hover:not(:disabled) { background: rgba(74,158,255,.26); }
 .btn.ghost { background: transparent; }
 
-/* 材料列表（真实收藏条目） */
-.materials { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; max-height: 170px; overflow-y: auto; }
+/* 材料列表（真实收藏条目）
+ * ⚠️ 这里**不再自己滚** —— 之前 `max-height:170px; overflow-y:auto` 让左栏出现**两条滚动条**
+ * （.pet 一条、材料区一条），很乱。统一由 .pet 滚（11-19 实测）。 */
+.materials { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .mat {
   display: flex; align-items: center; gap: 9px; padding: 7px 10px;
   border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.03);
@@ -375,18 +406,26 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 /* ---------------------------------------------------------------- 底栏 */
 .strip {
   position: relative; z-index: 2; flex: none;
-  height: 78px; border-top: 1px solid var(--line); background: rgba(8,10,14,.5);
-  display: flex; align-items: center; justify-content: space-between; padding: 0 32px; gap: 18px;
+  min-height: 78px; border-top: 1px solid var(--line); background: rgba(8,10,14,.5);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 32px; gap: 14px 18px; flex-wrap: wrap;
 }
 .stat { display: flex; flex-direction: column; gap: 4px; }
-.stat .n { font-size: 21px; font-weight: 800; letter-spacing: .5px; }
-.stat .n i { font-style: normal; font-size: 13px; color: var(--ink3); font-weight: 500; margin-left: 3px; }
-.stat .l { font-size: 11.5px; color: var(--ink3); letter-spacing: 1px; }
+/* ⚠️ 不加 nowrap 的话，窄屏下「44% 工具与环境」会在词中间断行（11-19 用户实拍） */
+.stat .n { font-size: 21px; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
+.stat .n i { font-style: normal; font-size: 13px; color: var(--ink3); font-weight: 500; margin-left: 3px; white-space: nowrap; }
+.stat .l { font-size: 11.5px; color: var(--ink3); letter-spacing: 1px; white-space: nowrap; }
 .stat.hl .n { color: var(--blue); }
 .stat.amber .n { color: var(--amber); }
 .sep { width: 1px; height: 36px; background: var(--line); flex: none; }
 .proof { font-size: 11.5px; color: var(--ink3); line-height: 1.65; text-align: right; }
 .proof b { color: var(--ink2); font-weight: 600; }
+
+/* 窄屏：底栏放不下 4 个统计 + 说明 → 说明整体换到第二行，文字不丢 */
+@media (max-width: 1180px) {
+  .strip { justify-content: flex-start; }
+  .strip .proof { flex-basis: 100%; text-align: left; }
+}
 
 /* ---------------------------------------------------------------- 杂项 */
 .hidden { display: none !important; }
