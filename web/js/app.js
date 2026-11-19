@@ -255,8 +255,10 @@ async function loadQuota() {
     const disc = find('question_discovery');
     const user = find('user_data');
     const bits = [];
-    if (disc) bits.push(`问题发现 ${disc.remaining}/${disc.total}`);
-    if (user) bits.push(`用户数据 ${user.remaining}/${user.total}`);
+    // ⚠️ 这里显示的是**剩余**额度（`remaining`），不是已用 —— 必须写清楚，
+    // 否则「问题发现 22/100」会被读成「已用 22」，把事实说反。
+    if (disc) bits.push(`问题发现 剩 ${disc.remaining}/${disc.total}`);
+    if (user) bits.push(`用户数据 剩 ${user.remaining}/${user.total}`);
     pill.textContent = bits.length ? bits.join(' · ') : '额度已取';
   } catch {
     pill.textContent = '额度没读到';
