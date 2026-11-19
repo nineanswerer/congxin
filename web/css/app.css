@@ -95,6 +95,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   position: relative; z-index: 1;
   flex: 1; min-height: 0;
   display: grid; grid-template-columns: 400px 1fr;
+  /* ⚠️ 必须显式给行高：隐式行是 auto → 行高 = max-content = 左栏内容高度，
+     左栏（桌宠+材料）一高就撑破 .stage，**溢出压到底栏统计行上**（11-19 实测）。
+     minmax(0,1fr) 把行锁在容器高度内，两栏各自滚动（和右栏 .panel 一样）。 */
+  grid-template-rows: minmax(0, 1fr);
   gap: 18px; padding: 16px 32px 12px;
 }
 
@@ -104,7 +108,13 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .pet {
   display: flex; flex-direction: column; align-items: center;
   padding: 10px 0 0; position: relative;
+  /* 内容比容器高时**自己滚**，不要溢出压到底栏（和右栏 .panel 一个规矩） */
+  min-height: 0; overflow-y: auto; padding-right: 6px;
 }
+/* ⚠️ flex 子项默认 flex-shrink:1 → 空间不够时气泡会被压扁、
+   小字被裁掉一半。720p 的笔记本上左栏本来就装不下（桌宠+气泡+材料 645px > 504px），
+   所以：**一个都不许压**，整体滚动。 */
+.pet > * { flex: none; }
 .bubble {
   position: relative; width: 100%; min-height: 62px;
   background: linear-gradient(180deg, #ffffff, #eef3fb);
@@ -190,6 +200,14 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .mat .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mat .k { font-size: 11px; color: var(--ink3); flex: none; }
 .mat.is-eaten { opacity: .45; text-decoration: line-through; }
+
+/* 滚动条收窄：默认 15px 的滚动条会压在气泡/卡片上（11-19 实测） */
+.pet::-webkit-scrollbar, .panel::-webkit-scrollbar, .materials::-webkit-scrollbar { width: 6px; height: 6px; }
+.pet::-webkit-scrollbar-track, .panel::-webkit-scrollbar-track, .materials::-webkit-scrollbar-track { background: transparent; }
+.pet::-webkit-scrollbar-thumb, .panel::-webkit-scrollbar-thumb, .materials::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.18); border-radius: 3px;
+}
+.pet::-webkit-scrollbar-thumb:hover, .panel::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
 
 /* ---------------------------------------------------------------- 右区 */
 .panel {
