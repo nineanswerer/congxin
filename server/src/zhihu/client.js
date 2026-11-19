@@ -28,9 +28,19 @@ function buildHeaders() {
   // OAuth 身份：**优先用当前登录会话里的 token**（每个登录用户读自己的数据）；
   // 没有会话时才退回开发期的全局 token（config.oauthToken）。
   // ⚠️ 官方要求：Token 过期或鉴权失败时**停止读取**，不静默切回 Access Secret 所属账号。
-  const oauthToken = authContext.getStore()?.accessToken || config.oauthToken;
+  const oauthToken = currentOAuthToken();
   if (oauthToken) headers['X-OAuth-Token'] = oauthToken;
   return headers;
+}
+
+/** 当前请求该用的 OAuth token（会话优先，其次全局）。 */
+function currentOAuthToken() {
+  return authContext.getStore()?.accessToken || config.oauthToken || '';
+}
+
+/** 有没有任何可用的知乎凭据。 */
+function hasCredential() {
+  return Boolean(config.accessSecret || currentOAuthToken());
 }
 
 /**
@@ -54,6 +64,17 @@ export async function callUpstreamPost(path, body = {}) {
 }
 
 async function callUpstreamJson(path, { method = 'GET', query = {}, body = null, raw = false } = {}) {
+  // ⚠️ **没有凭据就别白跑上游**（11-19 部署预检时加的）。
+  //    部署到 AI Works 后如果密钥没注入对，接口本来会回 401，
+  //    但那会显示成「知乎那边暂时不稳定」——**不准确**（真实原因是没凭据）。
+  //    这里提前挡住，直接给准确的中文提示（官方检查第 7 条：提示必须是真话）。
+  if (!hasCredential()) {
+    throw new ApiError('ZHIHU_AUTH_INVALID', '没有可用的知乎凭据', {
+      retryable: false,
+      userHint: '知乎凭据没配好或已失效，这次读不到知乎上的数据。',
+    });
+  }
+
   const url = new URL(path, config.upstreamBase);
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
@@ -89,6 +110,16 @@ async function callUpstreamJson(path, { method = 'GET', query = {}, body = null,
 
       if (payload.Code === 0) return payload.Data;
 
+      // 鉴权失败（实测 Code=20001 / "Authorization failed"）：
+      // **不是**「知乎不稳定」，重试也没用 —— 直接给出准确提示，别让用户干等。
+      if (payload.Code === 20001 || /authorization failed/i.test(payload.Message ?? '')) {
+        throw new ApiError('ZHIHU_AUTH_INVALID', `知乎接口鉴权失败：${payload.Message}`, {
+          upstream: { code: payload.Code, message: payload.Message },
+          retryable: false,
+          userHint: '知乎凭据没配好或已失效，这次读不到知乎上的数据。',
+        });
+      }
+
       // 秒级限流：退避后重试
       if (payload.Code === 30001) {
         lastError = new ApiError('ZHIHU_RATE_LIMITED', `知乎接口触发秒级限流：${payload.Message}`, {
@@ -98,6 +129,18 @@ async function callUpstreamJson(path, { method = 'GET', query = {}, body = null,
         if (attempt === MAX_ATTEMPTS) break;
         await sleep(config.retryBaseMs * attempt + Math.floor(Math.random() * 300));
         continue;
+      }
+
+      // 额度耗尽（实测 **Code=30002 / "quota exceeded"**）：
+      // **不是**「知乎不稳定」——重试到明天也没用，必须给准确提示。
+      // ⚠️ 契约里早就定义了 `ZHIHU_QUOTA_EXHAUSTED`（contracts/api.json 的 x-error-codes），
+      //    但**代码里从来没抛出过** → 额度耗尽时前端显示的是「知乎那边暂时不稳定，稍后重试」，
+      //    那句话是**假的**（重试没用）。11-19 补上，让实现回到契约。
+      if (payload.Code === 30002 || /quota exceeded/i.test(payload.Message ?? '')) {
+        throw new ApiError('ZHIHU_QUOTA_EXHAUSTED', `知乎接口报额度用尽：${payload.Message}`, {
+          upstream: { code: payload.Code, message: payload.Message },
+          retryable: false,
+        });
       }
 
       // 参数缺失：重试没有意义

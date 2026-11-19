@@ -21,6 +21,9 @@ build/
 access_secret
 .zhihu-cli/
 docs/sources/zhihu-cli-skill/
+# 密钥文件落点（官方口径「秘钥写入文件直接构建」；见 server/src/config.js）
+secrets/
+.secrets/
 
 # 他人材料，待队友同意后再决定是否公开
 docs/sources/队友桌宠想法-原始.txt

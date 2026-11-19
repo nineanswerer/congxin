@@ -18,11 +18,18 @@
  *       docs/sources/kanshan_material/dynamic/。
  */
 
-const { spawnSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(__dirname, '..');
+// ⚠️ **11-19 修**：根 `package.json` 有 `"type": "module"`（D42 加的），
+//    `scripts/` 下的 `.js` 因此按 **ESM** 解释 —— 原来这里的 `require()` / `__dirname`
+//    会直接抛 "require is not defined in ES module scope"，**素材脚本整个跑不起来**。
+//    现在与仓库其余部分（server/、web/ 全部是 ESM）保持一致。
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+const ROOT = path.resolve(HERE, '..');
 const SRC = path.join(ROOT, 'docs', 'sources', 'kanshan_material', 'dynamic');
 const DST = path.join(ROOT, 'assets', 'kanshan');
 

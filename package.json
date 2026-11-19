@@ -9,8 +9,12 @@
   },
   "scripts": {
     "start": "node server/src/index.js",
+    "build": "node scripts/build-check.js",
     "dev:server": "node server/src/index.js",
-    "dev:web": "node web/serve.js"
+    "dev:web": "node web/serve.js",
+    "deploy:pack": "node scripts/pack-deploy.js",
+    "deploy:check": "node scripts/predeploy-check.js",
+    "regress": "node scripts/regress-p3.js"
   },
   "dependencies": {
     "express": "^4.21.2"

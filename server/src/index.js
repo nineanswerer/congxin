@@ -125,11 +125,14 @@ app.use((err, req, res, next) => {
   res.status(apiError.httpStatus).json(apiError.toBody());
 });
 
-try {
-  assertConfig();
-} catch (err) {
-  console.error(`[server] 启动自检失败：${err.message}`);
-  process.exit(1);
+// 启动自检：**警告，不退出**（11-19 改）。
+// 缺凭据时崩成 CrashLoop → 评委打开链接是空白页；照常起 → 接口回真实错误提示，
+// 前端把 user_hint 显示出来（官方提交前检查第 7 条：失败要有真实提示，不许给假数据）。
+const configProblems = assertConfig();
+if (configProblems.length > 0) {
+  console.warn('[server] ⚠️ 配置不完整 —— 服务照常启动：');
+  for (const problem of configProblems) console.warn(`[server]    - ${problem}`);
+  console.warn('[server]    缺凭据的接口会回真实错误提示（不会返回假数据）。');
 }
 
 app.listen(config.port, () => {

@@ -117,6 +117,17 @@ export class ApiError extends Error {
  */
 export function toApiError(err) {
   if (err instanceof ApiError) return err;
+
+  // body-parser 解析坏 JSON 时抛的 SyntaxError（带 status 400 / type entity.parse.failed）。
+  // 这是**请求格式不对**，不是服务器内部错误 —— 别回 500。
+  // ⚠️ 11-19 实测撞出来的：命令行里 JSON 的引号被 shell 吃了，接口回的是
+  //    「出了点问题，我们正在查」（INTERNAL_ERROR），而真实原因是「你的请求格式不对」。
+  if (err?.type === 'entity.parse.failed' || (err?.status === 400 && err instanceof SyntaxError)) {
+    return new ApiError('VALIDATION_ERROR', '请求体不是合法 JSON', {
+      userHint: '请求格式不对，检查一下发过来的内容',
+    });
+  }
+
   const ref = `err_${Math.random().toString(36).slice(2, 10)}`;
   console.error(`[server] 未处理异常 ${ref}：`, err);
   return new ApiError('INTERNAL_ERROR', '服务器内部错误', {
