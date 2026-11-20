@@ -74,6 +74,10 @@ node scripts\predeploy-check.js
 
 ![认知地形](web/docs-shot-terrain.png)
 
+**落版（5 分钟 Demo 的最后一拍）**
+
+![落版](web/docs-shot-outro.png)
+
 ## 技术选型（已定，详见 [docs/decisions.md](docs/decisions.md)）
 
 | 项 | 决定 | 依据 |

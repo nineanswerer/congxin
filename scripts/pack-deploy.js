@@ -83,7 +83,7 @@ const isExcludedName = (name) => {
   if (name.startsWith('skin-')) return true;
   if (name.startsWith('prepared-media')) return true;
   // **文档用的实拍截图**（web/docs-shot-*.png）：只在 README 里给人看，
-  // 页面不引用，5 张就占 3.8MB —— 打进部署包纯属浪费带宽。
+  // 页面不引用，6 张就占 4.4MB —— 打进部署包纯属浪费带宽。
   if (name.startsWith('docs-shot-')) return true;
   return false;
 };
