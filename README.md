@@ -30,7 +30,21 @@
 
 ## 快速开始（本地跑一遍：零依赖、零构建、零 npm 包）
 
-需要**两个进程**。密钥**不进仓库**，只从环境变量读。
+**最省事的一条命令**（体检 Node / 依赖 / 密钥 / 端口，然后前台起服务，`Ctrl+C` 停）：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-local.ps1
+```
+
+```powershell
+# 只体检不启动（想先确认环境对不对）
+powershell -ExecutionPolicy Bypass -File scripts\start-local.ps1 -Check
+```
+
+脚本会自动找密钥（环境变量 → `ZHIHU_ACCESS_SECRET_FILE` → 仓库根 `secrets/access_secret` → 本机知乎 CLI 落点 `~\.zhihu-cli\access_secret`），
+**读不到也照常启动**，接口回真实错误提示（不返回假数据）。
+
+需要**两个进程**的原始方式如下。密钥**不进仓库**，只从环境变量读。
 
 ```powershell
 # 1) 后端（本机 8787 端口绑不上，必须换端口）
