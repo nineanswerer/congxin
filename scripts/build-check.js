@@ -169,7 +169,17 @@ export function checkBuildTree(root) {
       pass.push(`根 package.json 可直接 npm install && npm start（start=${pkg.scripts.start}）`);
     }
     if (!pkg.scripts?.build) {
-      warn.push('根 package.json 没有 build 脚本 —— 平台若按 npm run build 走会失败，建议补一个');
+      // ⚠️ 交付副本**故意不声明 build**（D48）：
+      //    官方对「入口就是已提交源码、没有构建产物」的项目有专门通道，
+      //    构建步骤退化成 `test -f <运行入口>`；真把自检脚本当 build，
+      //    官方描述符生成器会直接报错（backend build requires at least one BuildArtifact）。
+      //    交付包里会多出官方生成的 scf_bootstrap / cloudbaserc.json —— 用它区分两种形态。
+      const isDelivery = exists('scf_bootstrap') || exists('cloudbaserc.json');
+      if (isDelivery) {
+        pass.push('交付副本不声明 build —— 走官方「无构建」通道（已生成 scf_bootstrap）');
+      } else {
+        warn.push('根 package.json 没有 build 脚本 —— 平台若按 npm run build 走会失败，建议补一个');
+      }
     }
   } catch (err) {
     fail.push(`根 package.json 解析失败：${err.message}`);
