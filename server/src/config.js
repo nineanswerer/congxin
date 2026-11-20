@@ -1,21 +1,37 @@
 /**
- * 运行期配置。**只从环境变量读，仓库里不写任何密钥。**
+ * 运行期配置。**仓库里不写任何密钥。**
+ *
+ * 密钥来源（先到先得）：
+ *   1. 环境变量 `ZHIHU_ACCESS_SECRET`
+ *   2. 环境变量 `ZHIHU_ACCESS_SECRET_FILE` 指向的文件
+ *   3. 下面那几个约定路径（相对进程工作目录）
  *
  * ⚠️ **11-19 补**：官方部署口径是「**秘钥写入文件直接构建**」
  *    （见 docs/rules-知乎S3.md 11.7 原文）——平台不保证把密钥塞成环境变量。
  *    所以这里除了环境变量，**还支持从文件读**；顺序见 `resolveAccessSecret()`。
  *    两种都读不到就**大声警告**，但**服务照常起**（见 assertConfig 的说明）。
+ *
+ * ⚠️ **11-21 补**：官方 AI Works 交付规范只允许运行期读 `PORT` / `HOST`
+ *    这两个受管变量，其余自定义环境变量会让官方探测器直接阻断打包。
+ *    所以交付包里的 `config.js` 由 `scripts/make-delivery.js` 生成，
+ *    **只保留文件来源的密钥**，不读任何自定义环境变量。
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-const num = (name, fallback) => {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') return fallback;
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : fallback;
-};
+/**
+ * 端口与监听地址。
+ *
+ * ⚠️ **只读字面量名**（`process.env.PORT` / `process.env.HOST`）——
+ *    官方 AI Works 交付规范只允许运行期读这两个受管变量；
+ *    写成「动态下标」取法（方括号里放变量名）会被官方探测器判成
+ *    `E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED`，**直接阻断打包**。
+ *
+ * 端口 fallback 用 **9000**（官方 CloudBase HTTP 函数的固定端口）。
+ */
+const PORT = Number(process.env.PORT);
+const HOST = process.env.HOST || '0.0.0.0';
 
 /** 从文件读密钥。读不到（不存在 / 空 / 无权限）就返回空串，不抛异常。 */
 function readSecretFile(filePath) {
@@ -64,7 +80,11 @@ export function resolveAccessSecret() {
 }
 
 export const config = {
-  port: num('PORT', 8787),
+  // 平台注入 PORT（CloudBase HTTP 函数固定 9000）；本地默认也是 9000。
+  port: Number.isFinite(PORT) && PORT > 0 ? PORT : 9000,
+
+  // 监听全地址：容器里只听 127.0.0.1 的话，外面的公网链接打不开。
+  host: HOST,
 
   // 知乎开放平台 Access Secret。**必填**——没有它所有行为接口都跑不了。
   accessSecret: resolveAccessSecret(),
@@ -86,9 +106,11 @@ export const config = {
   // Cookie 是否加 Secure。生产默认开；本地 http 调试可显式关掉。
   cookieSecure: (process.env.SESSION_COOKIE_SECURE || (process.env.NODE_ENV === 'production' ? 'true' : 'false')) === 'true',
 
-  cacheTtlMs: num('CACHE_TTL_MS', 5 * 60 * 1000),
-  upstreamTimeoutMs: num('UPSTREAM_TIMEOUT_MS', 10_000),
-  retryBaseMs: num('RETRY_BASE_MS', 1200),
+  // 这三个是内部调参常量，**不开放成环境变量**
+  // （官方交付规范不允许运行期读自定义环境变量）。
+  cacheTtlMs: 5 * 60 * 1000,
+  upstreamTimeoutMs: 10_000,
+  retryBaseMs: 1200,
 
   upstreamBase: 'https://developer.zhihu.com',
 };

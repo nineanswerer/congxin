@@ -214,12 +214,21 @@ export function checkBuildTree(root) {
 
   // ---------------------------------------------------------- 7. 密钥拿得到
   const configSrc = readText('server/src/config.js');
-  if (configSrc.includes('ZHIHU_ACCESS_SECRET_FILE') && configSrc.includes('resolveAccessSecret')) {
-    pass.push('密钥支持「环境变量 / 环境变量指的文件 / 约定路径」三种来源');
+  // ⚠️ 这里判的是**能力**（能从文件读密钥），不是某一种环境变量名：
+  //    仓库版支持「环境变量 / 环境变量指的文件 / 约定路径」，
+  //    交付版（scripts/make-delivery.js 生成）只留「约定路径」——
+  //    官方 AI Works 规范不允许运行期读自定义环境变量。
+  //    两版都保留 readSecretFile + SECRET_FILE_FALLBACKS，所以这条两边都成立。
+  if (
+    configSrc.includes('resolveAccessSecret') &&
+    configSrc.includes('readSecretFile') &&
+    configSrc.includes('SECRET_FILE_FALLBACKS')
+  ) {
+    pass.push('密钥支持从文件读取（约定路径），官方「秘钥写入文件直接构建」口径可用');
   } else {
     fail.push(
-      'config.js 只认环境变量 —— 官方口径是「秘钥写入文件直接构建」，' +
-        '按官方那样注入会启动失败（缺 ZHIHU_ACCESS_SECRET）'
+      'config.js 不会从文件读密钥 —— 官方口径是「秘钥写入文件直接构建」，' +
+        '没有文件读取能力就会启动失败（读不到凭据）'
     );
   }
 

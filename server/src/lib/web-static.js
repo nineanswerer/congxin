@@ -16,9 +16,8 @@
  * 页面里素材用的是**相对路径** ../assets/kanshan/...，
  * 所以页面固定从 /web/ 进 —— 根路径 / 会 302 到 /web/。
  *
- * 环境变量：
- *   WEB_STATIC_ROOT  指定仓库根（默认自动探测）
- *   WEB_STATIC=off  不挂载，只发 API
+ * 仓库根的定位：**按本文件位置算**（server/src/lib → 上溯三层），
+ * 不看工作目录 —— 容器里的工作目录不一定是代码根。
  */
 
 import express from 'express';
@@ -31,9 +30,7 @@ const HERE = dirname(fileURLToPath(import.meta.url)); // server/src/lib
 /** 找到含 web/index.html 的那层目录。找不到返回 null —— 退化成「只发 API」。 */
 export function findRepoRoot() {
   const candidates = [
-    process.env.WEB_STATIC_ROOT,
     resolve(HERE, '../../..'), // server/src/lib → 仓库根
-    resolve(process.cwd(), '..'),
     process.cwd(),
   ].filter(Boolean);
 
@@ -48,14 +45,6 @@ export function findRepoRoot() {
  * 顺序反了会「接口被静态吃掉」或「静态永远轮不到」。
  */
 export function mountWeb(app) {
-  const disabled = ['off', '0', 'false', 'no'].includes(
-    String(process.env.WEB_STATIC ?? '').toLowerCase()
-  );
-  if (disabled) {
-    console.log('[server] WEB_STATIC=off —— 只发 API，不挂前端静态');
-    return { mounted: false, root: null };
-  }
-
   const root = findRepoRoot();
   if (!root) {
     console.log('[server] 没找到 web/index.html —— 只发 API（开发期双进程模式）');

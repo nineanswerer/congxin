@@ -41,16 +41,8 @@ const app = express();
 app.disable('x-powered-by');
 app.use(express.json({ limit: '1mb' }));
 
-// 开发期跨域（前端 Vite 跑在别的端口）。生产由同域部署，不需要。
-if (process.env.NODE_ENV !== 'production') {
-  app.use((req, res, next) => {
-    res.set('Access-Control-Allow-Origin', '*');
-    res.set('Access-Control-Allow-Headers', 'Content-Type');
-    res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    if (req.method === 'OPTIONS') return res.sendStatus(204);
-    return next();
-  });
-}
+// 前端与接口**同源**（开发期由 web/serve.js 代理，部署期同一个进程挂载），
+// 所以这里不需要 CORS —— 加了反而会让任何站点都能调我们的接口。
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -135,9 +127,11 @@ if (configProblems.length > 0) {
   console.warn('[server]    缺凭据的接口会回真实错误提示（不会返回假数据）。');
 }
 
-app.listen(config.port, () => {
-  console.log(`[server] 「从心」后端已启动：http://localhost:${config.port}`);
-  console.log(`[server] 前端页面：${web.mounted ? 'http://localhost:' + config.port + '/web/' : '未挂载（只发 API）'}`);
+// 监听**全地址**（0.0.0.0）：容器里只听 127.0.0.1 的话，公网链接打不开。
+// 端口来自 PORT（平台注入，CloudBase HTTP 函数固定 9000），本地默认 9000。
+app.listen(config.port, config.host, () => {
+  console.log(`[server] 「从心」后端已启动：http://${config.host}:${config.port}`);
+  console.log(`[server] 前端页面：${web.mounted ? 'http://' + config.host + ':' + config.port + '/web/' : '未挂载（只发 API）'}`);
   console.log(`[server] 上游鉴权模式：${config.oauthToken ? 'OAuth（登录用户）' : 'Access Secret（开发期自读）'}`);
   console.log(`[server] 知乎登录入口：${config.oauthAppId && config.oauthAppKey && config.oauthRedirectUri ? '已就绪' : '未就绪（App ID / App Key 由赛事页面在项目创建后分配）'}`);
   console.log(`[server] 缓存 TTL：${config.cacheTtlMs}ms`);

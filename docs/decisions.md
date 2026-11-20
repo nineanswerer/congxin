@@ -1515,3 +1515,134 @@ P3 明天收口、提报窗口 12-05 10:00 → 12-07 10:00 冻结、**正式公�
 - skill 正本在仓库 `.minimax/skills/plain-talk/`；本机用 **junction** 指向 `~/.agents/skills/plain-talk`（同一份文件、不复制，新会话自动可见）。
   队友若用别的 AI 平台，需自行把该目录软链到它的 skills 根目录。
 - **术语表要随项目演进补**：出现新黑话就加一行，别让「没收录的词」每次都要现编。
+
+---
+
+## D48 · 按官方 AI Works 交付规范改造源码 + 交付副本隔离
+
+- **时间**：2026-11-21
+- **拍板人**：本会话（规范适配属机械改造，官方口径「无需单独请求授权」；**发布动作仍需用户授权**）
+- **关联**：D22（部署走 AI Works 源码发布）· D42（单进程部署形态）· D46（密钥三来源）· `server/src/config.js` · `server/src/index.js` · `server/src/lib/web-static.js` · `scripts/make-delivery.js` · `docs/部署指南.md`
+
+### 背景
+
+11-21 上午在 AI Works 平台上创建了项目（`projectId=240909`），到 step=2「上传源码」这一步才发现：
+**平台要的不是「一个能跑的 Node 服务」，而是「符合官方交付规范的源码包」**——
+平台 step=2 页面直接给出官方 AI Works Skill 的下载链接（`zhihu-ai-works-deploy-helper_v1.2.0`）。
+
+下载跑了一遍官方探测器，5 条 error 阻断：
+
+| 官方 finding | 根因 | 处理 |
+| --- | --- | --- |
+| `E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED` | 运行期读了 `ZHIHU_ACCESS_SECRET` 等自定义环境变量 | 交付副本里密钥**只从文件读** |
+| `E_PORT_CONTRACT_UNSAFE` | 没读 `process.env.PORT`、只监听默认地址 | 仓库版改为字面量读 `PORT`（fallback **9000**）+ 监听 **`0.0.0.0`** |
+| `E_DISK_WRITE_FORBIDDEN` | `scripts/`、`server/scripts/` 全是写盘工具 | 交付副本按**白名单**只装运行期文件 |
+| `E_LOCAL_PERSISTENCE` | 同上 | 同上 |
+| `E_AGENT_BUILD_REQUIRED` | `npm run build` 是自定义脚本 | 交付版**不声明 build**，走官方「无构建」通道 |
+
+### 结论
+
+1. **仓库版源码对齐官方交付标准**（这部分改动直接进仓库，不只改交付副本）：
+   - `config.js`：`port` 改为字面量 `process.env.PORT`（fallback 9000）、新增 `host`（`process.env.HOST`，fallback `0.0.0.0`）；
+     删掉 `num()` 这个**动态下标**helper（`process.env[name]` 会被官方判成动态访问），三个调参常量改为字面量。
+   - `index.js`：`app.listen(config.port, config.host, …)`；**删掉 CORS 中间件**（前端一直是同源，
+     `web/js/api.js` 用 `location.origin`，`web/serve.js` 代理 —— CORS 是没人用的残留，
+     留着还等于「任何站点都能调我们的接口」）。
+   - `web-static.js`：仓库根改为**按本文件位置算**（不看工作目录），去掉 `WEB_STATIC_ROOT` / `WEB_STATIC` 两个环境变量开关。
+2. **交付副本由 `scripts/make-delivery.js` 生成**，放**仓库外**（默认 `%TEMP%\congxin`）——
+   密钥不会落进仓库工作树。脚本做四件事：白名单复制 → 改写 `config.js` → 生成
+   `_tmp/backend-html-pages.json` → **自检**（扫交付副本的 JS：非 `PORT`/`HOST` 的环境变量、写盘调用，
+   **注释里的写法同样算命中**，与官方探测器同口径）。
+3. **交付版不声明 `build` 脚本**：我们的 `npm run build` 跑的是 `scripts/build-check.js`（部署面**自检**），
+   一个文件都不产出；官方描述符生成器对「有 build 但无产物」直接报错
+   （`backend build requires at least one BuildArtifact`）。官方对「入口即已提交源码」有专门通道，
+   构建步骤退化成 `test -f server/src/index.js`。**仓库版保留 `build`**（本地自检用），
+   交付前手动对交付目录跑一遍 `node scripts/build-check.js <交付目录>`。
+
+### 状态
+
+**已定并实施**。官方探测器对交付副本的最终结果：**`Status: review-required`、0 error**，
+剩 3 条 warning（动态路由 ×2 + 健康检查探测不到 ×1），**不阻断打包**。
+`npm ci` 与 `npm run build` 在交付目录内**真跑通**（PASS 11 / WARN 0 / FAIL 0），
+30 秒启动探测实测：**监听 `0.0.0.0:9000`**、`/api/health` 200、`/web/` 200、素材 200。
+
+---
+
+## D49 · Access Secret 的处置：进交付包，但用**部署专用**密钥并主动披露
+
+- **时间**：2026-11-21
+- **拍板人**：**用户**（2026-11-21 问卷，在「进包 / 不进包 / 预置快照」三选一里选了「进包 + 部署专用密钥」）
+- **关联**：D46（密钥三来源）· D48（交付规范）· 官方 `docs/rules-知乎S3.md` 11.7 / 12.4 第 6 条
+
+### 背景
+
+D48 解决了「怎么交付」，但**密钥怎么给**是独立的一件事，且它同时撞上两条官方口径：
+
+- 官方 11.7 硬约束原文：「使用知乎 CLI 时若提示注入环境变量秘钥，可告诉 Agent：**秘钥写入文件直接构建，代码不会上传到仓库**。」
+- 官方提交前检查第 6 条：「App Key、Access Secret、OAuth Token 等密钥未出现在**源码**、前端响应、日志、截图或视频中。」
+
+用户 11-21 明确问了「**一定要放密钥吗？这会有风险吧？有什么解决方式吗？**」——所以这一步必须把
+「有没有别的路」查实，不能凭印象。
+
+### 查证结论（事实）
+
+**按平台当前能力，密钥只能以文件形式存在于源码包里**：
+
+1. 平台 step=2 页面只有「上传 .zip」+ 两项审核声明，**没有环境变量/密钥输入位**（整页已读）。
+2. 官方描述符 `backend.deploy.json` 的 `"Env"` 被 schema **钉死为 `[]`**（`{"const": []}`）——填什么都过不了校验。
+3. 云函数运行时只有官方 bootstrap 注入的 `PORT/HOST/HOSTNAME/NITRO_HOST/NITRO_PORT`。
+4. 我们每个开放平台调用都要 `Authorization: Bearer <Access Secret>`；
+   OAuth token 只作为 `X-OAuth-Token` 指定「读谁的」，**不能单独鉴权**
+   （官方 12.3：读授权用户的创作列表/关注/收藏仍需 `Bearer <Access Secret>`）。
+   → **「等 12-05 拿 App ID/Key 改走 OAuth」这条路堵死。**
+
+### 结论
+
+1. **进包**，但用**专门申请的部署专用 Access Secret**，与日常开发用的那个**分开**：
+   - 申请入口 <https://developer.zhihu.com/profile>（单账号最多 20 个，**删除后无法恢复**，同账号共享额度）；
+   - 落在 `~/.zhihu-cli/access_secret.deploy`（`make-delivery.js` 按 `--secret-file` → 部署专用 → 仓库 `secrets/` → 开发用的 顺序找）。
+2. **暴露面如实披露**（写进计划书，不藏）：密钥存在于**上传给平台的 ZIP** 与**平台的 CloudBase 运行环境**；
+   **GitHub 仓库、仓库历史、本机开发密钥、前端响应、日志里都没有它**。
+   这正是官方 11.7「秘钥写入文件直接构建，代码不会上传到仓库」的口径 —— 密钥进的是**构建输入**，不是仓库源码。
+3. **收尾动作**：比赛结束 / 提报完成后，**删掉那个部署专用 Access Secret**；日常开发用的不受影响。
+4. **没配对也不白屏**：缺凭据时服务照常起，接口回**真实的中文错误提示**（D46 已定），不返回假数据。
+
+### 状态
+
+**已定，待人操作**（用户去申请部署专用密钥 → 存到 `~/.zhihu-cli/access_secret.deploy` → 重出包）。
+**未决**：不带密钥的备选（评委看到的是坏掉的 demo）与「预置真实快照」方案**已放弃**，不再讨论。
+
+---
+
+## D50 · Windows 上必须补 ZIP 执行位 + 交付版走「无构建」通道
+
+- **时间**：2026-11-21
+- **拍板人**：本会话（工具链适配，无业务取舍）
+- **关联**：D48 · `scripts/fix-zip-exec-bit.py` · `scripts/make-delivery.js`
+
+### 背景
+
+官方 `validate_deploy_output.py` 要求 `scf_bootstrap` 的**文件模式是 0755**，而官方归档器写 ZIP 条目权限时取的是
+**源文件的 exec 位**：`mode = 0o755 if source.stat().st_mode & 0o111 else 0o644`。
+
+我们在 **Windows / NTFS** 上准备交付包：**NTFS 没有 Unix exec 位**，Python 的 `os.chmod` 在 Windows 上只切「只读」属性，
+`st_mode` 恒为 `0o666`（已实测：`chmod 0755` 之后仍是 `0o666`）。WSL 的 vhdx 已损坏（`ERROR_PATH_NOT_FOUND`），
+本机也没有 Docker。
+
+**这不是一个无关紧要的校验红字**：ZIP 里 `scf_bootstrap` 若成了 0644 → 平台解包后启动文件不可执行 →
+平台自己的校验步骤 `test -x scf_bootstrap` 失败 → **部署直接挂**。
+
+### 结论
+
+1. **`scripts/fix-zip-exec-bit.py`**：把「Linux 上本来就会产生的 0755」补进 ZIP 条目，
+   并在写完后**逐项复检**——CRC（`testzip()`）、成员清单与顺序、**逐成员内容 SHA-256**、
+   权限位、`create_system == 3`（否则 Linux 解包会忽略权限位）。
+   这不是「改了就交差」，是**可复检的等效实现**。
+2. **官方校验器在 Windows 上会红一条**「scf_bootstrap mode must be 0755」——
+   **这是 NTFS 物理上做不到，不是交付缺陷**；其余检查全过，且这个权限已在 ZIP 里补齐。**如实记录，不谎称全绿。**
+3. **交付版不带 `build` 脚本**（理由见 D48）：走官方「无构建」通道，构建步骤 = `test -f server/src/index.js`。
+
+### 状态
+
+**已定并实施**。交付 ZIP 实测：`scf_bootstrap` = **0755**、其余 64 个成员全 0644、
+无 `node_modules` / `docs` / 开发脚本 / 密钥 / `.env`。

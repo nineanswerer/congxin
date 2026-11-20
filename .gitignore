@@ -39,6 +39,9 @@ npm-debug.log*
 # 本地实测脚本写入的旁路凭证
 scripts/.secret
 
+# 官方交付探测产物（inspect_node_project.py 等写入），只在本机做体检用，不入库
+_tmp/
+
 # 待提交的改动理由（AI 转录人说过的话，提交后由 hook 自动清空，不入库）
 .ctx/
 
