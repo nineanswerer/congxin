@@ -22,6 +22,7 @@ import {
 import { Pet, escapeHtml } from './pet.js';
 import { QUESTIONS, scoreQuiz, DIMENSION_LABELS } from './quiz.js';
 import { renderTerrain, zoomFracture } from './terrain.js';
+import { initOutro, showOutro } from './outro.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -935,6 +936,9 @@ async function init() {
   pet = new Pet($('#pet'));
   pet.img.addEventListener('error', () => pet.onAssetError());
 
+  // 落版（脚本 4:50—5:00 那一拍）：顶栏按钮 / 键盘 O、End / 演练结束自动出
+  initOutro(pet);
+
   // 台词先来：没有它，桌宠说不成话
   try {
     state.tone = await getTone();
@@ -1047,7 +1051,7 @@ async function init() {
   // 演练模式：?demo=1 自动串一遍
   if (new URLSearchParams(location.search).has('demo')) {
     const { runDemo } = await import('./demo.js');
-    runDemo({ state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain });
+    runDemo({ state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro });
   }
 }
 

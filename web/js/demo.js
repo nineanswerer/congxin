@@ -22,7 +22,7 @@ const DEEP_ANSWERS = { q1: 0, q2: 0, q3: 0, q4: 0, q5: 0, q6: 0 };
 
 export async function runDemo(ctx) {
   const {
-    state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain,
+    state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro,
   } = ctx;
 
   const params = new URLSearchParams(location.search);
@@ -84,6 +84,11 @@ export async function runDemo(ctx) {
   await wait(900);
   await loadTerrain();
 
-  step(9, '完');
+  // ---- 9. 落版（脚本 4:50—5:00 那一拍）----
+  step(9, '落版');
+  await wait(900);
+  showOutro?.();
+
+  step(10, '完');
   return true;
 }

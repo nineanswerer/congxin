@@ -457,3 +457,47 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .cardrow { grid-template-columns: 1fr; }
   .vs { display: none; }
 }
+
+/* ---------------------------------------------------------------- 落版
+   脚本最后一拍（4:50—5:00），见 docs/P1-三件产出.md §2.4。
+   内容写死在 index.html 里 —— 这一拍**没有台词**，所以不归语气目录管。 */
+.outro-trigger {
+  font-size: 12.5px; color: var(--ink3); padding: 6px 13px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel);
+  white-space: nowrap; transition: .15s;
+}
+.outro-trigger:hover { color: var(--ink); border-color: rgba(74,158,255,.45); }
+
+.outro {
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 14px; text-align: center;
+  background:
+    radial-gradient(900px 560px at 50% 40%, rgba(74,158,255,.15), transparent 62%),
+    radial-gradient(700px 460px at 78% 88%, rgba(93,211,158,.09), transparent 60%),
+    linear-gradient(160deg, #0c0e13, #12151d);
+  opacity: 0; pointer-events: none; transition: opacity .55s ease;
+}
+.outro.is-on { opacity: 1; pointer-events: auto; }
+
+.outro .outro-pet {
+  width: 128px; height: 128px; object-fit: contain;
+  filter: drop-shadow(0 10px 24px rgba(0,0,0,.5));
+  margin-bottom: 6px;
+}
+.outro .outro-title {
+  font-size: 62px; font-weight: 800; letter-spacing: 16px;
+  text-indent: 16px; line-height: 1.1;
+}
+.outro .outro-title em { font-style: normal; color: var(--blue); }
+.outro .outro-track { font-size: 13px; color: var(--ink3); letter-spacing: 3px; }
+.outro .outro-line {
+  font-size: 17px; color: var(--ink2); letter-spacing: .5px;
+  border-top: 1px solid var(--line); padding-top: 16px; margin-top: 8px;
+}
+
+@media (max-width: 1180px) {
+  .outro .outro-title { font-size: 44px; letter-spacing: 10px; text-indent: 10px; }
+  .outro .outro-pet { width: 96px; height: 96px; }
+  .outro .outro-line { font-size: 15px; }
+}
