@@ -15,9 +15,9 @@
 import { escapeHtml } from './pet.js';
 
 const KIND_COLOR = {
-  core: { fill: 'rgba(74,158,255,.22)', stroke: 'rgba(74,158,255,.75)', text: '#cfe4ff' },
-  observed: { fill: 'rgba(255,180,84,.20)', stroke: 'rgba(255,180,84,.75)', text: '#ffd9a8' },
-  grown: { fill: 'rgba(93,211,158,.20)', stroke: 'rgba(93,211,158,.75)', text: '#b6f0d6' },
+  core: { fill: 'rgba(183,51,44,.18)', stroke: 'rgba(183,51,44,.78)', text: '#7A2A25' },
+  observed: { fill: 'rgba(200,136,81,.20)', stroke: 'rgba(200,136,81,.78)', text: '#7A5230' },
+  grown: { fill: 'rgba(30,48,39,.20)', stroke: 'rgba(30,48,39,.78)', text: '#1E3027' },
 };
 
 const LAYER_STYLE = [
@@ -151,11 +151,11 @@ function layerSvg(layer, key) {
   const name = layer?.label ?? key;
   const emptyHint = (layer?.blocks ?? []).length
     ? ''
-    : `<text class="lsub" x="380" y="118" text-anchor="middle" fill="#6d7689">（这层还是空的）</text>`;
+    : `<text class="lsub" x="380" y="118" text-anchor="middle" fill="#8A8579">（这层还是空的）</text>`;
   return `
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(name)}">
       <rect x="18" y="14" width="${W - 36}" height="${H - 42}" rx="12"
-            fill="rgba(255,255,255,.028)" stroke="rgba(255,255,255,.10)"/>
+            fill="rgba(74,59,50,.05)" stroke="rgba(74,59,50,.16)"/>
       <text class="lname" x="34" y="36">${escapeHtml(name)}${
         layer?.type ? `　·　${escapeHtml(layer.type)}` : ''
       }</text>
@@ -203,9 +203,9 @@ function drawBridges(terrainEl, bridges) {
     const my = (a.y + b.y) / 2 - 30;
     paths.push(`
       <path d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"
-            fill="none" stroke="rgba(93,211,158,.8)" stroke-width="2" stroke-dasharray="5 4"/>
-      <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>
-      <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>`);
+            fill="none" stroke="rgba(30,48,39,.80)" stroke-width="2" stroke-dasharray="5 4"/>
+      <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="3" fill="rgba(30,48,39,.95)"/>
+      <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="3" fill="rgba(30,48,39,.95)"/>`);
   }
   if (!paths.length) return;
 
@@ -255,7 +255,7 @@ export function renderTerrain(wrap, data, onFracture) {
     const amp = 8 + (f.intensity ?? 0.5) * 12;
     const path = `M ${x - 26} ${y - amp} L ${x - 9} ${y + amp * 0.6} L ${x + 4} ${y - amp * 0.8}
                   L ${x + 15} ${y + amp * 0.4} L ${x + 28} ${y - amp * 0.5}`;
-    const color = (f.intensity ?? 0) > 0.6 ? '#ff6b6b' : '#ffb454';
+    const color = (f.intensity ?? 0) > 0.6 ? '#B7332C' : '#C88851';
     return `
       <g class="fracture-mark" data-fracture-id="${escapeHtml(f.id)}" style="cursor:pointer">
         <path class="fracture-line" d="${path}" fill="none" stroke="${color}"

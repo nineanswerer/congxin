@@ -75,7 +75,7 @@ cd 'C:\Users\steam\Desktop\从心\web'; node serve.js
 | 文件 | 职责 |
 | --- | --- |
 | `index.html` | 单页骨架（顶栏 / 桌宠 / 主流程 / 照镜子 / 底栏统计） |
-| `css/app.css` | 设计系统与全部样式（沿用 P1 静帧的设计令牌） |
+| `css/app.css` | 设计系统与全部样式（11-21 起改为 any2html 复古排版令牌，见下） |
 | `js/api.js` | 接口层：统一错误信封 → `user_hint`；**失败一律说真话，不造假数据** |
 | `js/pet.js` | 桌宠状态机 + 气泡台词 + 运动层（跟随 / 转场 / 点头） |
 | `js/quiz.js` | 6 题自述问卷 + 前端计分 |
@@ -83,6 +83,14 @@ cd 'C:\Users\steam\Desktop\从心\web'; node serve.js
 | `js/app.js` | 主逻辑（把上面几个串起来） |
 | `js/demo.js` | `?demo=1` 演练模式 |
 | `serve.js` | 零依赖静态服务 + `/api` 代理（**开发期用**，部署时不需要） |
+
+### 视觉语言：甲子渡口复古排版（11-21 改版）
+
+- 依据 **any2html skill**（高级复古图文卡片排版）。原 P1 静帧的「深色桌面 + 蓝绿双主色」已整体替换。
+- 令牌集中在 `:root`：羊皮纸 `#F4EFE6` / 复古灰白 `#E6E2D8` / 1px 描边 `#D6D2C4`；复古红 `#B7332C`、暗夜绿 `#1E3027`、深驼 `#C88851`、赭石黄 `#D4A373`。
+- **硬规则：不用任何蓝色调**（skill 明确禁止）。`--blue/--blue-dim` 已更名为 `--accent/--accent-dim`；地形块配色在 `js/terrain.js` 的 `KIND_COLOR`。
+- 标题用衬线体（Noto Serif SC → 本地宋体回退），正文用黑体；纸纹由 `.grain` 的极淡横向纤维实现。
+- ⚠️ 白色刘看山在羊皮纸上会糊 → `.petfigure::before` 常驻一层暗夜绿柔光托底（仍是伪元素，**不碰 img**，动画 WebP 的残影红线不变）。
 
 ### 桌宠运动分三层（别合并）
 

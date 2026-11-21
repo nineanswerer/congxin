@@ -821,7 +821,7 @@ async function answerSituation(q, key) {
       tone: state.tone?.tone,
     });
     box.innerHTML = `
-      <div class="card" style="border-color:rgba(93,211,158,.4)">
+      <div class="card" style="border-color:rgba(30,48,39,.40)">
         <div class="kicker">地形长出了一块</div>
         <div class="title">${escapeHtml(res.block?.label ?? '')}</div>
         <div class="quote">${escapeHtml(res.block?.summary ?? '')}</div>
