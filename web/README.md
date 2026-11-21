@@ -77,12 +77,26 @@ cd 'C:\Users\steam\Desktop\从心\web'; node serve.js
 | `index.html` | 单页骨架（顶栏 / 桌宠 / 主流程 / 照镜子 / 底栏统计） |
 | `css/app.css` | 设计系统与全部样式（沿用 P1 静帧的设计令牌） |
 | `js/api.js` | 接口层：统一错误信封 → `user_hint`；**失败一律说真话，不造假数据** |
-| `js/pet.js` | 桌宠状态机 + 气泡台词 |
+| `js/pet.js` | 桌宠状态机 + 气泡台词 + 运动层（跟随 / 转场 / 点头） |
 | `js/quiz.js` | 6 题自述问卷 + 前端计分 |
 | `js/terrain.js` | 2.5D 分层认知地图（SVG + CSS `perspective`） |
 | `js/app.js` | 主逻辑（把上面几个串起来） |
 | `js/demo.js` | `?demo=1` 演练模式 |
 | `serve.js` | 零依赖静态服务 + `/api` 代理（**开发期用**，部署时不需要） |
+
+### 桌宠运动分三层（别合并）
+
+| 层 | 负责 | 实现 |
+| --- | --- | --- |
+| 素材自身 | 角色动作（挥手 / 电波 / 运球…） | `assets/kanshan/*.webp`，本身是**动画 WebP** |
+| `.petfigure` | 跟随指针的倾斜与位移 | CSS 变量 `--pet-tilt/--pet-shift/--pet-lift` + `transition` |
+| `.petanim` | 循环与一次性动画（呼吸 / 摇摆 / 弹跳 / 垂头 / 落地 / 点头） | `@keyframes` |
+
+- **为什么必须拆两层**：`animation` 会**整体覆盖** `transform`。写在同一元素上时，只要呼吸在跑，鼠标跟随就被整个顶掉。
+- **红线**：`transform` / `filter` 一律不许作用在 `<img>` 上（动画 WebP 逐帧重新合成 → 白边与残影，11-19 实拍 / D39）。改动桌宠时先用 devtools 确认 `getComputedStyle(img).transform === 'none'`。
+- **支点统一 86% 高度**（接近脚），缩放才读作「踮脚 / 呼吸」，而不是整张图胀缩。
+- **`prefers-reduced-motion` 全关**：`.petanim` 动画、跟随绑定、换图收放全部跳过；素材自身的帧动画照旧。
+
 
 ## 调了哪些接口
 

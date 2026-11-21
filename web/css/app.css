@@ -154,13 +154,43 @@ button:disabled { cursor: not-allowed; opacity: .5; }
  * 已在素材层修掉，见 assets/kanshan/NOTICE.md 与 scripts/build-kanshan-assets.js
  * （11-19 D39）。两层都得干净，画面才没有残影。
  */
+/* ---------------------------------------------------------- 桌宠运动（分层）
+ *
+ * ⚠️ **两层分工是安全分层，别合并回一层**：
+ *   .petfigure  只放「跟手姿态」—— CSS 变量驱动的 translate/rotate/scale + transition（可插值）
+ *   .petanim    只放「循环 / 一次性动画」—— keyframes
+ *   img         一律不碰（动画 WebP 的雷区，见上）
+ *
+ * 为什么必须拆：`animation` 会**整体覆盖** `transform`。如果「跟着鼠标轻微倾斜」
+ * 和「待机呼吸」写在同一个元素上，只要呼吸在跑，倾斜就会被整个顶掉，鼠标怎么动它都不跟。
+ * 拆成父子两层之后，两套位移各自独立、自然叠加。
+ *
+ * 支点统一在 86% 高度（偏低，接近脚），所以缩放读起来是「踮脚 / 呼吸」，
+ * 而不是「整张图胀大缩小」——后者一眼就是假动画。
+ */
 .petfigure {
   position: relative; margin-top: 6px;
   isolation: isolate;              /* 让光晕伪元素安全地留在自己这一层 */
-  transition: transform .28s ease;
+  /* 姿态变量：JS 只改这几个值，绝不直接写 transform */
+  --pet-tilt: 0deg;    /* 跟随鼠标的倾斜 */
+  --pet-shift: 0px;    /* 跟随鼠标的横移 */
+  --pet-lift: 0px;     /* 跟随鼠标的纵向 */
+  --pet-hold: 0px;     /* 被拖到（is-drop）时的抬升，由 CSS 类给，不被 JS 覆盖 */
+  --pet-scale: 1;
+  transform:
+    translate3d(var(--pet-shift), calc(var(--pet-lift) + var(--pet-hold)), 0)
+    rotate(var(--pet-tilt))
+    scale(var(--pet-scale));
+  transform-origin: 50% 86%;
+  transition: transform .3s cubic-bezier(.2,.9,.3,1);
 }
 .petfigure img {
   width: 210px; height: 210px; object-fit: contain; display: block;
+}
+/* 循环微动层：默认就是「活着」的呼吸，所有状态在此之上叠加 */
+.petanim {
+  transform-origin: 50% 86%;
+  animation: pet-breathe 3.8s ease-in-out infinite;
 }
 /* 拖到它身上 → 亮起。光晕用伪元素画（**不用 filter**，理由同上） */
 .petfigure::after {
@@ -168,22 +198,75 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   background: radial-gradient(closest-side, rgba(74,158,255,.34), rgba(74,158,255,0) 72%);
   opacity: 0; transition: opacity .2s; pointer-events: none; z-index: -1;
 }
-.pet.is-drop .petfigure { transform: scale(1.07); animation: none; }
+/* 换素材的瞬间先收一下（JS 加 / 去这个类），换完再弹回 → 不是硬切 */
+.petfigure.is-swapping { --pet-scale: .93; transition-duration: .1s; }
+.pet.is-drop .petfigure { --pet-scale: 1.06; --pet-hold: -3px; }
 .pet.is-drop .petfigure::after { opacity: 1; }
 .pet.is-drop .bubble { border-color: rgba(74,158,255,.55); }
 
-/* 自建过渡（D19：吞咽 / 吐卡片 / 失败，不自绘角色）——也都在 wrapper 上做 */
-.pet[data-state="chew"] .petfigure { animation: chew .55s ease-in-out infinite; }
-.pet[data-state="emitting"] .petfigure { animation: emit .5s ease-out; }
+/* ---- 状态各自的「节奏」，不是各画一套新动作 ---- */
+/* 电波中：轻微左右摇摆 —— 像在等回音，而不是站着不动 */
+.pet[data-state="thinking"] .petanim { animation: pet-sway 4.2s ease-in-out infinite; }
+/* 睡觉：呼吸放慢放深 */
+.pet[data-state="sleep"] .petanim { animation: pet-breathe-slow 6.4s ease-in-out infinite; }
+/* 弥撒 / 庆祝：素材自己在动，这里只补一次「起跳」把情绪顶上去，不循环（循环会晕） */
+.pet[data-state="cheer"] .petanim,
+.pet[data-state="play"] .petanim { animation: pet-bounce .78s cubic-bezier(.25,.9,.3,1) 1; }
+/* 失败：垂头（前倾下沉 + 轻微缩小），而不是只有变淡 */
+.pet[data-state="error"] .petanim { animation: pet-droop .6s ease-out both; }
+/* 自建过渡（D19：吞咽 / 吐卡片，不自绘角色） */
+.pet[data-state="chew"] .petanim { animation: pet-chew .55s ease-in-out infinite; }
+.pet[data-state="emitting"] .petanim { animation: pet-emit .5s ease-out; }
 /* 失败态原来是 grayscale/brightness 滤镜 → 同样会累积边缘，改用 opacity */
 .pet[data-state="error"] .petfigure img { opacity: .58; }
-@keyframes chew {
-  0%, 100% { transform: scale(1) translateY(0); }
-  50% { transform: scale(.955) translateY(5px); }
+
+/* ⚠️ 下面两条必须写在上面的状态规则**之后**：特异性同为 (0,2,1)，靠顺序取胜 */
+/* 换状态落地：先被 is-swapping 收小，再弹回，避免硬切 */
+.pet.is-landing .petanim { animation: pet-land .46s cubic-bezier(.2,.9,.3,1); }
+/* 开口说话：整个身子点一下，让「话」和「身体」连起来 */
+.pet.is-talking .petanim { animation: pet-talk .5s ease-out; }
+
+@keyframes pet-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-3px) scale(1.006); }
 }
-@keyframes emit {
-  0% { transform: scale(.96); }
-  55% { transform: scale(1.06) translateY(-6px); }
+@keyframes pet-breathe-slow {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-4px) scale(1.008); }
+}
+@keyframes pet-sway {
+  0%, 100% { transform: rotate(-1.1deg) translateY(0); }
+  50%      { transform: rotate(1.1deg) translateY(-2px); }
+}
+@keyframes pet-bounce {
+  0%   { transform: translateY(0) scale(1, 1); }
+  28%  { transform: translateY(-10px) scale(1.02, .99); }
+  52%  { transform: translateY(0) scale(.99, 1.012); }
+  72%  { transform: translateY(-4px) scale(1.008); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes pet-droop {
+  0%   { transform: translateY(-2px) scale(1); }
+  100% { transform: translateY(3px) scale(.985); }
+}
+@keyframes pet-land {
+  0%   { transform: translateY(6px) scale(.93); }
+  55%  { transform: translateY(-4px) scale(1.028); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes pet-talk {
+  0%   { transform: translateY(0) scale(1); }
+  32%  { transform: translateY(3px) scale(.994); }
+  64%  { transform: translateY(-2px) scale(1.004); }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes pet-chew {
+  0%, 100% { transform: scale(1) translateY(0); }
+  50%      { transform: scale(.955) translateY(5px); }
+}
+@keyframes pet-emit {
+  0%   { transform: scale(.96); }
+  55%  { transform: scale(1.06) translateY(-6px); }
   100% { transform: scale(1); }
 }
 
@@ -618,4 +701,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
   .terrain { transition: none; }
   .fracture-line { animation: none; }
   .outro { transition: none; }
+  /* 桌宠：循环微动、落地、点头全部关掉；跟随鼠标的姿态也归零（JS 侧同时不再绑定）
+     —— 素材自身仍是动画 WebP，所以它不会变成一张死图，只是不再有额外运动。 */
+  .petanim { animation: none !important; }
+  .petfigure { transition: none; --pet-tilt: 0deg; --pet-shift: 0px; --pet-lift: 0px; }
 }
