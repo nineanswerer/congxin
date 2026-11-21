@@ -5,13 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>从心日报 · 把你的收藏印成一张报</title>
 <meta name="description" content="从心日报：把你的知乎收藏与阅读痕迹印成一张复古报刊头版，每张都能点回原文。" />
-<!-- Hallmark / Broadside：Six Caps + Bevan + Archivo Narrow（拉丁），Noto 中文回退 -->
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Six+Caps&family=Bevan&family=Archivo+Narrow:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet" />
-<!-- 官方主题令牌与地基（scaffold broadside），必须先于 app.css -->
-<link rel="stylesheet" href="css/tokens.css" />
-<link rel="stylesheet" href="css/base.css" />
+<!-- Apple Design System：SF Pro 系统字体栈（无需外链），中文回退系统黑体 -->
+<!-- Apple 主题令牌（Sun-Bleached Polaroid 调色板 + 双模式），先于 app.css -->
+<link rel="stylesheet" href="css/apple-tokens.css" />
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -94,6 +90,11 @@
 <!-- ============================ 落版（4:50 至 5:00） ============================
      内容来自 docs/P1-三件产出.md §2.4，**不归语气目录管**（这一拍没有台词）。
      快捷键：O / End 出，Esc 关。 -->
+<!-- 双模式切换（Apple HIG Step 8：Web 用右下角按钮） -->
+<button class="theme-toggle" id="theme-toggle" type="button" title="切换浅色 / 深色模式" aria-label="切换浅色或深色模式">
+  <span class="theme-toggle-icon" aria-hidden="true"></span>
+</button>
+
 <div class="outro" id="outro" aria-hidden="true" role="dialog" aria-label="从心 · 落版">
   <img class="outro-pet" src="../assets/kanshan/idle.webp" alt="刘看山 · 待机" />
   <div class="outro-title">从<em>心</em></div>

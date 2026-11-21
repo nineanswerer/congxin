@@ -333,7 +333,7 @@ function cardHtml(c) {
          ${escapeHtml(src.kicker ?? '知乎原文')}
          <span class="link">${escapeHtml(shortHost(link))}</span>
        </a>`
-    : `<span class="src" style="color:var(--ink3);background:transparent;border-color:var(--line)">
+    : `<span class="src" style="color:var(--label-tertiary);background:transparent">
          没有知乎出处（这条是你自己给的材料）
        </span>`;
 
@@ -824,7 +824,7 @@ async function answerSituation(q, key) {
       tone: state.tone?.tone,
     });
     box.innerHTML = `
-      <div class="card" style="border-left: var(--rule-bar) solid var(--color-accent)">
+      <div class="card" style="border-left: 3px solid var(--accent-primary)">
         <div class="kicker">地形长出了一块</div>
         <div class="title">${escapeHtml(res.block?.label ?? '')}</div>
         <div class="quote">${escapeHtml(res.block?.summary ?? '')}</div>
@@ -980,6 +980,20 @@ async function init() {
   // 事件
   $('#btn-feed').addEventListener('click', feed);
   $('#btn-views').addEventListener('click', loadViewpoints);
+
+  // 双模式切换（Apple HIG Step 8）：右下角按钮切 light/dark，记住选择
+  const themeBtn = $('#theme-toggle');
+  const savedTheme = (() => { try { return localStorage.getItem('congxin-theme'); } catch { return null; } })();
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    document.documentElement.dataset.theme = savedTheme;
+  }
+  themeBtn?.addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme
+      || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('congxin-theme', next); } catch { /* 隐私模式下忽略 */ }
+  });
 
   // 日报首屏 → 翻开内页（桌宠工作台）
   $('#daily-enter')?.addEventListener('click', () => {

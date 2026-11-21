@@ -14,12 +14,12 @@
 
 import { escapeHtml } from './pet.js';
 
-/* Broadside：单一朱红 + 近黑墨阶，颜色全部取主题令牌（scaffold tokens.css）。
-   SVG presentation attribute 支持 var()/color-mix()，与 CSS 共用同一套令牌。 */
+/* Apple Design System：品牌三色取 apple-tokens.css 的 token（Sun-Bleached Polaroid）。
+   SVG presentation attribute 支持 var()/color-mix()，与 CSS 共用同一套令牌，双模式自动适配。 */
 const KIND_COLOR = {
-  core: { fill: 'color-mix(in oklab, var(--color-accent) 16%, var(--color-paper))', stroke: 'var(--color-accent)', text: 'var(--color-accent)' },
-  observed: { fill: 'color-mix(in oklab, var(--color-ink) 12%, var(--color-paper))', stroke: 'var(--color-ink)', text: 'var(--color-ink)' },
-  grown: { fill: 'color-mix(in oklab, var(--color-ink) 26%, var(--color-paper))', stroke: 'var(--color-ink)', text: 'var(--color-ink)' },
+  core: { fill: 'var(--accent-soft)', stroke: 'var(--accent-primary)', text: 'var(--accent-primary)' },
+  observed: { fill: 'var(--brand-sand)', stroke: 'var(--brand-sand)', text: 'var(--label-primary)' },
+  grown: { fill: 'var(--brand-pine)', stroke: 'var(--brand-pine)', text: 'var(--brand-paper)' },
 };
 
 const LAYER_STYLE = [
