@@ -23,6 +23,7 @@ import { Pet, escapeHtml } from './pet.js';
 import { QUESTIONS, scoreQuiz, DIMENSION_LABELS } from './quiz.js';
 import { renderTerrain, zoomFracture } from './terrain.js';
 import { initOutro, showOutro } from './outro.js';
+import { renderDaily } from './daily.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -37,6 +38,7 @@ const state = {
   quizPicked: {},
   topic: '',
   ownQuote: null,
+  quota: null,
 };
 
 let pet = null;
@@ -280,6 +282,7 @@ async function loadQuota() {
   const pill = $('#pill-quota');
   try {
     const q = await getQuota();
+    state.quota = q;              // 日报头版要用真实额度
     const list = q.apis ?? [];
     const find = (id) => list.find((x) => x.api_id === id);
     const disc = find('question_discovery');
@@ -954,13 +957,19 @@ async function init() {
   renderQuiz();
   renderCards();
   await loadProfile();
-  loadQuota();
+  await loadQuota();   // 日报要用真实额度，等它回来
 
   // 材料：真实收藏
   try {
     state.favorites = await getFavorites(9);
     renderMaterials();
     renderStrip();
+
+    // 日报头版：把真实收藏印成一张报（打开即见的首屏）
+    renderDaily($('#daily-paper'), {
+      favorites: state.favorites,
+      quota: state.quota,
+    });
     // 脚本 0:15：材料摊开了，桌宠转头问一句「要不我先啃一口？」
     pet.setState('greet');
     pet.say('offer', { note: '拖一条到它身上，或者点下面的按钮' });
@@ -971,6 +980,13 @@ async function init() {
   // 事件
   $('#btn-feed').addEventListener('click', feed);
   $('#btn-views').addEventListener('click', loadViewpoints);
+
+  // 日报首屏 → 翻开内页（桌宠工作台）
+  $('#daily-enter')?.addEventListener('click', () => {
+    const tabs = $('#tabs');
+    if (!tabs) return;
+    tabs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
 
   // 脚本 1:15：看第一条 → 桌宠说一句「这是知乎上真有人写过的」
   // 挂在**卡片**上（点标题或点出处都算「看这条」）；
@@ -1048,8 +1064,10 @@ async function init() {
     });
   });
 
-  // 演练模式：?demo=1 自动串一遍
+  // 演练模式：?demo=1 自动串一遍（脚本从桌宠开始，先翻到内页，别停在日报头版）
   if (new URLSearchParams(location.search).has('demo')) {
+    $('#daily-front')?.scrollIntoView({ block: 'start' });
+    $('#tabs')?.scrollIntoView({ block: 'start' });
     const { runDemo } = await import('./demo.js');
     runDemo({ state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro });
   }

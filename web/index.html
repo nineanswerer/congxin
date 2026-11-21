@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>从心 · 桌宠</title>
-<meta name="description" content="从心：桌宠陪你把知乎收藏照成一张认知地图，每张卡片都能点回原文。" />
+<title>从心日报 · 把你的收藏印成一张报</title>
+<meta name="description" content="从心日报：把你的知乎收藏与阅读痕迹印成一张复古报刊头版，每张都能点回原文。" />
 <!-- Hallmark / Broadside：Six Caps + Bevan + Archivo Narrow（拉丁），Noto 中文回退 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -29,6 +29,14 @@
     <button class="pill outro-trigger" id="btn-outro" title="落版（4:50 至 5:00）· 快捷键 O / End">落版</button>
   </div>
 </header>
+
+<!-- ============================ 每日日报 · 首屏头版 ============================
+     把真实收藏 / 读过的东西印成一张复古报刊。由 daily.js 用真实数据渲染，
+     打开即是首屏；点「翻开内页」进入下面的桌宠工作台（问答 / 照镜子）。 -->
+<section class="daily-front" id="daily-front">
+  <div class="daily-paper" id="daily-paper"></div>
+  <button class="daily-enter" id="daily-enter" type="button">翻开内页 ↓ · 桌宠在下面等你</button>
+</section>
 
 <nav class="tabs" id="tabs">
   <button data-tab="flow" class="is-on">主流程 · 它在陪你干活</button>
