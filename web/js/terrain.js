@@ -14,20 +14,29 @@
 
 import { escapeHtml } from './pet.js';
 
+/* Apple Design System：品牌三色取 apple-tokens.css 的 token（Sun-Bleached Polaroid）。
+   SVG presentation attribute 支持 var()/color-mix()，与 CSS 共用同一套令牌，双模式自动适配。 */
 const KIND_COLOR = {
-  core: { fill: 'rgba(74,158,255,.22)', stroke: 'rgba(74,158,255,.75)', text: '#cfe4ff' },
-  observed: { fill: 'rgba(255,180,84,.20)', stroke: 'rgba(255,180,84,.75)', text: '#ffd9a8' },
-  grown: { fill: 'rgba(93,211,158,.20)', stroke: 'rgba(93,211,158,.75)', text: '#b6f0d6' },
+  core: { fill: 'var(--accent-soft)', stroke: 'var(--accent-primary)', text: 'var(--accent-primary)' },
+  observed: { fill: 'var(--brand-sand)', stroke: 'var(--brand-sand)', text: 'var(--label-primary)' },
+  grown: { fill: 'var(--brand-pine)', stroke: 'var(--brand-pine)', text: 'var(--brand-paper)' },
 };
 
 const LAYER_STYLE = [
-  { key: 'self_reported', dy: -190, dz: 110 },
-  { key: 'behavioral', dy: 0, dz: 0 },
-  { key: 'situational', dy: 190, dz: -110 },
+  { key: 'self_reported' },
+  { key: 'behavioral' },
+  { key: 'situational' },
 ];
 
 const W = 760;
 const H = 220;
+
+/** 背景框的内边距（与 `layerSvg` 里那个 rect 的 x=18 对齐）。 */
+const PAD_X = 18;
+/** 块默认宽 / 下限宽（再窄就装不下字了）/ 块间最小间隙。 */
+const BLOCK_W = 104;
+const BLOCK_MIN_W = 52;
+const BLOCK_GAP = 10;
 
 function px(x) { return 34 + x * (W - 78); }
 function py(y) { return 34 + y * (H - 96); }
@@ -38,16 +47,93 @@ function clip(s, n) {
   return str.length > n ? `${str.slice(0, n)}…` : str;
 }
 
-function blockSvg(b) {
+/**
+ * 层内块布局 —— **碰撞避让**（web/README 已知问题 #6）。
+ *
+ * 为什么会叠：后端 `server/src/services/terrain.js` 里自述层与行为层按
+ * `x = (i + 1) / (total + 1)` **等距**铺开，情境层有一半按 hash 出随机位置。
+ * 块宽固定 104px、画布可用宽 724px —— 块一多，等距间距就小于块宽，直接糊在一起；
+ * 随机位置还会偶然撞车。
+ *
+ * 做法（只动渲染，不改后端契约）：
+ *   1. 块多时先**自适应缩窄块宽**，让 n 个块放得下；
+ *   2. 按 position.x 排好序后**沿 x 轴推开**，保证相邻块间距 ≥ 块宽 + 间隙；
+ *   3. 右边界越界反向压回；仍放不下时均匀铺开——**宁可贴边，也不让两块重叠**。
+ *
+ * 返回每块算好的几何量，`blockSvg` 只管画，不再自己算坐标。
+ *
+ * 导出仅供自测（`node --input-type=module` 跑边界用例），运行时不从外部调用。
+ */
+export function layoutBlocks(list) {
+  const n = list.length;
+  if (!n) return [];
+
+  const avail = W - PAD_X * 2;
+
+  // 1. 自适应块宽 + 间隙：n 块 + (n-1) 个间隙塞不进可用宽 → 先缩块，再缩间隙。
+  //    这样无论一层有多少块，总宽都不会超过画布（极端密度下也绝不重叠）。
+  let w = BLOCK_W;
+  let gap = BLOCK_GAP;
+  if (n * w + (n - 1) * gap > avail) {
+    w = (avail - (n - 1) * gap) / n;
+    if (w < BLOCK_MIN_W) {
+      w = BLOCK_MIN_W;
+      gap = n > 1 ? Math.max(2, (avail - n * w) / (n - 1)) : 0;
+    }
+  }
+  w = Math.max(BLOCK_MIN_W, Math.min(BLOCK_W, Math.floor(w)));
+
+  // 2. position.x ∈ [0,1] → 块中心的可用落点区间
+  const left = PAD_X + w / 2;
+  const right = W - PAD_X - w / 2;
+  const span = Math.max(0, right - left);
+
+  const items = list.map((b, idx) => ({
+    b,
+    idx,
+    x: left + (b.position?.x ?? 0.5) * span,
+    y: py(b.position?.y ?? 0.5),
+    w,
+    h: 30 + (b.height ?? 0.4) * 24,
+  })).sort((a, b) => a.x - b.x || a.idx - b.idx);
+
+  // 3. 左 → 右推开
+  for (let i = 1; i < items.length; i++) {
+    const need = items[i - 1].x + w + gap;
+    if (items[i].x < need) items[i].x = need;
+  }
+
+  // 4. 右越界 → 反向压回（保持相对顺序与最小间隙）
+  const maxX = W - PAD_X - w / 2;
+  if (items[items.length - 1].x > maxX) {
+    items[items.length - 1].x = maxX;
+    for (let i = items.length - 2; i >= 0; i--) {
+      const cap = items[i + 1].x - w - gap;
+      if (items[i].x > cap) items[i].x = cap;
+    }
+  }
+
+  // 5. 左越界（块密度到极限）→ 均匀铺开，保证绝对不重叠
+  if (items[0].x < left) {
+    const step = w + gap;
+    items.forEach((it, i) => { it.x = left + i * step; });
+  }
+
+  return items;
+}
+
+/** 按块宽决定每行能放几个字（字号 11px，留 12px 边距）。 */
+function charsPerLine(w) {
+  return Math.max(3, Math.floor((w - 12) / 11));
+}
+
+function blockSvg(item) {
+  const { b, x, y, w, h } = item;
   const c = KIND_COLOR[b.kind] ?? KIND_COLOR.core;
-  const x = px(b.position?.x ?? 0.5);
-  const y = py(b.position?.y ?? 0.5);
-  const h = 30 + (b.height ?? 0.4) * 24;
-  const w = 104;
   const rx = x - w / 2;
   const ry = Math.max(8, y - h);
 
-  const lines = clip(b.label, 10).split('');
+  const lines = clip(b.label, charsPerLine(w) * 2).split('');
   const half = Math.ceil(lines.length / 2);
   const l1 = lines.slice(0, half).join('');
   const l2 = lines.slice(half).join('');
@@ -63,15 +149,15 @@ function blockSvg(b) {
 }
 
 function layerSvg(layer, key) {
-  const blocks = (layer?.blocks ?? []).map(blockSvg).join('');
+  const blocks = layoutBlocks(layer?.blocks ?? []).map(blockSvg).join('');
   const name = layer?.label ?? key;
   const emptyHint = (layer?.blocks ?? []).length
     ? ''
-    : `<text class="lsub" x="380" y="118" text-anchor="middle" fill="#6d7689">（这层还是空的）</text>`;
+    : `<text class="lsub" x="380" y="118" text-anchor="middle" fill="#8A8579">（这层还是空的）</text>`;
   return `
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${escapeHtml(name)}">
       <rect x="18" y="14" width="${W - 36}" height="${H - 42}" rx="12"
-            fill="rgba(255,255,255,.028)" stroke="rgba(255,255,255,.10)"/>
+            fill="rgba(74,59,50,.05)" stroke="rgba(74,59,50,.16)"/>
       <text class="lname" x="34" y="36">${escapeHtml(name)}${
         layer?.type ? `　·　${escapeHtml(layer.type)}` : ''
       }</text>
@@ -119,9 +205,9 @@ function drawBridges(terrainEl, bridges) {
     const my = (a.y + b.y) / 2 - 30;
     paths.push(`
       <path d="M ${a.x.toFixed(1)} ${a.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}"
-            fill="none" stroke="rgba(93,211,158,.8)" stroke-width="2" stroke-dasharray="5 4"/>
-      <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>
-      <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="3" fill="rgba(93,211,158,.95)"/>`);
+            fill="none" stroke="rgba(30,48,39,.80)" stroke-width="2" stroke-dasharray="5 4"/>
+      <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="3" fill="rgba(30,48,39,.95)"/>
+      <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="3" fill="rgba(30,48,39,.95)"/>`);
   }
   if (!paths.length) return;
 
@@ -152,11 +238,13 @@ export function renderTerrain(wrap, data, onFracture) {
   const layers = data?.layers ?? {};
   const fractures = data?.fractures ?? [];
 
+  // ⚠️ 三层之间的间距（translateY / translateZ）**不写死在这里**——
+  // 写死在 JS 里，窄屏下图层整体缩小、间距却不变 → 三层会散架。
+  // 改成 CSS 变量 `--layer-dy` / `--layer-dz`，由 app.css 按断点收缩。
   const layerHtml = LAYER_STYLE.map((s) => {
     const layer = layers[s.key];
     return `
-      <div class="layer" data-layer="${s.key}"
-           style="transform: translate(-50%,-50%) translateY(${s.dy}px) translateZ(${s.dz}px) rotateX(12deg);">
+      <div class="layer" data-layer="${s.key}">
         ${layerSvg(layer, s.key)}
       </div>`;
   }).join('');
@@ -169,7 +257,7 @@ export function renderTerrain(wrap, data, onFracture) {
     const amp = 8 + (f.intensity ?? 0.5) * 12;
     const path = `M ${x - 26} ${y - amp} L ${x - 9} ${y + amp * 0.6} L ${x + 4} ${y - amp * 0.8}
                   L ${x + 15} ${y + amp * 0.4} L ${x + 28} ${y - amp * 0.5}`;
-    const color = (f.intensity ?? 0) > 0.6 ? '#ff6b6b' : '#ffb454';
+    const color = (f.intensity ?? 0) > 0.6 ? '#B7332C' : '#C88851';
     return `
       <g class="fracture-mark" data-fracture-id="${escapeHtml(f.id)}" style="cursor:pointer">
         <path class="fracture-line" d="${path}" fill="none" stroke="${color}"
@@ -184,7 +272,7 @@ export function renderTerrain(wrap, data, onFracture) {
   // 断层标记：**必须和图层同一个盒子**（同一个 viewBox、同一个 transform），
   // 否则坐标对不上 —— 之前它自己撑满整个 wrap，标记跑到地图外面去了。
   const overlay = fractures.length
-    ? `<div class="layer layer-overlay" style="transform: translate(-50%,-50%) translateY(0px) translateZ(0px) rotateX(12deg);">
+    ? `<div class="layer layer-overlay" data-layer="overlay">
          <svg class="fracture-overlay" viewBox="0 0 ${W} ${H}" role="img" aria-label="断层标记">
            <g pointer-events="auto">${fractureHtml}</g>
          </svg>

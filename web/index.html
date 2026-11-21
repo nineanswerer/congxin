@@ -3,7 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>从心 · 桌宠</title>
+<title>从心日报 · 把你的收藏印成一张报</title>
+<meta name="description" content="从心日报：把你的知乎收藏与阅读痕迹印成一张复古报刊头版，每张都能点回原文。" />
+<!-- Apple Design System：SF Pro 系统字体栈（无需外链），中文回退系统黑体 -->
+<!-- Apple 主题令牌（Sun-Bleached Polaroid 调色板 + 双模式），先于 app.css -->
+<link rel="stylesheet" href="css/apple-tokens.css" />
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -16,11 +20,19 @@
   </div>
   <div class="topright">
     <div class="pill" id="pill-profile"><span class="dot"></span><span id="profile-text">连接中…</span></div>
-    <div class="pill" id="pill-quota">额度 —</div>
+    <div class="pill" id="pill-quota">额度查询中</div>
     <div class="tone-switch" id="tone-switch"></div>
-    <button class="pill outro-trigger" id="btn-outro" title="落版（4:50—5:00）· 快捷键 O / End">落版</button>
+    <button class="pill outro-trigger" id="btn-outro" title="落版（4:50 至 5:00）· 快捷键 O / End">落版</button>
   </div>
 </header>
+
+<!-- ============================ 每日日报 · 首屏头版 ============================
+     把真实收藏 / 读过的东西印成一张复古报刊。由 daily.js 用真实数据渲染，
+     打开即是首屏；点「翻开内页」进入下面的桌宠工作台（问答 / 照镜子）。 -->
+<section class="daily-front" id="daily-front">
+  <div class="daily-paper" id="daily-paper"></div>
+  <button class="daily-enter" id="daily-enter" type="button">翻开内页 ↓ · 桌宠在下面等你</button>
+</section>
 
 <nav class="tabs" id="tabs">
   <button data-tab="flow" class="is-on">主流程 · 它在陪你干活</button>
@@ -33,9 +45,11 @@
   <section class="pet" id="pet">
     <div class="bubble" data-pet-bubble><span class="muted">（安静看着你）</span></div>
     <div class="petfigure">
-      <img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" />
+      <div class="petanim">
+        <img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" />
+      </div>
     </div>
-    <div class="petstate"><span class="b"></span><span data-pet-state>待机</span></div>
+    <div class="petstate" role="status"><span class="b"></span><span data-pet-state>待机</span></div>
 
     <div class="tray">
       <div class="trayhead">
@@ -73,9 +87,14 @@
 
 <footer class="strip" id="strip"></footer>
 
-<!-- ============================ 落版（4:50—5:00） ============================
+<!-- ============================ 落版（4:50 至 5:00） ============================
      内容来自 docs/P1-三件产出.md §2.4，**不归语气目录管**（这一拍没有台词）。
      快捷键：O / End 出，Esc 关。 -->
+<!-- 双模式切换（Apple HIG Step 8：Web 用右下角按钮） -->
+<button class="theme-toggle" id="theme-toggle" type="button" title="切换浅色 / 深色模式" aria-label="切换浅色或深色模式">
+  <span class="theme-toggle-icon" aria-hidden="true"></span>
+</button>
+
 <div class="outro" id="outro" aria-hidden="true" role="dialog" aria-label="从心 · 落版">
   <img class="outro-pet" src="../assets/kanshan/idle.webp" alt="刘看山 · 待机" />
   <div class="outro-title">从<em>心</em></div>
