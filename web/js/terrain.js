@@ -14,10 +14,12 @@
 
 import { escapeHtml } from './pet.js';
 
+/* Broadside：单一朱红 + 近黑墨阶，颜色全部取主题令牌（scaffold tokens.css）。
+   SVG presentation attribute 支持 var()/color-mix()，与 CSS 共用同一套令牌。 */
 const KIND_COLOR = {
-  core: { fill: 'rgba(183,51,44,.18)', stroke: 'rgba(183,51,44,.78)', text: '#7A2A25' },
-  observed: { fill: 'rgba(200,136,81,.20)', stroke: 'rgba(200,136,81,.78)', text: '#7A5230' },
-  grown: { fill: 'rgba(30,48,39,.20)', stroke: 'rgba(30,48,39,.78)', text: '#1E3027' },
+  core: { fill: 'color-mix(in oklab, var(--color-accent) 16%, var(--color-paper))', stroke: 'var(--color-accent)', text: 'var(--color-accent)' },
+  observed: { fill: 'color-mix(in oklab, var(--color-ink) 12%, var(--color-paper))', stroke: 'var(--color-ink)', text: 'var(--color-ink)' },
+  grown: { fill: 'color-mix(in oklab, var(--color-ink) 26%, var(--color-paper))', stroke: 'var(--color-ink)', text: 'var(--color-ink)' },
 };
 
 const LAYER_STYLE = [

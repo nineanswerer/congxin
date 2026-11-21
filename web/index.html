@@ -5,10 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>从心 · 桌宠</title>
 <meta name="description" content="从心：桌宠陪你把知乎收藏照成一张认知地图，每张卡片都能点回原文。" />
-<!-- 复古排版字体：Noto Serif SC 做标题；取不到时回退到本地宋体，不影响可读性 -->
+<!-- Hallmark / Broadside：Six Caps + Bevan + Archivo Narrow（拉丁），Noto 中文回退 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Noto+Serif+SC:wght@400;700;900&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Six+Caps&family=Bevan&family=Archivo+Narrow:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet" />
+<!-- 官方主题令牌与地基（scaffold broadside），必须先于 app.css -->
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/base.css" />
 <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
@@ -42,7 +45,7 @@
         <img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" />
       </div>
     </div>
-    <div class="petstate"><span class="b"></span><span data-pet-state>待机</span></div>
+    <div class="petstate" role="status"><span class="b"></span><span data-pet-state>待机</span></div>
 
     <div class="tray">
       <div class="trayhead">
