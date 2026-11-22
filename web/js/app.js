@@ -244,6 +244,9 @@ function renderToneSwitch() {
   box.innerHTML = '<label>语气</label>';
   for (const opt of state.tone?.options ?? []) {
     const b = document.createElement('button');
+    // 与 actionbar 里其它控件共用 kit 的 .btn 体系：全站只有 primary / secondary 两种按钮形状
+    b.className = 'btn btn--secondary actionbar__btn';
+    b.type = 'button';
     b.textContent = opt.name;
     if (opt.id === state.tone?.tone) b.classList.add('is-on');
     b.addEventListener('click', async () => {
@@ -456,6 +459,24 @@ function renderList() {
     </div>
     <div class="cardlist" style="margin-top:12px">${all.map(cardHtml).join('')}</div>
     ${ZHIHU_LOGIN_HINT}`;
+}
+
+/** hero 的硬事实：真实收藏条数。 */
+function collectedCount(favorites) {
+  return favorites?.collected_count ?? (favorites?.items?.length ?? 0);
+}
+
+/** hero 窗口里的头版预览：真实收藏的前三条，带出处域名。 */
+function heroPreviewHtml(favorites) {
+  const items = (favorites?.items ?? []).filter((it) => it?.url).slice(0, 3);
+  if (!items.length) {
+    return `<div class="d-loading">${escapeHtml(favorites?.empty_notice ?? '今天还没有可印的收藏。')}</div>`;
+  }
+  return `<div class="preview-list">${items.map((it, i) => {
+    let host = '';
+    try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = ''; }
+    return `<div class="preview-row"><span class="preview-no">${String(i + 1).padStart(2, '0')}</span><span class="preview-title">${escapeHtml(it.title ?? '(无标题)')}</span><span class="preview-host">${escapeHtml(host)}</span></div>`;
+  }).join('')}</div>`;
 }
 
 function renderMaterials() {
@@ -864,6 +885,13 @@ async function loadTerrain() {
     const data = await getTerrain(state.tone?.tone);
     state.terrain = data;
 
+    // tasteskill 改造：同一份真实地形数据同时印到「三层认知地图」section 的展示窗，
+    // 不重复调接口（不额外烧额度）。展示窗只读，断层交互仍在 #mirror-terrain 上。
+    const showcase = $('#terrain-mount');
+    if (showcase && showcase !== wrap) {
+      renderTerrain(showcase, data, () => {});
+    }
+
     // 创作信号：脚本 4:05 那一拍备料（用户自己写过的那句话）。
     // ⚠️ **不 await** —— 不阻塞地形渲染；取不到就降级成数据陈述，
     //    **不报错、不编、也不拿假引文充数**。
@@ -973,19 +1001,24 @@ async function init() {
     favError = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
   }
 
-  // 日报头版：把真实收藏印成一张报（打开即见的首屏）
-  //
-  // ⚠️ **必须渲染在 try 之外**（11-22 补）：
-  //    收藏接口一抛异常，上面那段 try 走 catch 走了，
-  //    `#daily-paper` 就没人填 —— 首屏会留一个**纯白空框**，
-  //    打开只看到一个空白矩形，什么提示都没有。
-  //    （2026-11-22 实测确认：缺凭据起服务时首屏就是这个白框。）
-  //    失败时也要印一张报，如实说「今天读不到」，**不留白、不编数据**。
+  // 日报头版与 hero 预览必须渲染在 try 之外（11-22 队友 5135ef8 修的真实 bug）：
+  // ⚠️ 收藏接口一抛异常，上面那段 try 走 catch，`#daily-paper` 就没人填 ——
+  //    首屏只剩一个**纯白空框**，什么提示都没有（缺凭据起服务时实测如此）。
+  //    失败时也要如实印一张「今天读不到」的报 —— **不留白、不编数据**；
+  //    hero 的计数与预览同样给兜底，不再停在「正在印…」。
   renderDaily($('#daily-paper'), {
     favorites: state.favorites,
     quota: state.quota,
     error: favError,
   });
+
+  // hero 上的真实硬事实：今日收藏条数 + 头版索引预览（同一份真实数据，不另调接口）
+  const heroCount = $('#hero-count');
+  if (heroCount) heroCount.textContent = favError ? '—' : String(collectedCount(state.favorites));
+  const preview = $('#hero-paper-preview');
+  if (preview) preview.innerHTML = favError
+    ? `<div class="d-loading">${escapeHtml(favError)}</div>`
+    : heroPreviewHtml(state.favorites);
 
   // 事件
   $('#btn-feed').addEventListener('click', feed);
@@ -1090,7 +1123,7 @@ async function init() {
 
   // 演练模式：?demo=1 自动串一遍（脚本从桌宠开始，先翻到内页，别停在日报头版）
   if (new URLSearchParams(location.search).has('demo')) {
-    $('#daily-front')?.scrollIntoView({ block: 'start' });
+    $('#pet')?.scrollIntoView({ block: 'center' });   // 桌宠在工作台里，脚本从它开始
     $('#tabs')?.scrollIntoView({ block: 'start' });
     const { runDemo } = await import('./demo.js');
     runDemo({ state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro });

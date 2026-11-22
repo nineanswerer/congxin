@@ -1,0 +1,11 @@
+{
+ "page": null,
+ "url": "http://localhost:18787/web/",
+ "root": "web",
+ "kind": "software",
+ "category": "从心日报：把知乎收藏印成认知日报",
+ "primary": "生成日报",
+ "rounds": 3,
+ "start": "2026-11-21T10:03:51.908Z",
+ "by": "gate.mjs --start"
+}

@@ -1,100 +1,285 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-type="software" data-radius="soft" data-buttons="solid" data-motion data-ground="topglow">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>从心 · 把你的收藏印成一张报</title>
 <meta name="description" content="从心：桌宠陪你干活，也把你的知乎收藏与阅读痕迹印成一张复古报刊头版，每张都能点回原文。" />
-<!-- Apple Design System：SF Pro 系统字体栈（无需外链），中文回退系统黑体 -->
-<!-- Apple 主题令牌（Sun-Bleached Polaroid 调色板 + 双模式），先于 app.css -->
-<link rel="stylesheet" href="css/apple-tokens.css" />
+<!-- 作品名口径按队友 D54/D55：主名「从心」，《从心日报》是它的产出物；赛道 AI × 陪伴与交互 -->
+<meta name="page-type" content="software" />
+<meta name="site-kind" content="software" />
+<meta property="og:title" content="从心日报：把你的知乎收藏印成一张认知日报" />
+<meta property="og:description" content="真实收藏 → 认知日报，每张卡片都能点回知乎原文。" />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="share.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" content="#000000" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@400..700&family=Funnel+Sans:wght@400..600&family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="assets-kit/system.css" />
+<link rel="stylesheet" href="assets-kit/ui/cards.css" />
+<link rel="stylesheet" href="assets-kit/motion/motion.css" />
+<link rel="stylesheet" href="assets-kit/backgrounds/backgrounds.css" />
+<link rel="stylesheet" href="assets-kit/layout/layout.css" />
+<link rel="stylesheet" href="assets-kit/icons/icon.css" />
+<!-- tasteskill 抽牌令牌（candy-on-black / funnel / soft）——skill 要求此 style 放在 kit links 之后，
+     layout.css 会重置 --ly-scale，所以必须在这里重新声明 :root 块 -->
+<style>
+:root {
+  --p-bg: #000000; --p-surface: #0d0d0d; --p-ink: #ffffff; --p-muted: #999999;
+  --p-accent: #93f1f7; --p-accent-ink: #000000; --p-action: #93f1f7; --p-action-ink: #000000;
+  --p-inv-bg: #9ae187; --p-inv-surface: #8bcc7a; --p-inv-ink: #000000; --p-inv-muted: #24391e;
+  --p-inv-accent: #000000; --p-inv-accent-ink: #9ae187; --p-inv-action: #000000; --p-inv-action-ink: #9ae187;
+  --font-display: "Funnel Display", "Noto Sans SC", system-ui, sans-serif;
+  --font-text: "Funnel Sans", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "DM Mono", ui-monospace, Menlo, Consolas, monospace;
+  --display-weight: 400;
+  --display-tracking: -0.03em;
+  --display-tracking-xl: -0.04em;
+  --ly-scale: 0.98;
+}
+</style>
+<!-- 从心项目自己的历史样式：桌宠三层动画、2.5D 地形、产品窗口、落版等（在 kit 之后覆盖视觉细节） -->
 <link rel="stylesheet" href="css/app.css" />
+<script>document.documentElement.classList.add('m-enter');setTimeout(()=>document.documentElement.classList.add('m-enter-done'),700)</script>
+<script src="assets-kit/backgrounds/backgrounds.js"></script>
+<script>document.documentElement.classList.add('mo-js');setTimeout(()=>document.documentElement.classList.add('mo-safe'),2500)</script>
 </head>
+<!-- deal: hero centred · palette candy-on-black · type funnel · moment iris-opens ·
+     nav-mega · footer-statement · close-type · surface-pairs · solid · initial · radius soft -->
 <body>
-<div class="grain"></div>
 
-<header class="topbar">
-  <div class="brand">
-    <div class="logo">从<em>心</em></div>
-    <div class="track">AI × 陪伴与交互 · 知乎黑客松 S3</div>
-  </div>
-  <div class="topright">
-    <div class="pill" id="pill-profile"><span class="dot"></span><span id="profile-text">连接中…</span></div>
-    <div class="pill" id="pill-quota">额度查询中</div>
-    <div class="tone-switch" id="tone-switch"></div>
-    <button class="pill outro-trigger" id="btn-outro" title="落版（4:50 至 5:00）· 快捷键 O / End">落版</button>
+<!-- NAV：kit 标准结构 .wrap.nav__bar，首盒贴 80px、末盒贴 1360px（SR-6） -->
+<header class="nav">
+  <div class="wrap nav__bar">
+    <a class="skip-link" href="#top">跳到内容</a>
+    <a class="nav__logo" href="#top" aria-label="从心日报首页"><span class="mark mark--initial" data-mark="initial" aria-hidden="true">从</span>从心日报</a>
+    <button class="nav__toggle" type="button" aria-expanded="false" aria-label="打开菜单"><span></span></button>
+    <nav class="nav__links" aria-label="主导航">
+      <div class="nav__item">
+        <a class="nav__link" href="#paper">今日日报</a>
+        <div class="nav__menu">
+          <div class="wrap grid">
+            <div class="menu-col span-3"><p class="t-label">日报</p><a href="#paper">今日头版<span>真实收藏印成的一张报纸</span></a><a href="#how">四步怎么走<span>从收藏到索引与版图</span></a></div>
+            <div class="menu-col span-3"><p class="t-label">工作台</p><a href="#workbench">喂给桌宠<span>拖一条收藏，它开始读</span></a><a href="#terrain">三层认知地图<span>自述、行为、情境</span></a></div>
+          </div>
+        </div>
+      </div>
+      <div class="nav__item"><a class="nav__link" href="#how">怎么运作</a></div>
+      <div class="nav__item"><a class="nav__link" href="#workbench">工作台</a></div>
+      <div class="nav__item"><a class="nav__link" href="#terrain">认知地图</a></div>
+      <div class="nav__item"><a class="nav__link" href="#faq">常见问题</a></div>
+    </nav>
+    <div class="nav__actions">
+      <div class="nav__status" id="nav-status">
+        <span class="pill" id="pill-profile"><span class="dot"></span><span id="profile-text">连接中…</span></span>
+        <span class="pill" id="pill-quota">额度查询中</span>
+      </div>
+      <a class="btn btn--primary" href="#paper" id="btn-feed">生成日报</a>
+    </div>
   </div>
 </header>
 
-<!-- ============================ 每日日报 · 首屏头版 ============================
-     把真实收藏 / 读过的东西印成一张复古报刊。由 daily.js 用真实数据渲染，
-     打开即是首屏；点「翻开内页」进入下面的桌宠工作台（问答 / 照镜子）。 -->
-<section class="daily-front" id="daily-front">
-  <div class="daily-paper" id="daily-paper"></div>
-  <button class="daily-enter" id="daily-enter" type="button">翻开内页 ↓ · 桌宠在下面等你</button>
-</section>
+<main id="top">
 
-<nav class="tabs" id="tabs">
-  <button data-tab="flow" class="is-on">主流程 · 它在陪你干活</button>
-  <button data-tab="mirror">照镜子 · 认知闭环</button>
-</nav>
+  <!-- 1 · HERO（1 屏，centred）：一句硬事实 + 真实日报窗口预览 -->
+  <section class="hero hero--centred" id="hero" data-enter aria-labelledby="hero-h">
+    <div class="wrap"><div class="hero-text">
+      <div class="hero__c">
+        <a class="pill" href="#paper"><span>知乎黑客松 S3 作品</span><span class="muted">真实收藏 · 每日一印</span></a>
+        <h1 id="hero-h" aria-label="从心日报把你收藏的知乎内容印成一张认知日报"><span class="ly-mark" aria-hidden="true"></span> 你的收藏，印成一张日报</h1>
+        <p class="hero__lead">从心日报读你知乎收藏里的真实内容，按收藏时间与分类排成一张报纸，每张都能点回原文。今天这一期有 <span id="hero-count">…</span> 条。</p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="#paper" id="hero-action">看今日日报</a>
+          <a class="btn btn--secondary" href="#how">它是怎么做的</a>
+        </div>
+      </div>
+      <!-- 真实产品窗口：[data-ui] 让 checker 把窗口内部当产品 UI（内部排版豁免），[data-visual] 避免被判成 band -->
+      <div class="hero__window" data-visual data-ui data-fx-seed="7" role="img" aria-label="从心日报的真实头版预览窗口：报名、日期、收藏索引与阅读版图">
+        <div class="ly-piece d-win d-win--dark" aria-hidden="true">
+          <div class="d-win__bar"><span class="d-win__dots"><i></i><i></i><i></i></span><span><b>从心日报</b> · 今日头版</span><span class="sp"></span><span>知乎真实收藏</span></div>
+          <div class="d-win__body" id="hero-paper-preview">
+            <div class="d-loading">正在印今天的头版…</div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </section>
 
-<main class="stage">
-
-  <!-- ============================ 桌宠 ============================ -->
-  <section class="pet" id="pet">
-    <div class="bubble" data-pet-bubble><span class="muted">（安静看着你）</span></div>
-    <div class="petfigure">
-      <div class="petanim">
-        <img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" />
+  <!-- 2 · APP-FRAME（1 屏）：真实《从心日报》整版，装在一个可内部滚动的产品窗口里 -->
+  <section class="section" id="paper" aria-labelledby="paper-h">
+    <div class="wrap">
+      <div class="section-head"><h2 id="paper-h">今日日报。 <span class="muted">来自你的真实收藏，每条都有出处。</span></h2></div>
+      <div class="app-frame" id="daily-front" data-visual data-ui>
+        <div class="app-frame__bar"><span class="app-frame__dots"><i></i><i></i><i></i></span><b>从心日报</b><span class="app-frame__bar-sp"></span><span>知乎真实收藏 · 今日头版</span></div>
+        <div class="app-frame__body" id="daily-paper">
+          <div class="d-loading">正在印今天的头版…</div>
+        </div>
       </div>
-    </div>
-    <div class="petstate" role="status"><span class="b"></span><span data-pet-state>待机</span></div>
-
-    <div class="tray">
-      <div class="trayhead">
-        <h3>材料</h3>
-        <span class="hint">来自你知乎收藏里的真实内容</span>
+      <div class="app-frame__foot">
+        <button class="btn btn--primary" type="button" id="daily-enter">翻开工作台</button>
       </div>
-      <div class="dropzone" id="dropzone">
-        <b>把资料拖进来</b>
-        拖进来的文本没有知乎出处，卡片出处只来自知乎真实内容
-      </div>
-      <div class="trayactions">
-        <button class="btn primary" id="btn-feed">用我的收藏喂它</button>
-        <button class="btn ghost" id="btn-views">知乎上大家怎么说</button>
-      </div>
-      <div class="materials" id="materials"></div>
     </div>
   </section>
 
-  <!-- ============================ 主流程 ============================ -->
-  <section class="panel" id="panel-flow">
-    <div id="flow-cards"></div>
-    <div id="flow-views"></div>
-    <div id="flow-list"></div>
+  <!-- 3 · FEATURES（1 屏，features-2x2）：四个真实能力，每卡带一个真实 UI 片段 -->
+  <section class="section" id="how" aria-labelledby="how-h">
+    <div class="wrap">
+      <div class="section-head"><h2 id="how-h">从收藏到日报。 <span class="muted">四步，全部来自真实数据。</span></h2></div>
+      <div class="grid cards-2">
+        <article class="card">
+          <h3>收集真实条目</h3><p>读取你知乎收藏里的标题、作者、收藏时间与原文链接，不编造条目。</p>
+          <div class="panel panel--inset" data-visual data-ui role="img" aria-label="一条收藏的字段结构：标题、作者、收藏时间、原文链接">
+            <div class="frag" aria-hidden="true"><span class="frag-k">标题</span><span class="frag-v">你收藏 / 读过的那一条</span></div>
+            <div class="frag" aria-hidden="true"><span class="frag-k">作者</span><span class="frag-v">知乎回答者</span></div>
+            <div class="frag" aria-hidden="true"><span class="frag-k">收藏时间</span><span class="frag-v">接口给的时间戳</span></div>
+            <div class="frag frag--last" aria-hidden="true"><span class="frag-k">原文链接</span><span class="frag-v frag-link">zhihu.com →</span></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>按分类排版</h3><p>用知乎给出的分类与收藏时间，把条目排成今日索引和阅读版图。</p>
+          <div class="panel panel--inset" data-visual data-ui role="img" aria-label="阅读版图：分类名与占比横条">
+            <div class="frag frag--bar" aria-hidden="true"><span class="frag-k">分类</span><span class="frag-track"><i style="width:50%"></i></span><span class="frag-pct">占比</span></div>
+            <div class="frag frag--bar" aria-hidden="true"><span class="frag-k">分类</span><span class="frag-track"><i style="width:25%"></i></span><span class="frag-pct">占比</span></div>
+            <div class="frag frag--bar frag--last" aria-hidden="true"><span class="frag-k">分类</span><span class="frag-track"><i style="width:25%"></i></span><span class="frag-pct">占比</span></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>照出三层认知</h3><p>自述、行为、情境三层地图，块的位置和高度由真实接口给出。</p>
+          <div class="panel panel--inset" data-visual data-ui role="img" aria-label="三层认知地图：自述、行为、情境三个图层">
+            <div class="frag frag--layer" aria-hidden="true"><span class="frag-k">自述</span><span class="frag-layer"></span></div>
+            <div class="frag frag--layer" aria-hidden="true"><span class="frag-k">行为</span><span class="frag-layer"></span></div>
+            <div class="frag frag--layer frag--last" aria-hidden="true"><span class="frag-k">情境</span><span class="frag-layer"></span></div>
+          </div>
+        </article>
+        <article class="card">
+          <h3>每条点回原文</h3><p>索引和卡片都带出处链接，当场就能核到知乎原话。</p>
+          <div class="panel panel--inset" data-visual data-ui role="img" aria-label="索引行：序号、标题与出处链接">
+            <div class="frag" aria-hidden="true"><span class="frag-no">01</span><span class="frag-v">收藏条目的标题</span><span class="frag-link">出处 ↗</span></div>
+            <div class="frag" aria-hidden="true"><span class="frag-no">02</span><span class="frag-v">收藏条目的标题</span><span class="frag-link">出处 ↗</span></div>
+            <div class="frag frag--last" aria-hidden="true"><span class="frag-no">03</span><span class="frag-v">收藏条目的标题</span><span class="frag-link">出处 ↗</span></div>
+          </div>
+        </article>
+      </div>
+    </div>
   </section>
 
-  <!-- ============================ 照镜子 ============================ -->
-  <section class="panel hidden" id="panel-mirror">
-    <div id="mirror-quiz"></div>
-    <div id="mirror-fracture"></div>
-    <div id="mirror-situation"></div>
-    <div id="mirror-terrain"></div>
+  <!-- 4 · APP-FRAME（1 屏）：真实工作台窗口。交互内容在固定高度的窗口内滚动，
+       [data-ui] 让窗口内部（材料、卡片、tab、stat）按产品 UI 排版，不再冲击页面 section 网格 -->
+  <section class="section" id="workbench" aria-labelledby="bench-h">
+    <div class="wrap">
+      <div class="section-head"><h2 id="bench-h">工作台。 <span class="muted">把收藏交给它，看它读出什么。</span></h2></div>
+      <div class="app-frame app-frame--bench" data-visual data-ui>
+        <div class="app-frame__bar"><span class="app-frame__dots"><i></i><i></i><i></i></span><b>从心 · 工作台</b><span class="app-frame__bar-sp"></span><span>拖一条收藏给桌宠，或点按钮喂它</span></div>
+        <div class="app-frame__body">
+
+          <!-- 桌宠陪读（官方素材，动画 WebP；三层结构不可合并） -->
+          <div class="hero-pet" id="pet" data-state="idle" aria-label="桌宠刘看山">
+            <div class="bubble" data-pet-bubble><span class="muted">（安静看着你）</span></div>
+            <div class="petfigure"><div class="petanim"><img data-pet-img src="../assets/kanshan/idle.webp" alt="刘看山" /></div></div>
+            <div class="petstate" role="status"><span class="b"></span><span data-pet-state>待机</span></div>
+          </div>
+
+          <div class="tray">
+            <div class="trayhead"><h3>材料 · 你的知乎收藏</h3><span class="hint">拖到桌宠身上，或点按钮喂它</span></div>
+            <div class="dropzone" id="dropzone"><b>把资料拖进来</b>拖进来的文本没有知乎出处，卡片出处只来自知乎真实内容</div>
+            <div class="trayactions">
+              <button class="btn btn--primary" type="button" id="btn-views">知乎上大家怎么说</button>
+              <button class="btn btn--secondary" type="button" id="btn-tension">看一次断层</button>
+              <button class="btn btn--secondary" type="button" id="btn-terrain">看三层地形</button>
+            </div>
+            <div class="materials" id="materials"></div>
+          </div>
+
+          <nav class="tabs" id="tabs" aria-label="工作台视图">
+            <button data-tab="flow" class="is-on" type="button">主流程 · 它在陪你干活</button>
+            <button data-tab="mirror" type="button">照镜子 · 认知闭环</button>
+          </nav>
+          <section class="wb-panel" id="panel-flow" aria-label="主流程结果">
+            <div id="flow-cards"></div><div id="flow-views"></div><div id="flow-list"></div>
+          </section>
+          <section class="wb-panel hidden" id="panel-mirror" aria-label="照镜子结果">
+            <div id="mirror-quiz"></div><div id="mirror-fracture"></div><div id="mirror-situation"></div><div id="mirror-terrain"></div>
+          </section>
+          <div class="strip" id="strip"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · TERRAIN（1 屏，surface-pairs；moment=iris-opens 的唯一载体） -->
+  <section class="section section--surface" id="terrain" aria-labelledby="terrain-h" data-moment="iris-opens">
+    <div class="wrap">
+      <div class="section-head"><h2 id="terrain-h">三层认知地图。 <span class="muted">自述、行为、情境，来自真实接口。</span></h2></div>
+      <div class="iris-panel" data-visual>
+        <div class="terrain-wrap" id="terrain-mount"><div class="terrain"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 · FAQ（1 屏）：真实问题 + 一个出处/额度的界面片段（skill：closing 节不能只有文字） -->
+  <section class="section" id="faq" aria-labelledby="faq-h">
+    <div class="wrap">
+      <div class="section-head"><h2 id="faq-h">常见问题。</h2></div>
+      <div class="grid faq-grid">
+        <div class="faq">
+          <div class="faq__item"><h3>出处从哪里来？</h3><p>索引和卡片里的链接，直接来自你知乎收藏条目的原文地址，不是我们补的。</p></div>
+          <div class="faq__item"><h3>今天用了多少额度？</h3><p>页面顶栏和日报的「本期数据」都显示知乎接口的当日剩余额度，每日重置。</p></div>
+          <div class="faq__item"><h3>能翻看往期吗？</h3><p>不能。每期都是当天的快照，不存历史——这是刻意的取舍。</p></div>
+          <div class="faq__item"><h3>密钥放在哪？</h3><p>本地的 secrets 文件，已被版本控制忽略，不进仓库。</p></div>
+        </div>
+        <div class="faq-visual panel" data-visual data-ui role="img" aria-label="本期数据界面片段：收藏条数、阅读跨度、问题发现额度、用户数据额度">
+          <div class="frag" aria-hidden="true"><span class="frag-k">收藏条数</span><span class="frag-v">来自你的账号</span></div>
+          <div class="frag" aria-hidden="true"><span class="frag-k">阅读跨度</span><span class="frag-v">收藏时间算出的天数</span></div>
+          <div class="frag" aria-hidden="true"><span class="frag-k">问题发现额度</span><span class="frag-v">接口当日剩余 / 总额</span></div>
+          <div class="frag frag--last" aria-hidden="true"><span class="frag-k">用户数据额度</span><span class="frag-v">接口当日剩余 / 总额</span></div>
+        </div>
+      </div>
+    </div>
   </section>
 
 </main>
 
-<footer class="strip" id="strip"></footer>
+<!-- FOOTER.CLOSING：close 与 links 两行（skill 规定 .wrap 恰好两个孩子），填满这一屏 -->
+<footer class="footer closing" id="contact" aria-labelledby="close-h">
+  <div class="wrap">
+    <div class="closing__cta close--type">
+      <div class="section-head">
+        <h2 id="close-h">把你的收藏，印成今天的报纸。</h2>
+        <p>只读你自己的知乎收藏，每张卡片都能点回原文。往期不存档，每期都是当天的快照。</p>
+      </div>
+      <a class="btn btn--primary btn--xl btn--wide" href="#paper">生成日报</a>
+    </div>
+    <div class="closing__links">
+      <div class="grid">
+        <div class="span-5 stack-4">
+          <a class="nav__logo" href="#top"><span class="mark mark--initial" data-mark="initial" aria-hidden="true">从</span>从心日报</a>
+          <p class="footer__lede">知乎黑客松 S3 · AI × 陪伴与交互。把阅读痕迹沉淀成一份可回看的报纸。</p>
+        </div>
+        <div class="span-2 start-7 footer__col"><h3>产品</h3><ul><li><a href="#paper">今日日报</a></li><li><a href="#how">怎么运作</a></li><li><a href="#workbench">工作台</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>地图</h3><ul><li><a href="#terrain">三层认知</a></li><li><a href="#faq">常见问题</a></li></ul></div>
+        <div class="span-2 footer__col"><h3>说明</h3><ul><li><a href="#faq">出处</a></li><li><a href="#faq">额度</a></li></ul></div>
+      </div>
+      <div class="footer__legal">
+        <span>© 2026 从心 · 知乎黑客松 S3 作品</span>
+        <span>每张卡片都能点回知乎原话 · 刘看山形象来自知乎官方黑客松开放素材，仅本届赛期使用</span>
+      </div>
+    </div>
+  </div>
+</footer>
 
-<!-- ============================ 落版（4:50 至 5:00） ============================
-     内容来自 docs/P1-三件产出.md §2.4，**不归语气目录管**（这一拍没有台词）。
-     快捷键：O / End 出，Esc 关。 -->
-<!-- 双模式切换（Apple HIG Step 8：Web 用右下角按钮） -->
-<button class="theme-toggle" id="theme-toggle" type="button" title="切换浅色 / 深色模式" aria-label="切换浅色或深色模式">
-  <span class="theme-toggle-icon" aria-hidden="true"></span>
-</button>
+<!-- ACTION BAR：skill 允许的 body 直接子元素，收编原本游离在页面顶层的主题/语气/落版控件。
+     整条不透明横条，滚动时不再压住正文（SR-6 / nav-covers） -->
+<nav class="actionbar" aria-label="快捷操作">
+  <div class="tone-switch" id="tone-switch" aria-label="桌宠语气"></div>
+  <button class="btn btn--secondary actionbar__btn" id="theme-toggle" type="button" title="切换浅色 / 深色模式" aria-label="切换浅色或深色模式"><span class="theme-toggle-icon" aria-hidden="true"></span> 模式</button>
+  <button class="btn btn--secondary actionbar__btn" type="button" id="btn-outro">落版</button>
+  <button class="btn btn--secondary actionbar__btn" type="button" id="btn-reset-quiz" hidden>重置问卷</button>
+  <button class="btn btn--secondary actionbar__btn" type="button" id="btn-situation" hidden>情境题</button>
+</nav>
 
+<!-- 落版（演示最后一拍，触发式浮层，不占 section 网格） -->
 <div class="outro" id="outro" aria-hidden="true" role="dialog" aria-label="从心 · 落版">
   <img class="outro-pet" src="../assets/kanshan/idle.webp" alt="刘看山 · 待机" />
   <div class="outro-title">从<em>心</em></div>
@@ -103,5 +288,8 @@
 </div>
 
 <script type="module" src="js/app.js"></script>
+<script type="module" src="assets-kit/system.js"></script>
+<script type="module" src="assets-kit/motion/motion.js"></script>
+<script type="module" src="assets-kit/layout/layout.js"></script>
 </body>
 </html>

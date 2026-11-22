@@ -1,0 +1,20 @@
+{
+ "palettes": [
+  "candy-on-black"
+ ],
+ "types": [
+  "funnel"
+ ],
+ "dealt": [
+  "funnel",
+  "gabarito",
+  "instrument"
+ ],
+ "moments": [
+  {
+   "id": "iris-opens",
+   "at": "2026-11-21T10:04:17.529Z",
+   "seed": "eb8e75c7"
+  }
+ ]
+}

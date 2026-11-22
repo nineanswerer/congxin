@@ -63,3 +63,8 @@ dark-echo-*.jpg
 skin-*.png
 
 .hallmark/
+
+# taste-skill 的 gate 验证中间产物（截图、渲染报告、指纹状态）——只在本机验收用，不入库；
+# 设计决策记录 .taste-skill/plan.md、build.json、history.json 等小型元数据随版本保留。
+.taste-skill/gate/
+.taste-skill/gate.json
