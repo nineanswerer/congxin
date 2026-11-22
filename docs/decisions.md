@@ -1646,3 +1646,93 @@ D48 解决了「怎么交付」，但**密钥怎么给**是独立的一件事，
 
 **已定并实施**。交付 ZIP 实测：`scf_bootstrap` = **0755**、其余 64 个成员全 0644、
 无 `node_modules` / `docs` / 开发脚本 / 密钥 / `.env`。
+
+## D51 · 队友 `web/apple-daily-redesign` 分支全量合入 main + 作品名口径回「从心」+ 日报空态兜底
+
+- **时间**：2026-11-22
+- **拍板人**：用户（拍板合并范围与作品名口径）
+- **关联**：`web/js/daily.js` · `web/css/apple-tokens.css` · `web/js/app.js` · `web/index.html` · `web/js/pet.js` · `web/js/terrain.js`
+
+### 背景
+
+队友 `5zdz5` 在 `origin/web/apple-daily-redesign` 上交了 7 个提交（11-21，+1125 / −380，9 个文件）：
+《从心日报》头版做成默认首屏（收藏 → 复古报刊）、Apple HIG 风改造（含深浅双模式）、hallmark 审计全清、
+桌宠指针跟随与转场、地形块碰撞避让。
+
+合入前必须核三件事：**① 日报字段与后端契约对不对得上 ② 有没有外链资源（评审现场可能断网）③ 后端要不要跟着改。**
+
+### 结论
+
+1. **全量合入 main**：merge-base = `94d6b75`（合入前的 main HEAD）→ **零冲突 fast-forward**，HEAD 前进到 `b7959d2`。
+   字段级核对全部通过（逐项比对 `server/src/services/behavior.js` + `server/src/lib/classify.js`）：
+   `buildFavoritesSignal` 回 `signal / collected_count / span / category_distribution / favlists / items / empty / empty_notice`；
+   `computeSpan` 回 `{earliest_fav_time, latest_fav_time, span_days, distinct_days}`（**空时回 `null`**，日报侧用 `?? {}` 兜住）；
+   `normalizeContentItem` 回 `content_type / title / summary / url / author.{name,url,headline} / created_at / engagement.*`；
+   `distribution(items,'topic')` 回 `{category, count, ratio, score, tied_with, evidence}`。
+   **后端一行没改**，只用现有 `/api/behavior/favorites`、`/api/quota`、`/api/auth/profile`。
+2. **无外链**：分支 `web/` 里所有 `https?://` 只有 localhost 开发地址与 SVG 命名空间；`web/css/` **无任何 `url()`**
+   → 评审现场断网不会白屏。
+3. **作品名仍叫「从心」**（D26 不变）。队友分支的 `<title>从心日报 · …</title>` 改为 `<title>从心 · 把你的收藏印成一张报</title>`；
+   meta description 改为「从心：桌宠陪你干活，也把你的知乎收藏与阅读痕迹印成一张复古报刊头版，每张都能点回原文。」
+   **报头刊名「从心日报」保留**——它是「从心」这个产品里那份报纸的刊名，不是作品名。
+4. **AI 补日报空态兜底**（队友分支带出来的一个真缺陷）：`renderDaily()` 原先写在 `try` 块里、且在 `await getFavorites(9)` 之后
+   → 收藏接口一抛异常 → `#daily-paper` 无人填 → **首屏留一个纯白空框**，打开只看到空白矩形、什么提示都没有
+   （**2026-11-22 实测确认**：缺凭据起服务时首屏就是这个白框）。改法：`renderDaily` 移到 try/catch 之外，
+   新增 `favError`，catch 里赋后端 `user_hint`（`ApiFail.hint`），渲染时作 `error` 传进去。
+
+### 状态
+
+**已定并实施**（commit `5135ef8`，已推 `origin/main`）。
+失败场景已实测：18801 端口**无密钥**起服务 → `/api/behavior/favorites` 回 401 → **首屏照常印一份报**，
+索引区显示后端真话「知乎凭据没配好或已失效，这次读不到知乎上的数据。」，阅读版图「暂无分类数据」，额度显示「—」不编数字。
+
+## D52 · AI Works 上传分两步走 + 失败点已定位到 `media.zhihu.com/zos/api`
+
+- **时间**：2026-11-22
+- **拍板人**：用户（拍板密钥策略）
+- **关联**：`docs/部署指南.md` · `projectId=240909`
+
+### 背景
+
+要在官方 AI Works 上传源码包拿公网链接（**正式公网链接必须 12-04 前拿到**，P7 审核时间不可控）。
+平台 step=2 页面**没有密钥/环境变量输入位**，且写明「**上传即自动构建部署**」；官方口径是「秘钥写入文件直接构建」。
+
+### 结论
+
+1. **分两步上传**（用户拍板）：**先传无密钥包**跑通平台流水线（零密钥暴露面）→ 拿到部署专用 Access Secret 后
+   **重传带密钥的包**再发布。
+2. **失败点已定位，不在包上**：`upload_files` 返回 success 但页面报「**文件上传未完成，请检查网络后重新上传。**」。
+   逐段抓包：`GET https://www.zhihu.com/api/v4/creation_project/source_upload/precheck` → **200**（包本身合规）
+   → 加载 `unpkg.zhimg.com` 的 ali-oss SDK → `POST https://media.zhihu.com/zos/api` → **401**（application/json，duration 392ms）。
+   刷新页面重试同样 401。**时钟因素已排除**（`curl.exe` 读 `www.zhihu.com` / `unpkg.zhimg.com` / `zhstatic.zhihu.com`
+   的 Date 头，本机 2026-11-20 13:32:40，偏移 −0.03 ~ +0.04 分钟）。控制台无上传相关报错（只有 Sentry「MMKV not available, fallback」）。
+   → 判定为**上传鉴权 / OSS 代理通道问题**，不是交付包的问题。**下一步：先做 126 字节小 ZIP 对照实验**，
+   再决定是继续由 AI 试上传，还是改由用户在自己浏览器手动拖 ZIP。
+
+### 状态
+
+**已定，卡在 401 上**。见 [status.md](status.md) B19 / B20。
+
+## D53 · 官方交付链不需要 `--build-validation`
+
+- **时间**：2026-11-22
+- **拍板人**：本会话（工具链事实，无业务取舍）
+- **关联**：`scripts/make-delivery.js` · `docs/部署指南.md`
+
+### 背景
+
+`scripts/make-delivery.js` 生成交付副本后会清空 `_tmp/`，而 `agent-build-validation.json` 就在 `_tmp/` 里
+→ 下一次重跑时 `--build-validation _tmp\agent-build-validation.json` 找不到文件 → 探测器 inspect 失败。
+
+### 结论
+
+**交付副本不需要 `--build-validation`**（实测：去掉这个参数，探测器 **exit 0 / Status: review-required / 0 error / 3 warning**，
+warning 是 `W_DYNAMIC_ROUTES`×2 与 `W_HEALTHCHECK_ABSENT`×1）。
+原因是交付版走**官方「无构建」通道**（D48 / D50：交付副本不声明 `build`，构建步骤 = `test -f server/src/index.js`），
+`agent-build-validation.json` 又在官方归档器的 `SKIP_FILES` 里 → 它对交付包没有意义。
+
+**交付链去掉这条参数即可完全复现**，不再依赖一个会被清空的中间产物。
+
+### 状态
+
+**已定并实施**：`docs/部署指南.md` 的命令链已去掉该参数；全链实跑通过。
