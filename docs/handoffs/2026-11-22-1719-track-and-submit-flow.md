@@ -61,6 +61,12 @@
 - **赛道在代码里写死 4 处**，留赛道二时**全部不用改**：`web/index.html:19`、`web/index.html:101`、`web/js/outro.js:30`、README 1 处。
 - **提交纪律**：`git add -- <显式路径>`，**禁 `git add -A`**；commit message **第一行必须是标题**，
   后带 `Context:` / `Tried:` / `Verify:`；`Context` 写进 `.ctx/current.md` 由 hook 自动填。
+  ⚠️ **两个实测坑**：
+  ① **`.ctx/current.md` 提交成功后会被 hook 清空（变成 0 字节）** → **每提交一次都要重新填一遍**，否则下一次提交报
+  「缺少或为空的 'Context:' 行」。
+  ② **`git commit --amend --no-edit -F <file>` 会被 hook 拒**（`--no-edit` 走「复用原消息」分支，hook 读到空的 Context 行）→
+  改不了历史就别 amend，写成独立提交。
+- **标题长度按字节算**：hook 用 `wc -c` 与 150 字节比（中文 1 字 = 3 字节 ≈ 50 字符），别按字符数估。
 - **编码**：`.ps1` 必须 UTF-8 **with BOM**（PowerShell 5.1 按 ANSI 解析会中文乱码）；工作区行尾统一 LF；
   写完扫 `U+FFFD`。本会话改的 4 个 md 文件已扫：BOM=False / U+FFFD=False / CRLF=False。
 - **自检**：`powershell -ExecutionPolicy Bypass -File scripts\check-contract.ps1` → 本会话实跑 **PASS 13 / WARN 0 / FAIL 0**（密钥扫描 146 文件无命中）。
