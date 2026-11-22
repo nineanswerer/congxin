@@ -960,22 +960,32 @@ async function init() {
   await loadQuota();   // 日报要用真实额度，等它回来
 
   // 材料：真实收藏
+  let favError = null;
   try {
     state.favorites = await getFavorites(9);
     renderMaterials();
     renderStrip();
-
-    // 日报头版：把真实收藏印成一张报（打开即见的首屏）
-    renderDaily($('#daily-paper'), {
-      favorites: state.favorites,
-      quota: state.quota,
-    });
     // 脚本 0:15：材料摊开了，桌宠转头问一句「要不我先啃一口？」
     pet.setState('greet');
     pet.say('offer', { note: '拖一条到它身上，或者点下面的按钮' });
   } catch (err) {
     $('#materials').innerHTML = noticeBox(showFail(err, '读收藏失败'), 'err');
+    favError = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
   }
+
+  // 日报头版：把真实收藏印成一张报（打开即见的首屏）
+  //
+  // ⚠️ **必须渲染在 try 之外**（11-22 补）：
+  //    收藏接口一抛异常，上面那段 try 走 catch 走了，
+  //    `#daily-paper` 就没人填 —— 首屏会留一个**纯白空框**，
+  //    打开只看到一个空白矩形，什么提示都没有。
+  //    （2026-11-22 实测确认：缺凭据起服务时首屏就是这个白框。）
+  //    失败时也要印一张报，如实说「今天读不到」，**不留白、不编数据**。
+  renderDaily($('#daily-paper'), {
+    favorites: state.favorites,
+    quota: state.quota,
+    error: favError,
+  });
 
   // 事件
   $('#btn-feed').addEventListener('click', feed);
