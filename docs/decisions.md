@@ -1811,3 +1811,60 @@ P1 内容只能人拍板，AI 只能提方案、不能自己改。11-22 17:1x �
 
 **已定并落到 `docs/P1-三件产出.md` §2.1**（逐拍时间轴见该节）。
 镜头与滚动节奏仍属 P1 内容、待人审；**代码零改动**。
+
+## D56 · 交付包怎么带 `web/assets-kit/`：只带 15 个运行期文件 + 打包时强制自检
+
+- **时间**：2026-11-22 18:0x
+- **拍板人**：AI 执行（D54/D55 由用户拍板；本条是工程实现方式，不改产品形态）
+- **关联**：B23 · D46 · D48 · D49 · D50
+
+### 背景
+
+队友 11-22 推的 `37f8a2a` 把 `web/index.html` 改成从 `web/assets-kit/` 引 CSS 与 ES module。
+而 `scripts/make-delivery.js` 是**显式白名单**复制（`FILES` / `DIRS` / `WEB_FILES` / `ASSET_FILES`），
+**不含 `web/assets-kit/`** → 照现状重出包，上线后这批文件全部 404 → **样式全丢、页面白屏**。
+
+B23 当时留了两个解法：① 把真正被引用的运行时文件加进白名单；② 把用到的样式/脚本内联进 `app.css` / `app.js`。
+② 需要队友先判定哪些是真依赖，且会让 `app.css` / `app.js` 变成几千行的拼接体，队友后续还在改前端 → 维护成本高。
+
+### 结论
+
+**选 ①，并且清单不是猜的，是浏览器实测出来的。**
+
+本地带密钥起服务（18800）→ 打开 `http://localhost:18800/web/?demo=1` → 跑完 10 步演练 →
+读网络面板里 `assets-kit` 的**全部**请求 → 一条不多一条不少，共 **15 个文件**：
+
+- `index.html` 直接引的 **10 个**：`system.css` / `ui/cards.css` / `motion/motion.css` / `backgrounds/backgrounds.css` /
+  `layout/layout.css` / `icons/icon.css` + `system.js` / `backgrounds.js` / `layout/layout.js` / `motion/motion.js`；
+- `system.js` **运行时动态 import** 的 **5 个**：`ui/ui.js`（总会加载）、`moments/moments.js` + `moments/lib.js`
+  + `moments/iris-opens/moment.css` + `moments/iris-opens/moment.js`（因为 `index.html` 的认知地图那节带
+  `data-moment="iris-opens"`）。
+
+**不进包**其余 1579 个（素材库 / demo 页 / 实验脚本 / `_demo` 照片，合计 32.9 MB）——判据只有一条：浏览器不请求。
+
+`effects/fx.js` 是**条件加载**（`system.js` 里 `grounds = [...document.querySelectorAll('[data-fx]')]`、
+`glows` 同理，两个都为空才不 import）。我们的页面没有 `data-fx` / `data-glow`，所以它**不该**进包；
+但页面一旦加上，自检会当场要求它进来。
+
+### 同时加了一道保险
+
+`make-delivery.js` 新增 `checkRuntimeRefs()`：对着**交付副本**逐条核对
+HTML 的本地 `href`/`src`、JS 的静态 `import`、JS 的字面量动态 `import` / `new URL('x', …)`、
+`data-moment` / `data-ui-load` 的片段文件、CSS 的 `url()` / `@import`、JS 里的本地素材路径字面量。
+
+**少一个文件就报错退出并写清楚缺哪个。** 这类错在仓库里跑永远发现不了（仓库里文件都在），
+只有在复制出去的交付副本里才露出来，而那时候已经上线了 —— 宁可打包时红，不要线上白屏。
+以后队友再往 `index.html` 加新引用，打包会当场提示，不用再靠人肉排查。
+
+### 验证结果（11-22 18:0x）
+
+- `node scripts/make-delivery.js` 四阶段全过：复制 70 个文件 → 改写 `config.js` 5 处 → 生成 HTML 证据 → 环境变量/写盘自检通过；
+- 从**交付副本**起服务（18801）实测：13 个静态引用 **全 200**、5 个动态文件 **全 200**、`effects/fx.js` **404（符合预期）**；
+- 浏览器打开交付副本：candy-on-black 主题、字体、布局**完整**（改之前这里是白屏），网络面板 **0 个静态资源 404**；
+- 无密钥的交付副本降级**诚实**：只有 2 个 401，页头如实显示「额度没读到」「开发期自读」——正是官方第 7 条要的。
+
+### 状态
+
+**已实施**（`scripts/make-delivery.js`）。**交付包本身还没重出**（B23 的下一步）——
+重出只需 `node scripts\make-delivery.js --secret`（需先申请到部署专用密钥，见 B19）。
+

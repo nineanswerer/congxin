@@ -110,6 +110,49 @@ const ASSET_FILES = [
   'assets/kanshan/NOTICE.md',
 ];
 
+/**
+ * `web/assets-kit/` —— 队友 11-22 引入的 taste-skill 组件库里的**运行期文件**。
+ *
+ * ## 为什么只挑这 15 个（11-22）
+ *
+ * 整个 `web/assets-kit/` 有 1594 个文件 / 32.9 MB，绝大部分是素材库、demo 页、
+ * 实验脚本 —— **一律不进包**。真正会被浏览器请求的只有下面这些，
+ * 清单不是猜的，是**浏览器实测**出来的：本地带密钥起服务后打开
+ * `http://localhost:18800/web/?demo=1`，把演练 10 步跑完，
+ * 再读网络面板里 `assets-kit` 的全部请求 —— 一条不多一条不少。
+ *
+ * 两类来源：
+ *   1. `web/index.html` 里 `<link>` / `<script>` 直接引的 10 个；
+ *   2. `system.js` **运行时动态 import** 的 5 个：
+ *      `ui/ui.js`（总会加载）、`moments/moments.js` + `moments/lib.js`
+ *      + `moments/iris-opens/moment.css` + `moments/iris-opens/moment.js`
+ *      （因为 `index.html` 的认知地图那节带 `data-moment="iris-opens"`）。
+ *
+ * ⚠️ 漏掉任何一个 = 上线后 CSS 404 / ES module 加载失败 → 白屏。
+ *    所以下面配了 `checkRuntimeRefs()`：以后队友再往 `index.html`
+ *    加新的引用，打包会**当场报错**并列出缺哪个文件，而不是等上线才白屏。
+ */
+const ASSET_KIT_FILES = [
+  // —— index.html 直接引的 6 个 CSS ——
+  'web/assets-kit/system.css',
+  'web/assets-kit/ui/cards.css',
+  'web/assets-kit/motion/motion.css',
+  'web/assets-kit/backgrounds/backgrounds.css',
+  'web/assets-kit/layout/layout.css',
+  'web/assets-kit/icons/icon.css',
+  // —— index.html 直接引的 4 个 JS ——
+  'web/assets-kit/system.js',
+  'web/assets-kit/backgrounds/backgrounds.js',
+  'web/assets-kit/layout/layout.js',
+  'web/assets-kit/motion/motion.js',
+  // —— system.js 运行时动态 import 的 5 个 ——
+  'web/assets-kit/ui/ui.js',
+  'web/assets-kit/moments/moments.js',
+  'web/assets-kit/moments/lib.js',
+  'web/assets-kit/moments/iris-opens/moment.css',
+  'web/assets-kit/moments/iris-opens/moment.js',
+];
+
 // --------------------------------------------------------------------- 工具
 
 function copyFile(rel) {
@@ -430,6 +473,188 @@ function lineOf(text, offset) {
   return text.slice(0, offset).split('\n').length;
 }
 
+// --------------------------------------------------------------------- 运行时引用自检
+
+/**
+ * 条件动态 import：页面里**没有**对应属性时，浏览器压根不会去请求那个文件，
+ * 所以不进包是对的；一旦页面加上那个属性，打包就**必须**带上它，否则运行时 404。
+ *
+ * `system.js` 里 `grounds = [...document.querySelectorAll('[data-fx]')]`、
+ * `glows = [...document.querySelectorAll('[data-glow]')]`，
+ * 两个都为空时 `effects/fx.js` 不会被 import。
+ */
+const CONDITIONAL_KIT = [
+  {
+    file: 'web/assets-kit/effects/fx.js',
+    trigger: /\sdata-fx\s*=|\sdata-glow\s*=/,
+    why: '页面里有 data-fx / data-glow 特效元素，system.js 会动态 import effects/fx.js',
+  },
+];
+
+/** 列出交付副本里所有文件的「包内相对路径」（统一用 `/`）。 */
+function listRelFiles(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) listRelFiles(full, out);
+    else if (entry.isFile()) out.push(path.relative(OUT, full).split(path.sep).join('/'));
+  }
+  return out;
+}
+
+/**
+ * 去掉 JS 注释再扫 import —— 注释里的 `import ui from './x.js'` 只是用法示例，
+ * 不是真的依赖（`web/assets-kit/ui/ui.js` 头部就有一段这样的示例）。
+ *
+ * 行注释要避开 `http://` 这种带冒号的写法，所以要求 `//` 前面不是 `:`。
+ */
+function stripJsComments(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, '$1');
+}
+
+/**
+ * 运行时引用自检（11-22 加的）。
+ *
+ * ## 为什么必须有它
+ *
+ * 11-22 队友把前端重建成 candy-on-black 风格后，`web/index.html` 改成从
+ * `web/assets-kit/` 引 CSS 和 ES module；而交付副本是**显式白名单**复制，
+ * `assets-kit/` 没在白名单里 —— 照旧打包上线会 CSS 404 / module 加载失败，
+ * **页面白屏**。
+ *
+ * 这类错在仓库里跑**永远发现不了**（仓库里文件都在），只有在「复制出去的
+ * 交付副本」里才露出来，而那时候已经是线上了。所以这里对着交付副本逐条核对：
+ *
+ *   1. `web/index.html` 里每个本地 `href` / `src`；
+ *   2. JS 里每个相对路径的静态 `import ... from`；
+ *   3. JS 里每个**字面量**的动态 `import('x')` / `new URL('x', ...)`；
+ *   4. `data-moment="<id>"` / `data-ui-load="<name>"` 对应的片段文件；
+ *   5. CSS 里每个相对路径的 `url()` / `@import`；
+ *   6. JS 里每个看起来像本地素材的路径字面量（`../assets/x.webp` 这种）。
+ *
+ * 少一个文件就直接报错退出，并写清楚缺哪个 —— 宁可现在红，不要上线白屏。
+ */
+function checkRuntimeRefs() {
+  const problems = [];
+  const have = new Set(listRelFiles(OUT));
+  const inPkg = (rel) => have.has(rel);
+
+  const htmlRel = 'web/index.html';
+  const html = fs.readFileSync(path.join(OUT, 'web', 'index.html'), 'utf8');
+  const htmlDir = 'web';
+
+  // —— 1. HTML 的 href / src ——
+  for (const m of html.matchAll(/(?:href|src)\s*=\s*["']([^"']+)["']/g)) {
+    const ref = m[1].trim();
+    if (/^(?:https?:|data:|mailto:|tel:|#|\/\/)/i.test(ref)) continue;
+    const clean = ref.split('#')[0].split('?')[0];
+    if (!clean) continue;
+    const target = path.posix.normalize(path.posix.join(htmlDir, clean));
+    if (!inPkg(target)) problems.push(`${htmlRel} 引了 ${ref} → 包里没有 ${target}`);
+  }
+
+  // —— 4. data-moment / data-ui-load 的片段文件 ——
+  for (const m of html.matchAll(/\sdata-moment\s*=\s*["']([^"']+)["']/g)) {
+    const id = m[1];
+    for (const file of [
+      `web/assets-kit/moments/${id}/moment.css`,
+      `web/assets-kit/moments/${id}/moment.js`,
+    ]) {
+      if (!inPkg(file)) {
+        problems.push(`${htmlRel} 用了 data-moment="${id}" → 包里没有 ${file}`);
+      }
+    }
+  }
+  for (const m of html.matchAll(/\sdata-ui-load\s*=\s*["']([^"']+)["']/g)) {
+    const name = m[1];
+    for (const file of [
+      `web/assets-kit/ui/${name}/fragment.css`,
+      `web/assets-kit/ui/${name}/fragment.js`,
+    ]) {
+      if (!inPkg(file)) {
+        problems.push(`${htmlRel} 用了 data-ui-load="${name}" → 包里没有 ${file}`);
+      }
+    }
+  }
+
+  // —— 2 / 3 / 6. JS 里的引用 ——
+  for (const rel of [...have].filter((f) => f.endsWith('.js'))) {
+    const raw = fs.readFileSync(path.join(OUT, ...rel.split('/')), 'utf8');
+    const text = stripJsComments(raw); // 注释里的 import 只是用法示例
+    const dir = path.posix.dirname(rel);
+
+    // 静态 import / export ... from
+    for (const m of text.matchAll(/(?:^|[\s;}])(?:import|export)[^;'"]*?from\s*["']([^"']+)["']/g)) {
+      const spec = m[1];
+      if (!spec.startsWith('.')) continue;
+      const target = path.posix.normalize(path.posix.join(dir, spec));
+      if (!inPkg(target)) problems.push(`${rel} import 了 ${spec} → 包里没有 ${target}`);
+    }
+
+    // 动态 import（字面量）+ new URL('x', <同目录基准>）
+    const dyn = [
+      ...text.matchAll(/import\(\s*["']([^"']+)["']\s*\)/g),
+      ...text.matchAll(/new URL\(\s*["']([^"']+)["']\s*,/g),
+    ];
+    for (const m of dyn) {
+      const spec = m[1];
+      if (!spec.startsWith('.')) continue;
+      if (spec.endsWith('/')) continue; // 目录基准（new URL('./', import.meta.url)）
+      const target = path.posix.normalize(path.posix.join(dir, spec));
+      const conditional = CONDITIONAL_KIT.find((c) => c.file === target);
+      if (conditional) {
+        // 条件加载：页面用了对应属性才必须带上
+        if (conditional.trigger.test(html) && !inPkg(target)) {
+          problems.push(`${rel} 会动态 import ${spec} —— ${conditional.why}，但包里没有 ${target}`);
+        }
+        continue;
+      }
+      if (!inPkg(target)) problems.push(`${rel} 会动态 import ${spec} → 包里没有 ${target}`);
+    }
+
+    // 本地素材路径字面量（../assets/x.webp 这种）。
+    // 这类字符串一般塞进 <img src> / Image.src，基准是**文档地址**（/web/），
+    // 不是模块目录 —— 两个基准都试一遍，命中任一即可。
+    for (const m of text.matchAll(
+      /["']((?:\.\.?\/)?[\w./-]+\.(?:webp|png|jpe?g|svg|gif|webm|mp4|woff2?))["']/g
+    )) {
+      const ref = m[1];
+      const fromModule = path.posix.normalize(path.posix.join(dir, ref));
+      const fromDoc = path.posix.normalize(path.posix.join(htmlDir, ref));
+      if (!inPkg(fromModule) && !inPkg(fromDoc)) {
+        problems.push(`${rel} 引用了素材 ${ref} → 包里既没有 ${fromModule} 也没有 ${fromDoc}`);
+      }
+    }
+  }
+
+  // —— 5. CSS 里的 url() / @import ——
+  for (const rel of [...have].filter((f) => f.endsWith('.css'))) {
+    const text = fs.readFileSync(path.join(OUT, ...rel.split('/')), 'utf8');
+    const dir = path.posix.dirname(rel);
+
+    const refs = [
+      ...[...text.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/g)].map((m) => m[1].trim()),
+      ...[...text.matchAll(/@import\s+(?:url\(\s*)?["']([^"']+)["']/g)].map((m) => m[1].trim()),
+    ];
+    for (const ref of refs) {
+      if (/^(?:data:|https?:|\/\/|#)/i.test(ref)) continue;
+      if (ref === '...') continue; // 文档里的占位写法，不是真路径
+      if (!/[\/.]/.test(ref)) continue; // 纯色值 / 变量名
+      const target = path.posix.normalize(path.posix.join(dir, ref));
+      if (!inPkg(target)) problems.push(`${rel} 引用了 ${ref} → 包里没有 ${target}`);
+    }
+  }
+
+  if (problems.length > 0) {
+    throw new Error(
+      `交付副本的运行时引用自检没过（上线会 404 / 白屏）：\n  - ${problems.join('\n  - ')}\n` +
+        '  修法：把缺的文件加进 make-delivery.js 的白名单（ASSET_KIT_FILES / DIRS），再重跑。'
+    );
+  }
+  return problems;
+}
+
 // --------------------------------------------------------------------- HTML 证据
 
 /**
@@ -500,8 +725,12 @@ function main() {
   for (const rel of DIRS) copyDir(rel);
   for (const rel of WEB_FILES) copied.push(copyFile(rel));
   for (const rel of ASSET_FILES) copied.push(copyFile(rel));
+  for (const rel of ASSET_KIT_FILES) copied.push(copyFile(rel));
 
   console.log(`\n[1/4] 复制运行期文件：${copied.length + countDirFiles()} 个`);
+
+  const missing = checkRuntimeRefs();
+  console.log(`    运行时引用自检：${missing.length === 0 ? '全部命中' : missing.length + ' 处缺失'}`);
 
   const changes = patchConfig();
   console.log(`[2/4] 改写 config.js：${changes.length} 处`);
