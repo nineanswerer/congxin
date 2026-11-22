@@ -1,6 +1,6 @@
 # status.md — 当前进度
 
-最后更新：2026-11-22 17:16
+最后更新：2026-11-22 18:05
 赛事：知乎黑客松 S3·湾区共创季（`activity_code=zhihu_hackathon_2026_p3`）
 
 ## 一、关键时间点
@@ -115,6 +115,7 @@
 | B20 | **AI Works 上传 401（平台侧 OSS 签名）** | 🔴 **已定位，不是我们的包**：`POST https://media.zhihu.com/zos/api?action=ApplyUpload&version=v1` → **401**，`{"code":10201,"message":"signature verification failed"}`。**126 字节对照包同样失败**；刷新页面 / 新标签页 / 全新页面都复现；precheck 200、时钟无偏差。→ **改由用户在自己的 Chrome / Edge 里手动传同一个 ZIP**（`.ctx/congxin.zip` / `%TEMP%\congxin\congxin.zip`）。若自己的浏览器也失败 → 平台侧问题，**立刻找赛事组**。⚠️ **新增硬约束（11-22 17:1x）**：**创建项目通道 12-05 10:00 才开**（见 B22）→ **这个 401 必须在 12-05 10:00 前修好**，否则开闸当天传不上去 | 用户 → 必要时找赛事组 |
 | B21 | ~~P1 演示脚本首屏口径~~ | ✅ **已关闭**（11-22 17:1x，D55）：用户拍板 **桌宠先出场、日报紧跟** → `docs/P1-三件产出.md` §2.1 已改写成三拍（0:00—0:05 工作台 + `lines.opening`／0:05—0:10 日报头版一瞥（**无台词纯画面**）／0:10—0:15 `lines.offer`），**后 17 拍全部不变、台词目录 14 句一个字没动、代码零改动**（不用重出交付包）。⚠️ 镜头与滚动节奏仍属 P1 内容、待人审 | — |
 | B22 | **参赛项目还没创建（创建通道 12-05 10:00 才开）** | 🔴 **已查明，不是我们漏了什么**：黑客松页「＋创建项目」按钮 **`aria-disabled="true"`、`title="创建项目通道将于12月5日10:00开启"`**；`GET .../hackathon/me` → `binding = {team:{team_id:120227,name:"从心",role:1}, project:{}}` → **AI Works 侧草稿 `projectId=240909` 没有绑定到队伍**。**赛道在创建项目那一步选**（`project_tracks`：7 = AI × 知识与探索 / **8 = AI × 陪伴与交互** / 9 = AI × 出海 → 选 **8**，D54）。**12-05 10:00 一开闸要一次走完**：创建项目 → 选赛道 → 填信息 → 上传源码 → 审核声明 → 发布。⚠️ 官方 timeline 把 **12-07 标为「决赛路演，巅峰对决」**、`project_end_at` = **12-07 02:00**（此前笔记写 10:00，以官方为准） | 用户（12-05 10:00）→ 必要时找赛事组 |
+| B23 | **交付包已作废，且重出前有个会打空线上站点的坑** | 🔴 **队友 11-22 推了 `37f8a2a`（1603 文件 / +101,625 行，taste-skill 重建 candy-on-black 认知日报风）→ `web/css/app.css`（+846）、`web/index.html`（+322）、`web/js/app.js`（+51）全变 → 现存交付包（SHA-256 `5CACC76B…`）**已不对应当前代码，必须重出**。⚠️ **更严重的一层**：`web/index.html` **硬引用 `assets-kit/`**（`system.css` / `ui/cards.css` / `motion/motion.css` / `backgrounds/backgrounds.css` / `layout/layout.css` / `icons/icon.css` + `system.js` / `motion.js` / `backgrounds.js` 等 module），而 `scripts/make-delivery.js` 的复制是**显式白名单**（`FILES` / `DIRS` / `WEB_FILES=['web/index.html']` / `ASSET_FILES`）**不含 `web/assets-kit/`** → **照现状重出包，上线后这些 CSS 404、JS module 404 → 站点样式全丢甚至白屏**。解法二选一：① 把 assets-kit 里真正被引用的运行时文件加进交付白名单（并重新评估体积）；② 把用到的样式/脚本内联进 `app.css` / `app.js`（需队友确认哪些是真依赖）。⚠️ 队友 commit message 自陈「**gate/consistency 仍有开放 FAIL**，按用户『直接提交』要求暂不阻塞合入」。**顺序建议：先修上传 401 → 再定 assets-kit 怎么进包 → 再重出包（一次到位，别重出两次）** | 队友（assets-kit 依赖判定）+ AI（重出包）+ 用户（401） |
 
 ## 四、开发顺序与倒排计划
 
