@@ -38,8 +38,13 @@ async function request(path, { method = 'GET', body = null, query = null } = {})
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (err) {
+    // ⚠️ 这句是给**终端用户**看的，不能带本地开发指令 ——
+    //    部署到公网后「先跑 node server/src/index.js」是句错话
+    //    （服务器在别处跑着，用户手里根本没有这个进程）。
+    //    开发细节进控制台，界面只说「连不上 + 稍后再试」（2026-11-23 22:3x 拟真审计）。
+    console.warn('[从心] 网络请求失败', path, err);
     throw new ApiFail('NETWORK_ERROR', String(err?.message ?? err),
-      '连不上后端。先确认 node server/src/index.js 在跑（端口用 18787，8787 在这台机器上绑不上）。');
+      '连不上服务器。这次没读到数据，过一会儿再试一次。');
   }
 
   const text = await res.text();

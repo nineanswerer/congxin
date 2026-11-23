@@ -88,9 +88,20 @@
       <div class="nav__item"><a class="nav__link" href="#workbench">工作台</a></div>
     </nav>
     <div class="nav__actions">
+      <!-- 顶栏只留一句短状态（拟真：顶栏不该挂着开发说明与后台数字）。
+           身份细节与今日额度收进这个可展开的详情里，点一下就开。
+           额度**读不到**时是例外：那一句会直接变成后端给的中文原因 ——
+           理由必须留在屏幕上，不能藏进折叠里（官方检查第 7 条 / D62）。 -->
       <div class="nav__status" id="nav-status">
-        <span class="pill" id="pill-profile"><span class="dot"></span><span id="profile-text">连接中…</span></span>
-        <span class="pill" id="pill-quota">额度查询中</span>
+        <button class="pill pill--toggle" id="pill-profile" type="button"
+                aria-expanded="false" aria-controls="nav-detail" aria-haspopup="true">
+          <span class="dot"></span><span id="profile-text">连接中…</span>
+        </button>
+        <span class="pill warn" id="pill-quota" hidden></span>
+        <div class="nav__detail" id="nav-detail" hidden>
+          <div class="nav__detail-row"><span class="k">身份</span><span class="v" id="detail-identity">…</span></div>
+          <div class="nav__detail-row"><span class="k">今日额度</span><span class="v" id="detail-quota">…</span></div>
+        </div>
       </div>
       <a class="btn btn--primary" href="#workbench" id="btn-feed">喂桌宠 · 开始读</a>
     </div>
@@ -121,13 +132,15 @@
         <div class="ch__halo" aria-hidden="true"></div>
         <div class="ch__bubble" id="ch-bubble" aria-live="polite"><i class="ri-sparkling-2-line" aria-hidden="true"></i><span id="ch-bubble-text">今天想读点什么？</span></div>
         <button class="ch__pet" id="ch-pet" type="button" aria-label="点一下和刘看山说话">
+          <!-- 首屏桌宠用**官方素材**的动画 WebP。
+               ⚠️ 这里原来放的是一段 AI 生成的 mp4（队友 12-23 12:45 提交的
+               web/assets/companion/pet-idle-motion.mp4）：画面右下角烧着
+               「视频由AI生成」水印、边缘有明显马赛克，而且和页脚
+               「刘看山形象来自知乎官方黑客松开放素材」的声明对不上。
+               2026-11-23 22:3x 拟真审计：换成官方 idle.webp（动画、无水印、
+               与右下角浮窗同一套情绪素材），那段 mp4 一并移除。 -->
           <span class="ch__pet-frame">
-            <video id="ch-pet-video" autoplay muted loop playsinline preload="metadata"
-                   poster="../assets/kanshan/idle.webp"
-                   aria-label="刘看山的动态问候">
-              <source src="assets/companion/pet-idle-motion.mp4" type="video/mp4" />
-            </video>
-            <img class="ch__pet-fallback" src="../assets/kanshan/idle.webp" alt="刘看山" />
+            <img class="ch__pet-img" src="../assets/kanshan/idle.webp" alt="刘看山" />
           </span>
         </button>
         <div class="ch__note ch__note--a"><i class="ri-bookmark-2-line" aria-hidden="true"></i>今日真实收藏 <b id="ch-note-count">…</b> 条</div>

@@ -61,12 +61,19 @@ function toast(msg, kind = '') {
   setTimeout(() => el.remove(), 4200);
 }
 
-/** 失败 → 显示后端给的中文提示（不显示原始报错）。 */
+/**
+ * 失败 → 显示后端给的中文提示（不显示原始报错）。
+ *
+ * ⚠️ 2026-11-23 22:3x（拟真审计）：**错误码不再印在界面上**。
+ *    「ZHIHU_AUTH_INVALID」这种机器码让界面看起来像在读日志 ——
+ *    官方检查第 7 条要的是「**真实**提示」，那句中文 user_hint 才是给人看的那句；
+ *    机器码留给控制台与后端日志，不进界面。
+ */
 function showFail(err, where) {
   const hint = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
   const code = err instanceof ApiFail ? err.code : 'UNKNOWN';
-  const html = `<b>${escapeHtml(where)}</b>：${escapeHtml(hint)}<span class="code">${escapeHtml(code)}</span>`;
-  return html;
+  console.warn(`[从心] ${where} 失败：${code}`, err?.detail ?? '');
+  return `<b>${escapeHtml(where)}</b>：${escapeHtml(hint)}`;
 }
 
 /**
@@ -77,12 +84,17 @@ function showFail(err, where) {
  *
  * ⚠️ 说的是**后端 `user_hint`**（契约层规定的那句中文），不是前端另编的台词
  * —— 换句话说：它说的那句就是系统给出的那句，不多不少。
+ *
+ * ⚠️ 2026-11-23 22:3x（拟真审计）：气泡里**不再出现英文错误码，也不再挂
+ *    「去知乎翻失败」这种操作标签** —— 角色只说那句中文真话，
+ *    否则桌宠看起来像个在念日志的控件。操作标签留在面板提示里。
  */
 function petSayFail(err, where) {
   const hint = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
   const code = err instanceof ApiFail ? err.code : 'UNKNOWN';
   pet.setState('error');
-  pet.sayText(escapeHtml(hint), { note: `${where} · ${code}` });
+  pet.sayText(escapeHtml(hint));
+  console.warn(`[从心] ${where} 失败：${code}`);
 }
 
 function noticeBox(html, kind = '') {
@@ -272,23 +284,32 @@ function renderToneSwitch() {
 async function loadProfile() {
   const pill = $('#pill-profile');
   const txt = $('#profile-text');
+  const detail = $('#detail-identity');
   try {
     const p = await getProfile();
     if (p.mode === 'developer_account') {
-      txt.textContent = '开发期自读（还没接知乎登录）';
+      // ⚠️ 2026-11-23 22:3x（拟真审计）：顶栏原来写「开发期自读（还没接知乎登录）」——
+      //    那是一句**开发说明**，挂在产品顶栏上像调试面板。
+      //    现在顶栏只留一句短状态（7 个字，本身就说得清，不用点开也知道），
+      //    完整说明收进可展开的详情里。
+      txt.textContent = '还没接知乎登录';
+      if (detail) detail.textContent = '还没接知乎登录。现在读的是你自己的账号（开发期自读模式）。';
       pill.classList.remove('on');
     } else {
       txt.textContent = p.fullname ? `已登录 · ${p.fullname}` : '已登录';
+      if (detail) detail.textContent = p.fullname ? `已登录 · ${p.fullname}` : '已登录（知乎 OAuth）';
       pill.classList.add('on');
     }
   } catch (err) {
     txt.textContent = '身份没读到';
+    if (detail) detail.textContent = '身份没读到。';
     pill.classList.add('warn');
   }
 }
 
 async function loadQuota() {
   const pill = $('#pill-quota');
+  const detail = $('#detail-quota');
   try {
     const q = await getQuota();
     state.quota = q;              // 日报头版要用真实额度
@@ -301,7 +322,11 @@ async function loadQuota() {
     // 否则「问题发现 22/100」会被读成「已用 22」，把事实说反。
     if (disc) bits.push(`问题发现 剩 ${disc.remaining}/${disc.total}`);
     if (user) bits.push(`用户数据 剩 ${user.remaining}/${user.total}`);
-    pill.textContent = bits.length ? bits.join(' · ') : '额度已取';
+    const text = bits.length ? bits.join(' · ') : '今天的额度读到了，但没有能显示的条目。';
+    // ⚠️ 2026-11-23 22:3x（拟真审计）：额度数字不再常驻顶栏（那是后台控制台的样子），
+    //    收进详情里。**读不到**时例外 —— 原因必须留在屏幕上。
+    if (detail) detail.textContent = text;
+    pill.hidden = true;
   } catch (err) {
     // ⚠️ 不能只写「额度没读到」就完事（2026-11-23 17:3x，P5 失败态实测）。
     //    官方检查第 7 条要的是「**真实**提示」——
@@ -309,10 +334,40 @@ async function loadQuota() {
     //    用户不知道是额度用完了、还是凭据坏了、还是网络抖。
     //    → 拿后端那句 user_hint（跟 showFail 同一个口径），一句都不另编。
     const hint = err instanceof ApiFail ? err.hint : '这次没读到额度。';
+    if (detail) detail.textContent = hint;
+    // 失败时这句**直接上顶栏**（不藏进折叠）：理由不见了就等于没说。
     pill.textContent = hint;
+    pill.hidden = false;
     pill.classList.add('warn');
     pill.title = hint;
   }
+}
+
+/**
+ * 顶栏详情：点那颗胶囊展开身份与今日额度，点外面 / Esc 收起。
+ * 2026-11-23 22:3x（拟真审计）新增。
+ */
+function initNavDetail() {
+  const btn = $('#pill-profile');
+  const panel = $('#nav-detail');
+  if (!btn || !panel) return;
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(panel.hidden);
+  });
+  document.addEventListener('click', (e) => {
+    if (!panel.hidden && !panel.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !panel.hidden) {
+      setOpen(false);
+      btn.focus();
+    }
+  });
 }
 
 // ---------------------------------------------------------------- 主流程
@@ -1026,6 +1081,11 @@ function renderStrip() {
   }
   const top = (f.category_distribution ?? [])[0];
   const span = f.span ?? {};
+  // ⚠️ 2026-11-23 22:3x（拟真审计）：没跑过对照时写「还没比」，
+  //    不是「—个独立行为信号」—— 那个破折号读起来像坏了，
+  //    而且 D62 的规矩是「读不到 ≠ 0」。
+  const sig = state.tension?.signal_count;
+  const sigHtml = sig == null ? '还没比<i>信号</i>' : `${sig}<i>个独立行为信号</i>`;
   strip.innerHTML = `
     <div class="stat hl"><div class="n">${f.collected_count ?? 0}<i>条收藏</i></div><div class="l">真实账号数据</div></div>
     <div class="sep"></div>
@@ -1033,10 +1093,10 @@ function renderStrip() {
     <div class="sep"></div>
     <div class="stat"><div class="n">${span.span_days ?? 0}<i>天跨度 / 集中在 ${span.distinct_days ?? 0} 天</i></div><div class="l">任务驱动型收藏</div></div>
     <div class="sep"></div>
-    <div class="stat amber"><div class="n">${state.tension?.signal_count ?? '—'}<i>个独立行为信号</i></div><div class="l">收藏 · 关注 · 创作</div></div>
+    <div class="stat amber"><div class="n">${sigHtml}</div><div class="l">收藏 · 关注 · 创作</div></div>
     <div class="sep"></div>
     <div class="proof">
-      数字与链接均为 <b>真实账号实测</b>（node server/scripts/smoke.js 可复现）<br />
+      数字与链接均为 <b>真实账号实测</b><br />
       刘看山形象来自<b>知乎官方黑客松开放素材</b>，仅本届比赛期间可用
     </div>`;
 }
@@ -1092,17 +1152,12 @@ async function init() {
   $('#ch-talk')?.addEventListener('click', () => { companion.setOpen(true); companion.setMood('greet'); });
   $('#ch-pet')?.addEventListener('click', () => { companion.setOpen(true); companion.setMood('greet'); });
 
-  // 首屏桌宠轻动效：视频不可用时回退到官方静态素材（诚实降级，不白屏）
-  const petVideo = $('#ch-pet-video');
-  const petBtn = $('#ch-pet');
-  if (petVideo && petBtn) {
-    const fallback = () => petBtn.classList.add('no-video');
-    petVideo.addEventListener('error', fallback);
-    petVideo.querySelector('source')?.addEventListener('error', fallback);
-    // 部分浏览器不触发 error，用可播放性兜底
-    petVideo.addEventListener('loadeddata', () => petBtn.classList.remove('no-video'));
-    if (!petVideo.canPlayType || !petVideo.canPlayType('video/mp4')) fallback();
-  }
+  // 首屏那只桌宠现在用官方动画 WebP（2026-11-23 22:3x 拟真审计换掉了那段
+  // AI 生成的 mp4），**没有 video，也就不需要 no-video 回退逻辑** ——
+  // 情绪素材由 pet-companion.js 直接换 src，首屏与浮窗共用同一套。
+
+  // 顶栏详情（身份 + 今日额度，点胶囊展开）
+  initNavDetail();
 
   renderQuiz();
   renderCards();

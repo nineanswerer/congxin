@@ -11,7 +11,9 @@
  *
  * 诚实口径（必须）：
  *   - 不接 LLM，不伪装成「AI 理解了你」。能答的只有真实数据 + 台词目录。
- *   - 每一条回答都标来源：『真实数据』或『台词目录』。
+ *   - 每一条回答都标来源：『它查到的』或『它记着的』。
+ *     （2026-11-23 22:3x 拟真审计：原来写『真实数据 / 台词目录』——
+ *      「台词目录」是实现术语，摆在界面上等于把内部结构给用户看。）
  *   - 记忆不上传、不跨设备，界面明示。
  */
 
@@ -58,7 +60,7 @@ export class PetCompanion {
           <input class="pc__input" id="pc-input" maxlength="60" autocomplete="off" placeholder="问它：今天读了多少？" aria-label="和桌宠说话" />
           <button class="pc__send" type="submit" aria-label="发送"><i class="ri-send-plane-2-line" aria-hidden="true"></i></button>
         </form>
-        <p class="pc__disclaimer">本地回应：只答真实数据（收藏/进度/足迹/额度）与台词目录，不是 AI 大模型。记忆只在这台浏览器。</p>
+        <p class="pc__disclaimer">本地回应：只答真实数据（收藏 / 进度 / 足迹 / 额度）和它自己记着的话，不是 AI 大模型。记忆只在这台浏览器。</p>
       </div>
     `;
     document.body.appendChild(root);
@@ -75,7 +77,7 @@ export class PetCompanion {
     const greet = this.memory.turns > 0
       ? `你之前跟我聊过 ${this.memory.turns} 句。想问什么？`
       : '你好，我是刘看山。问我今天读了多少、额度还剩多少都行。';
-    this.append('pet', greet, '本地记忆');
+    this.append('pet', greet, '它记着的');
   }
 
   bind() {
@@ -131,15 +133,11 @@ export class PetCompanion {
     const [file, label, state] = map[mood] ?? map.idle;
     if (this.img.getAttribute('src') !== `../assets/kanshan/${file}`) this.img.setAttribute('src', `../assets/kanshan/${file}`);
     // 首屏那只桌宠与浮窗共用同一套情绪素材，状态保持一致。
-    // 首屏若已升级为轻动效 video，则切换 poster 对应的静态帧，不打断视频播放。
-    const heroImg = document.querySelector('#ch-pet .ch__pet-fallback');
+    // 2026-11-23 22:3x：首屏改成官方动画 WebP（原来是 AI 生成的 mp4），
+    // 所以这里直接换 src 就行 —— 两边始终是同一张图、同一个情绪。
+    const heroImg = document.querySelector('#ch-pet .ch__pet-img');
     if (heroImg && heroImg.getAttribute('src') !== `../assets/kanshan/${file}`) {
       heroImg.setAttribute('src', `../assets/kanshan/${file}`);
-    }
-    // 视频 poster 同步，避免视频未就绪时显示旧帧
-    const heroVideo = document.getElementById('ch-pet-video');
-    if (heroVideo && heroVideo.getAttribute('poster') !== `../assets/kanshan/${file}`) {
-      heroVideo.setAttribute('poster', `../assets/kanshan/${file}`);
     }
     this.moodEl.textContent = label;
     this.memory.lastMood = mood;
@@ -153,7 +151,7 @@ export class PetCompanion {
     const text = cat?.lines?.[lineKey];
     if (!text) return;
     this.setMood(lineKey === 'cheer' || lineKey === 'digest' ? 'cheer' : 'greet');
-    this.append('pet', text, '台词目录');
+    this.append('pet', text, '它记着的');
     if (note) this.append('sys', note, '');
   }
 
@@ -180,36 +178,55 @@ export class PetCompanion {
     const days = trailDays();
     const quota = facts.quota;
 
+    // ⚠️ 这两个 source 是**给人看的来源标签**（2026-11-23 22:3x 拟真审计改的）。
+    //    原来写「真实数据 / 台词目录」—— 后者是实现术语，等于把内部结构
+    //    摆给用户看。现在统一成角色口吻：「它查到的」/「它记着的」。
+    const FROM_DATA = '它查到的';
+    const FROM_TONE = '它记着的';
+
     // 真实数据问题 → 查真实结果
     if (/今天|读了多少|收藏|几条|多少条/.test(s)) {
-      return { text: count > 0 ? `今天读到了 ${count} 条真实收藏。` : '今天还没有读到收藏——去工作台喂我一条？', source: '真实数据', mood: count > 0 ? 'cheer' : 'idle' };
+      return { text: count > 0 ? `今天读到了 ${count} 条真实收藏。` : '今天还没有读到收藏——去工作台喂我一条？', source: FROM_DATA, mood: count > 0 ? 'cheer' : 'idle' };
     }
     if (/进度|读到哪|目标|多少算够/.test(s)) {
       const pct = Math.round((prog.progress ?? 0) * 100);
-      return { text: `今天的阅读进度是 ${pct}%（12 条是一天的目标刻度，按真实收藏条数算出来的）。`, source: '真实数据', mood: prog.progress >= 1 ? 'cheer' : 'idle' };
+      return { text: `今天的阅读进度是 ${pct}%（12 条是一天的目标刻度，按真实收藏条数算出来的）。`, source: FROM_DATA, mood: prog.progress >= 1 ? 'cheer' : 'idle' };
     }
     if (/足迹|记了几天|里程碑|周报/.test(s)) {
-      return { text: `本机记了 ${days} 天的阅读足迹，没上传，也不跨设备。`, source: '真实数据', mood: 'idle' };
+      return { text: `本机记了 ${days} 天的阅读足迹，没上传，也不跨设备。`, source: FROM_DATA, mood: 'idle' };
     }
     if (/额度|quota|api/.test(s)) {
-      return quota
-        ? { text: `知乎接口今日剩余：问题发现 ${quota.questions?.remaining ?? '—'}，用户数据 ${quota.user_data?.remaining ?? '—'}（每日重置）。`, source: '真实数据', mood: 'idle' }
-        : { text: '额度现在没读到，页面顶栏有实时数字。', source: '真实数据', mood: 'thinking' };
+      // ⚠️ 额度接口的真实形状是 `{ apis: [{ api_id, total, used, remaining }] }`，
+      //    原来这里读 `quota.questions?.remaining` / `quota.user_data?.remaining`
+      //    —— 那两个键根本不存在，于是桌宠回答额度问题只会念两个「—」：
+      //    读不到，却占着两个数位（跟 D62 说的「读不到≠0」是一类毛病）。
+      const list = quota?.apis ?? [];
+      const find = (id) => list.find((x) => x.api_id === id);
+      const disc = find('question_discovery');
+      const user = find('user_data');
+      const bits = [];
+      if (disc) bits.push(`问题发现 ${disc.remaining}/${disc.total}`);
+      if (user) bits.push(`用户数据 ${user.remaining}/${user.total}`);
+      return bits.length
+        ? { text: `知乎那边的额度今天还剩：${bits.join('，')}（每天重置）。`, source: FROM_DATA, mood: 'idle' }
+        : { text: '今天的额度没读到。', source: FROM_DATA, mood: 'thinking' };
     }
     if (/出处|真的吗|编的|链接/.test(s)) {
-      return { text: '日报里每条都能点回知乎原文——出处是收藏条目自带的，不是我补的。', source: '真实数据', mood: 'greet' };
+      return { text: '日报里每条都能点回知乎原文——出处是收藏条目自带的，不是我补的。', source: FROM_DATA, mood: 'greet' };
     }
     if (/你好|嗨|hi|在吗|你是谁/.test(s)) {
       const cat = this.getTone();
-      return { text: cat?.lines?.opening ?? '我在这儿，陪你干活。', source: '台词目录', mood: 'greet' };
+      return { text: cat?.lines?.opening ?? '我在这儿，陪你干活。', source: FROM_TONE, mood: 'greet' };
     }
 
-    // 其余：用台词目录回应，并如实说明这是陪伴话，不是 AI 回答
+    // 其余：用台词目录回应。
+    // ⚠️ 不再把「台词目录」这个实现术语说给用户听（拟真），
+    //    但**诚实那层意思留着**：它给的不是查出来的答案，只是陪你的话。
     const cat = this.getTone();
     const line = cat?.lines?.park ?? cat?.lines?.offer;
     return {
-      text: line ? `${line}（这是台词目录里的陪伴话，不是 AI 对你的回答。）` : '这句我答不了——我只会照着台词目录说话，没有 AI 大脑。',
-      source: '台词目录',
+      text: line ? `${line}（这句是陪你的，不是我查出来的）` : '这句我接不住——我只会陪你读、陪你聊，不会回答问题。',
+      source: FROM_TONE,
       mood: 'thinking',
     };
   }

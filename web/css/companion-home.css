@@ -214,7 +214,9 @@ html[data-theme="dark"] .companion-hero::after {
   pointer-events: none;
 }
 
-/* 桌宠本体：Apple 玻璃相框里的动态照片（video），静态官方素材作回退 */
+/* 桌宠本体：Apple 玻璃相框里的官方动画素材（WebP）。
+   原来这里是一个 <video>（AI 生成的 mp4，带「视频由AI生成」水印 + 马赛克），
+   2026-11-23 22:3x 拟真审计后换成官方 assets/kanshan/idle.webp。 */
 .ch__pet {
   position: relative;
   z-index: 2;
@@ -238,19 +240,14 @@ html[data-theme="dark"] .companion-hero::after {
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
-.ch__pet-frame video,
-.ch__pet-fallback {
+.ch__pet-frame img.ch__pet-img {
   position: absolute;
   inset: 0;
   width: 100%; height: 100%;
-  object-fit: cover;
-  object-position: center 42%;
+  object-fit: contain;
+  padding: 5%;
   border-radius: inherit;
 }
-/* 视频失败/不支持时 JS 给 .no-video，显示静态官方素材 */
-.ch__pet-fallback { display: none; }
-.ch__pet.no-video .ch__pet-frame video { display: none; }
-.ch__pet.no-video .ch__pet-fallback { display: block; object-fit: contain; padding: 12%; }
 .ch__pet:hover { animation-play-state: paused; transform: translateY(-6px); }
 .ch__pet:focus-visible { outline: 2px solid var(--ch-accent); outline-offset: 6px; border-radius: var(--radius-xl); }
 html[data-theme="dark"] .ch__pet-frame { background: linear-gradient(160deg, rgba(20,40,52,.8), rgba(10,22,30,.6)); }
