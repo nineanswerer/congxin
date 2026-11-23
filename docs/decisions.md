@@ -1868,3 +1868,74 @@ HTML 的本地 `href`/`src`、JS 的静态 `import`、JS 的字面量动态 `imp
 **已实施**（`scripts/make-delivery.js`）。**交付包本身还没重出**（B23 的下一步）——
 重出只需 `node scripts\make-delivery.js --secret`（需先申请到部署专用密钥，见 B19）。
 
+---
+
+## D57 · 队友 11-23 新提交带来的交付包白名单缺口：补两个目录，并让打包自检认得「运行时拼目录」的纯文件名
+
+- **时间**：2026-11-23 13:0x
+- **拍板人**：AI（工程实现方式，与 D56 同性质 —— 不涉及产品口径与对外动作）
+- **关联**：D56 · B23 · B25
+
+### 背景
+
+队友 11-23 上午直接往 main 推了 `9601112`「陪伴空间改 Apple 玻璃风并加桌宠动效视频（去山/多端/双模式）」，
+11 个文件、+4024 / −103。其中 **5 个是运行期新文件**：
+
+| 文件 | 谁引的 | 漏带会怎样 |
+|---|---|---|
+| `web/vendor/remixicon/remixicon.css` | `web/index.html:44` `<link rel="stylesheet">` | 图标全变豆腐块 |
+| `web/vendor/remixicon/fonts/remixicon.woff2` | `remixicon.css:13` `src: url("fonts/remixicon.woff2")` | 同上（字体文件二级引用） |
+| `web/assets/companion/pet-idle-motion.mp4` | `web/index.html:127` `<source src>` | 桌宠动效区空着 |
+| `web/assets/companion/A_calm_healing_style_digital_i_2026-11-23T03-34-53.png` | `web/css/companion-home.css:32` `url()` | 陪伴空间背景空着 |
+| `web/css/*.css`、`web/js/*.js`（3 个 + 2 个） | `index.html:47-49`、`app.js:25-26` | —— |
+
+`web/css/` 与 `web/js/` 在 D56 的 `DIRS` 里是**整目录进包** → 这 3 个 CSS + 2 个 JS **自动进了包**，没问题。
+但 `web/vendor/` 与 `web/assets/companion/` **不在白名单** → **4 个文件漏带**。
+
+⚠️ **这正是 D56 那道保险第一次真正派上用场**：不用人肉排查，打包当场就红了。
+
+### 结论
+
+1. **白名单补两个整目录**（不是逐个文件）：`web/vendor/remixicon`、`web/assets/companion`
+   → 队友再往这两个目录里加运行期文件也自动跟上，不会再漏一次。
+2. **打包自检认得「运行时拼目录」的纯文件名**：
+   `web/js/pet-companion.js` 里 `map[mood] = ['idle.webp', '在', 'idle']` 这种**纯文件名**（不含目录），
+   真正的路径是运行时才拼出来的（`` `../assets/kanshan/${file}` ``）→ 静态扫不出完整路径，
+   D56 的自检会把它误报成「缺件」。
+   改成：**包里只要有同名文件就放过**（并记一条说明留痕），**一个同名文件都没有才报错**。
+   - **这不是放水**：漏掉 `assets/kanshan/*.webp` 整组时，包里一个 `idle.webp` 都不剩，照样报错。
+   - 参照物：`web/js/pet.js` 的 `../assets/kanshan/*.webp` 走的是**文档地址**（`/web/`）基准，
+     `web/js/pet-companion.js` 的裸名也是同一批素材 —— 结论一致。
+
+### 验证结果（11-23 13:0x）
+
+**交付链**
+
+- `node scripts\make-delivery.js --out .ctx\delivery-check` 四阶段全过：复制 **79** 个文件 → 改写 `config.js` 5 处 →
+  生成 HTML 证据 → 环境变量/写盘自检通过；运行时引用自检「**全部命中**」，5 条纯文件名按同名文件放过并留痕。
+- 交付副本 **80 个文件 / 4.03 MB**。
+
+**交付副本实测（18801）**
+
+- 队友新增的 9 个文件 **全 200**：`remixicon.css` / `remixicon.woff2` / `pet-idle-motion.mp4` /
+  `A_calm_healing….png` / `apple-blue-tokens.css` / `companion-home.css` / `pet-companion.css` /
+  `mountain-trail.js` / `pet-companion.js`。
+- 浏览器打开交付副本：console **0 错**；网络面板**静态资源 0 失败**，
+  10 条失败**全是 API 401**（无密钥注入，符合预期 —— 页头如实写「额度没读到」，正是赛规第 7 条要的）。
+- 浏览器**实际请求到**：`remixicon.css` 200 → `remixicon.woff2` **200（字体真加载了）**、
+  `A_calm_healing….png` 200、`pet-idle-motion.mp4` **206**（range 请求，正常）、
+  `assets/kanshan/*.webp` **6 个全 200**（含 `setMood` 切情绪时重新请求 `thinking.webp`）。
+- 陪伴浮窗点开正常：「你好，我是刘看山。问我今天读了多少、额度还剩多少都行。」+
+  「本地回应：只答真实数据（收藏/进度/足迹/额度）与台词目录，不是 AI 大模型。记忆只在这台浏览器。」
+
+**队友这次改动没打坏主流程**
+
+- 仓库侧 `node scripts\regress-p3.js --base http://localhost:18800` → **PASS 15 / FAIL 0**（15 拍全过，含 3 张带出处真卡、断层强度 0.67、情境题带出处、认知地图 3 层）。
+- `powershell -ExecutionPolicy Bypass -File scripts\check-contract.ps1` → **PASS 13 / WARN 0 / FAIL 0**。
+- 仓库侧浏览器 `?demo=1`：console **0 错**、网络 **0 失败**。
+
+### 状态
+
+**已实施**（`scripts/make-delivery.js`）。**交付包仍待重出**（B19 的部署密钥就位后 `node scripts\make-delivery.js --secret`）——
+这次重出**必须**带上队友 11-23 的新文件，否则上线会掉图标、桌宠动效区和陪伴空间背景是空的。
+

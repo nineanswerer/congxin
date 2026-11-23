@@ -94,6 +94,13 @@ const DIRS = [
   'server/src',
   'web/css',
   'web/js',
+  // 队友 11-23「陪伴空间改 Apple 玻璃风」新增的运行期资源（D57）：
+  //   - remixicon 图标字体（index.html:44 直接 <link>，css 内部再引 woff2）
+  //   - 陪伴空间背景图 + 桌宠动效视频（index.html:127 <source src>）
+  // 这两处漏掉 = 上线后图标全变豆腐块 / 桌宠动效区空着。
+  // 按**整目录**进包：队友再往这两个目录里加运行期文件也自动跟上。
+  'web/vendor/remixicon',
+  'web/assets/companion',
 ];
 
 /** `web/` 下单独挑的文件（`web/serve.js` 是开发服务器、`docs-shot-*.png` 是截图，都不进包）。 */
@@ -531,14 +538,26 @@ function stripJsComments(text) {
  *   3. JS 里每个**字面量**的动态 `import('x')` / `new URL('x', ...)`；
  *   4. `data-moment="<id>"` / `data-ui-load="<name>"` 对应的片段文件；
  *   5. CSS 里每个相对路径的 `url()` / `@import`；
- *   6. JS 里每个看起来像本地素材的路径字面量（`../assets/x.webp` 这种）。
+ *   6. JS 里每个看起来像本地素材的路径字面量（`../assets/x.webp` 这种）；
+ *      **纯文件名**（不含目录）当成「运行时才拼目录前缀」处理 —— 静态
+ *      解析不出完整路径，退化为「包里有没有同名文件」来判断（D57）。
  *
  * 少一个文件就直接报错退出，并写清楚缺哪个 —— 宁可现在红，不要上线白屏。
  */
 function checkRuntimeRefs() {
   const problems = [];
+  const notes = [];
   const have = new Set(listRelFiles(OUT));
   const inPkg = (rel) => have.has(rel);
+
+  // 按「文件名（不含目录）」索引。用途见下面第 6 条：JS 里存在
+  // 「运行时才拼目录前缀」的写法（`../assets/kanshan/${file}`），
+  // 静态扫不出完整路径，只能退化到同名匹配。
+  const byBase = new Map();
+  for (const f of have) {
+    const b = path.posix.basename(f);
+    if (!byBase.has(b)) byBase.set(b, f);
+  }
 
   const htmlRel = 'web/index.html';
   const html = fs.readFileSync(path.join(OUT, 'web', 'index.html'), 'utf8');
@@ -623,6 +642,16 @@ function checkRuntimeRefs() {
       const fromModule = path.posix.normalize(path.posix.join(dir, ref));
       const fromDoc = path.posix.normalize(path.posix.join(htmlDir, ref));
       if (!inPkg(fromModule) && !inPkg(fromDoc)) {
+        // 纯文件名（不含目录）= 路径是**运行时**才拼出来的，静态解析不出来。
+        // 例：pet-companion.js 里 `map[mood] = ['idle.webp', ...]`，
+        // 真正用的是 `` `../assets/kanshan/${file}` `` —— 目录前缀在运行时才接上。
+        // 这种只要包里**有同名文件**就放过，并记一条说明，不当成缺件。
+        if (!ref.includes('/') && byBase.has(path.posix.basename(ref))) {
+          notes.push(
+            `${rel} 的 ${ref} 是运行时拼目录的纯文件名，按包里同名文件 ${byBase.get(path.posix.basename(ref))} 放过`
+          );
+          continue;
+        }
         problems.push(`${rel} 引用了素材 ${ref} → 包里既没有 ${fromModule} 也没有 ${fromDoc}`);
       }
     }
@@ -652,7 +681,7 @@ function checkRuntimeRefs() {
         '  修法：把缺的文件加进 make-delivery.js 的白名单（ASSET_KIT_FILES / DIRS），再重跑。'
     );
   }
-  return problems;
+  return { problems, notes };
 }
 
 // --------------------------------------------------------------------- HTML 证据
@@ -729,8 +758,9 @@ function main() {
 
   console.log(`\n[1/4] 复制运行期文件：${copied.length + countDirFiles()} 个`);
 
-  const missing = checkRuntimeRefs();
+  const { problems: missing, notes } = checkRuntimeRefs();
   console.log(`    运行时引用自检：${missing.length === 0 ? '全部命中' : missing.length + ' 处缺失'}`);
+  for (const n of notes) console.log(`    · ${n}`);
 
   const changes = patchConfig();
   console.log(`[2/4] 改写 config.js：${changes.length} 处`);
