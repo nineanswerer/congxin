@@ -1,0 +1,159 @@
+/*
+ * Apple Design System token 基础（严格取自 apple-design skill / references/design-system.md）
+ * 从心项目在此之上叠加「蓝色治愈」调性，并落实 light / dark 双模式。
+ * 与旧 apple-tokens.css（复古报刊方案）并存：本文件只服务陪伴首屏与常驻桌宠面板。
+ */
+:root {
+  color-scheme: light dark;
+
+  /* --- Apple 系统色（light） --- */
+  --apple-blue: #007AFF;
+  --apple-green: #34C759;
+  --apple-indigo: #5856D6;
+  --apple-orange: #FF9500;
+  --apple-pink: #FF2D55;
+  --apple-purple: #AF52DE;
+  --apple-red: #FF3B30;
+  --apple-teal: #5AC8FA;
+  --apple-yellow: #FFCC00;
+
+  /* --- 背景 / 标签（light） --- */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F2F2F7;
+  --bg-tertiary: #FFFFFF;
+  --label-primary: #000000;
+  --label-secondary: rgba(60, 60, 67, 0.6);
+  --label-tertiary: rgba(60, 60, 67, 0.3);
+
+  /* --- 字体 --- */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", "PingFang SC", "Noto Sans SC", Arial, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", ui-monospace, Consolas, monospace;
+
+  /* --- 4pt 栅格 --- */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+  --space-4xl: 44px;
+
+  /* --- 圆角 --- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  /* --- 阴影层级（light） --- */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.10), 0 2px 4px rgba(0,0,0,0.08);
+  --shadow-lg: 0 10px 20px rgba(0,0,0,0.12), 0 6px 6px rgba(0,0,0,0.08);
+  --shadow-xl: 0 20px 40px rgba(0,0,0,0.15);
+
+  /* --- spring 缓动 --- */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0, 0, 0.58, 1);
+  --dur-micro: 130ms;
+  --dur-press: 150ms;
+  --dur-view: 350ms;
+
+  /* ===== 蓝色治愈语义层（light） ===== */
+  --ch-ink: #0B3042;
+  --ch-ink-soft: #426879;
+  --ch-accent: #2F8AA6;
+  --ch-accent-bright: #5AC8FA;
+  --ch-glass-bg: rgba(255, 255, 255, 0.72);
+  --ch-glass-border: rgba(255, 255, 255, 0.55);
+  --ch-glass-shadow: 0 8px 32px rgba(11, 48, 66, 0.12);
+  --ch-btn-bg: #103F54;
+  --ch-btn-ink: #F4FEFF;
+  --ch-sky-fallback: #B9DCE8;
+
+  /* 常驻桌宠浮窗：深色玻璃（在浅色首屏上也保持沉稳） */
+  --pc-bg: rgba(10, 22, 30, 0.86);
+  --pc-ink: #EAF4F7;
+  --pc-muted: #8FA9B4;
+  --pc-border: rgba(255, 255, 255, 0.12);
+  --pc-accent: #64D2FF;
+
+  /* nav 玻璃（浅色主题下偏浅） */
+  --nav-bg: rgba(8, 12, 16, 0.72);
+  --nav-border: rgba(255, 255, 255, 0.10);
+
+  /* --- Mobile spacing tokens（apple-design Step 5.1 强制，不硬编码） --- */
+  --margin-page: 16px;
+  --gap-card: 12px;
+  --padding-card: 16px;
+  --radius-card: 20px;
+}
+
+/* ===== Dark mode：系统色 + 蓝色治愈反相 ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --apple-blue: #0A84FF;
+    --apple-green: #30D158;
+    --apple-indigo: #5E5CE6;
+    --apple-orange: #FF9F0A;
+    --apple-pink: #FF375F;
+    --apple-purple: #BF5AF2;
+    --apple-red: #FF453A;
+    --apple-teal: #64D2FF;
+    --apple-yellow: #FFD60A;
+
+    --bg-primary: #000000;
+    --bg-secondary: #1C1C1E;
+    --bg-tertiary: #2C2C2E;
+    --label-primary: #FFFFFF;
+    --label-secondary: rgba(235, 235, 245, 0.6);
+    --label-tertiary: rgba(235, 235, 245, 0.3);
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.55), 0 2px 4px rgba(0,0,0,0.45);
+    --shadow-lg: 0 10px 20px rgba(0,0,0,0.6), 0 6px 6px rgba(0,0,0,0.5);
+    --shadow-xl: 0 20px 40px rgba(0,0,0,0.7);
+
+    --ch-ink: #EAF6FA;
+    --ch-ink-soft: #A9C6D2;
+    --ch-accent: #64D2FF;
+    --ch-accent-bright: #5AC8FA;
+    --ch-glass-bg: rgba(14, 26, 34, 0.78);
+    --ch-glass-border: rgba(255, 255, 255, 0.14);
+    --ch-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.42);
+    --ch-btn-bg: #64D2FF;
+    --ch-btn-ink: #06181B;
+    --ch-sky-fallback: #0E1B24;
+
+    --pc-bg: rgba(10, 18, 24, 0.9);
+    --pc-border: rgba(255, 255, 255, 0.14);
+
+    --nav-bg: rgba(6, 10, 14, 0.82);
+    --nav-border: rgba(255, 255, 255, 0.12);
+  }
+}
+
+/* 手动主题切换（Web 场景：右下角按钮） */
+html[data-theme="dark"] {
+  --apple-blue: #0A84FF; --apple-green: #30D158; --apple-indigo: #5E5CE6;
+  --apple-orange: #FF9F0A; --apple-pink: #FF375F; --apple-purple: #BF5AF2;
+  --apple-red: #FF453A; --apple-teal: #64D2FF; --apple-yellow: #FFD60A;
+  --bg-primary: #000000; --bg-secondary: #1C1C1E; --bg-tertiary: #2C2C2E;
+  --label-primary: #FFFFFF; --label-secondary: rgba(235,235,245,0.6);
+  --label-tertiary: rgba(235,235,245,0.3);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5); --shadow-md: 0 4px 6px rgba(0,0,0,0.55);
+  --shadow-lg: 0 10px 20px rgba(0,0,0,0.6); --shadow-xl: 0 20px 40px rgba(0,0,0,0.7);
+  --ch-ink: #EAF6FA; --ch-ink-soft: #A9C6D2; --ch-accent: #64D2FF;
+  --ch-accent-bright: #5AC8FA;
+  --ch-glass-bg: rgba(14, 26, 34, 0.78); --ch-glass-border: rgba(255,255,255,0.14);
+  --ch-glass-shadow: 0 8px 32px rgba(0,0,0,0.42);
+  --ch-btn-bg: #64D2FF; --ch-btn-ink: #06181B; --ch-sky-fallback: #0E1B24;
+  --pc-bg: rgba(10, 18, 24, 0.9); --pc-border: rgba(255,255,255,0.14);
+  --nav-bg: rgba(6, 10, 14, 0.82); --nav-border: rgba(255,255,255,0.12);
+}
+html[data-theme="light"] { color-scheme: light; }
+
+/* Reduced motion — skill Step 7 强制 */
+@media (prefers-reduced-motion: reduce) {
+  .ch__pet video, .ch__pet img, .pc__pet img { animation: none !important; }
+}

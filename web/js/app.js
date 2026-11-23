@@ -22,6 +22,8 @@ import {
 import { Pet, escapeHtml } from './pet.js';
 import { QUESTIONS, scoreQuiz, DIMENSION_LABELS } from './quiz.js';
 import { renderTerrain, zoomFracture } from './terrain.js';
+import { recordDailyRead, trailDays } from './mountain-trail.js';
+import { PetCompanion } from './pet-companion.js';
 import { initOutro, showOutro } from './outro.js';
 import { renderDaily } from './daily.js';
 
@@ -42,6 +44,7 @@ const state = {
 };
 
 let pet = null;
+let companion = null;
 
 // ---------------------------------------------------------------- 小工具
 
@@ -461,22 +464,9 @@ function renderList() {
     ${ZHIHU_LOGIN_HINT}`;
 }
 
-/** hero 的硬事实：真实收藏条数。 */
+/** 首屏硬事实：真实收藏条数。 */
 function collectedCount(favorites) {
   return favorites?.collected_count ?? (favorites?.items?.length ?? 0);
-}
-
-/** hero 窗口里的头版预览：真实收藏的前三条，带出处域名。 */
-function heroPreviewHtml(favorites) {
-  const items = (favorites?.items ?? []).filter((it) => it?.url).slice(0, 3);
-  if (!items.length) {
-    return `<div class="d-loading">${escapeHtml(favorites?.empty_notice ?? '今天还没有可印的收藏。')}</div>`;
-  }
-  return `<div class="preview-list">${items.map((it, i) => {
-    let host = '';
-    try { host = new URL(it.url).hostname.replace(/^www\./, ''); } catch { host = ''; }
-    return `<div class="preview-row"><span class="preview-no">${String(i + 1).padStart(2, '0')}</span><span class="preview-title">${escapeHtml(it.title ?? '(无标题)')}</span><span class="preview-host">${escapeHtml(host)}</span></div>`;
-  }).join('')}</div>`;
 }
 
 function renderMaterials() {
@@ -885,13 +875,6 @@ async function loadTerrain() {
     const data = await getTerrain(state.tone?.tone);
     state.terrain = data;
 
-    // tasteskill 改造：同一份真实地形数据同时印到「三层认知地图」section 的展示窗，
-    // 不重复调接口（不额外烧额度）。展示窗只读，断层交互仍在 #mirror-terrain 上。
-    const showcase = $('#terrain-mount');
-    if (showcase && showcase !== wrap) {
-      renderTerrain(showcase, data, () => {});
-    }
-
     // 创作信号：脚本 4:05 那一拍备料（用户自己写过的那句话）。
     // ⚠️ **不 await** —— 不阻塞地形渲染；取不到就降级成数据陈述，
     //    **不报错、不编、也不拿假引文充数**。
@@ -959,11 +942,22 @@ function renderStrip() {
     </div>`;
 }
 
+/** 首屏三块硬事实：同一份真实收藏快照 + 本机记忆，不另调接口。 */
+function updateHeroFacts(favError) {
+  const count = favError ? '—' : String(collectedCount(state.favorites));
+  const set = (sel, value) => { const el = $(sel); if (el) el.textContent = value; };
+  set('#ch-count', count);
+  set('#ch-note-count', count);
+  set('#ch-turns', String(companion?.memory?.turns ?? 0));
+  set('#ch-days', String(trailDays()));
+}
+
 // ---------------------------------------------------------------- 启动
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function init() {
+  // 首屏是陪伴空间（纯 2D + 桌宠），不加载 3D 山 / WebGL。
   pet = new Pet($('#pet'));
   pet.img.addEventListener('error', () => pet.onAssetError());
 
@@ -982,6 +976,32 @@ async function init() {
     pet.sayText(escapeHtml(err instanceof ApiFail ? err.hint : '台词加载失败。'));
   }
 
+  // 桌宠伴侣（借鉴 my-neuro 的常驻交互）：可拖拽、主动搭话、打字对话、本机记忆。
+  // 数据全部来自真实接口快照与台词目录，不接 LLM、不编造。
+  companion = new PetCompanion(pet, {
+    getFacts: () => ({
+      count: collectedCount(state.favorites),
+      quota: state.quota,
+    }),
+    getTone: () => state.tone,
+  });
+
+  // 首屏两只入口都打开同一个常驻对话面板，情绪素材共用
+  $('#ch-talk')?.addEventListener('click', () => { companion.setOpen(true); companion.setMood('greet'); });
+  $('#ch-pet')?.addEventListener('click', () => { companion.setOpen(true); companion.setMood('greet'); });
+
+  // 首屏桌宠轻动效：视频不可用时回退到官方静态素材（诚实降级，不白屏）
+  const petVideo = $('#ch-pet-video');
+  const petBtn = $('#ch-pet');
+  if (petVideo && petBtn) {
+    const fallback = () => petBtn.classList.add('no-video');
+    petVideo.addEventListener('error', fallback);
+    petVideo.querySelector('source')?.addEventListener('error', fallback);
+    // 部分浏览器不触发 error，用可播放性兜底
+    petVideo.addEventListener('loadeddata', () => petBtn.classList.remove('no-video'));
+    if (!petVideo.canPlayType || !petVideo.canPlayType('video/mp4')) fallback();
+  }
+
   renderQuiz();
   renderCards();
   await loadProfile();
@@ -991,11 +1011,15 @@ async function init() {
   let favError = null;
   try {
     state.favorites = await getFavorites(9);
+    // 山去掉了，但“今天读了多少”的本机足迹仍按真实收藏数记录
+    recordDailyRead(collectedCount(state.favorites));
     renderMaterials();
     renderStrip();
     // 脚本 0:15：材料摊开了，桌宠转头问一句「要不我先啃一口？」
     pet.setState('greet');
     pet.say('offer', { note: '拖一条到它身上，或者点下面的按钮' });
+    // 悬浮桌宠主动搭话（真实事件：收藏刚读到）：台词来自 tone 目录，条数是真实数据
+    companion?.proactive('source', `刚读到 ${collectedCount(state.favorites)} 条真实收藏。`);
   } catch (err) {
     $('#materials').innerHTML = noticeBox(showFail(err, '读收藏失败'), 'err');
     favError = err instanceof ApiFail ? err.hint : '出了点问题，稍后再试一次。';
@@ -1012,13 +1036,8 @@ async function init() {
     error: favError,
   });
 
-  // hero 上的真实硬事实：今日收藏条数 + 头版索引预览（同一份真实数据，不另调接口）
-  const heroCount = $('#hero-count');
-  if (heroCount) heroCount.textContent = favError ? '—' : String(collectedCount(state.favorites));
-  const preview = $('#hero-paper-preview');
-  if (preview) preview.innerHTML = favError
-    ? `<div class="d-loading">${escapeHtml(favError)}</div>`
-    : heroPreviewHtml(state.favorites);
+  // 首屏只放三块硬事实；日报头版在下面的 #paper 里完整呈现，不重复渲染预览
+  updateHeroFacts(favError);
 
   // 事件
   $('#btn-feed').addEventListener('click', feed);
