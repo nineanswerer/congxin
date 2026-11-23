@@ -192,15 +192,18 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
     const p = document.getElementById(PAD_ID);
     if (!p) return;
     const h = parseFloat(p.style.height) || 0;
-    if (!h) return;
+    if (!h) { p.remove(); return; }   // 从没垫高过 → 顺手把这个空节点也带走
     const vh = window.innerHeight;
     const before = document.documentElement.scrollHeight - vh;
     p.style.height = '0px';
     const after = document.documentElement.scrollHeight - vh;
     const delta = before - after;
+    // ⚠️ 撤掉垫高的那一拍，视口可能停在「新文档滚不到的位置」——
+    //    把 scrollY 一起拉回来，画面才不会突然往上跳一截。
     if (delta > 0 && window.scrollY > after) {
       window.scrollTo(0, Math.max(0, window.scrollY - delta));
     }
+    p.remove();
   }
 
   /**
