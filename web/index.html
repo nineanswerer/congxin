@@ -47,6 +47,7 @@
 <link rel="stylesheet" href="css/apple-blue-tokens.css" />
 <link rel="stylesheet" href="css/companion-home.css" />
 <link rel="stylesheet" href="css/pet-companion.css" />
+<link rel="stylesheet" href="css/onboarding.css" />
 <script>
 /* 统一主题入口：无手动偏好时跟随系统，并落成一个确定的 data-theme，
    保证背景图遮罩与文字 token 走同一套模式（Apple 双模式对比度要求）。 */
@@ -199,7 +200,13 @@
        [data-ui] 让窗口内部（材料、卡片、tab、stat）按产品 UI 排版，不再冲击页面 section 网格 -->
   <section class="section" id="workbench" aria-labelledby="bench-h">
     <div class="wrap">
-      <div class="section-head"><h2 id="bench-h">工作台。 <span class="muted">把收藏交给它，看它读出什么。</span></h2></div>
+      <div class="section-head section-head--row">
+        <div>
+          <h2 id="bench-h">工作台。 <span class="muted">把收藏交给它，看它读出什么。</span></h2>
+        </div>
+        <!-- 首次上手引导的「重开」入口：看过一遍也能随时再要一次 -->
+        <button class="btn btn--secondary" type="button" id="btn-guide">带我走一遍</button>
+      </div>
       <div class="app-frame app-frame--bench" data-visual data-ui>
         <div class="app-frame__bar"><span class="app-frame__dots"><i></i><i></i><i></i></span><b>从心 · 工作台</b><span class="app-frame__bar-sp"></span><span>拖一条收藏给桌宠，或点按钮喂它</span></div>
         <div class="app-frame__body">
@@ -272,8 +279,10 @@
   <div class="tone-switch" id="tone-switch" aria-label="桌宠语气"></div>
   <button class="btn btn--secondary actionbar__btn" id="theme-toggle" type="button" title="切换浅色 / 深色模式" aria-label="切换浅色或深色模式"><span class="theme-toggle-icon" aria-hidden="true"></span> 模式</button>
   <button class="btn btn--secondary actionbar__btn" type="button" id="btn-outro">落版</button>
-  <button class="btn btn--secondary actionbar__btn" type="button" id="btn-reset-quiz" hidden>重置问卷</button>
-  <button class="btn btn--secondary actionbar__btn" type="button" id="btn-situation" hidden>情境题</button>
+  <!-- ⚠️ 这里原本有两颗 hidden 的「重置问卷 / 情境题」按钮（id 与问卷面板里的重名，
+       而它们自己又没有任何 handler）。2026-11-23 删掉：重名 id 会让
+       `$('#btn-reset-quiz')` / `$('#btn-situation')` 取到错的那一个，
+       死代码留着只会再咬人。功能都在「照镜子」面板里。 -->
 </nav>
 
 <!-- 落版（演示最后一拍，触发式浮层，不占 section 网格） -->

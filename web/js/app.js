@@ -26,6 +26,7 @@ import { recordDailyRead, trailDays } from './mountain-trail.js';
 import { PetCompanion } from './pet-companion.js';
 import { initOutro, showOutro } from './outro.js';
 import { renderDaily } from './daily.js';
+import { initOnboarding } from './onboarding.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -45,6 +46,8 @@ const state = {
 
 let pet = null;
 let companion = null;
+let guide = null;          // 首次上手引导（web/js/onboarding.js）
+let demoMode = false;      // ?demo=1 —— 演练模式不弹引导、不弹完成卡
 
 // ---------------------------------------------------------------- 小工具
 
@@ -625,15 +628,15 @@ function renderQuiz() {
           ${q.sub ? `<div class="qsub">${escapeHtml(q.sub)}</div>` : ''}
           <div class="opts">
             ${q.options.map((o, i) => `
-              <button class="opt" data-qid="${q.id}" data-idx="${i}">
+              <button class="opt${state.quizPicked[q.id] === i ? ' is-on' : ''}" data-qid="${q.id}" data-idx="${i}">
                 <span class="k">${escapeHtml(o.k)}</span>${escapeHtml(o.text)}
               </button>`).join('')}
           </div>
         </div>`).join('')}
     </div>
     <div style="margin-top:14px; display:flex; gap:10px">
-      <button class="btn primary" id="btn-tension">让桌宠照照镜子</button>
-      <button class="btn ghost" id="btn-reset-quiz">重选</button>
+      <button class="btn btn--primary" id="btn-mirror-run">让桌宠照照镜子</button>
+      <button class="btn btn--secondary" id="btn-reset-quiz">重选</button>
     </div>`;
 
   $$('#mirror-quiz .opt').forEach((b) => {
@@ -644,16 +647,84 @@ function renderQuiz() {
       b.classList.add('is-on');
     });
   });
-  $('#btn-reset-quiz').addEventListener('click', () => {
+  $('#btn-reset-quiz')?.addEventListener('click', () => {
     state.quizPicked = {};
     renderQuiz();
   });
-  $('#btn-tension').addEventListener('click', runTension);
+  // ⚠️ 这个按钮**不能**再叫 `btn-tension` —— 工作台「看一次断层」已经用了这个 id，
+  //    `$('#btn-tension')` 只会返回**第一个**（工作台那个），
+  //    于是这颗主按钮永远拿不到 handler（2026-11-23 实测：点了没反应）。
+  $('#btn-mirror-run')?.addEventListener('click', (e) => startMirror(e.currentTarget));
 }
 
-async function runTension() {
-  const btn = $('#btn-tension');
-  btn.disabled = true;
+/** 问卷答了几题 / 还差几题。 */
+function quizAnsweredCount() {
+  return Object.keys(state.quizPicked).length;
+}
+function quizMissingCount() {
+  return QUESTIONS.filter((q) => state.quizPicked[q.id] === undefined).length;
+}
+
+/** 切到「照镜子 · 认知闭环」标签页（复用它自己的点击处理器，状态不会走偏）。 */
+function switchToMirrorTab() {
+  const btn = document.querySelector('#tabs button[data-tab="mirror"]');
+  if (btn && !btn.classList.contains('is-on')) btn.click();
+}
+
+/**
+ * 自述没说全 → **不许下判断**，也不许说「你说的一致」。
+ *
+ * 断层是拿「你说的」跟「你做的」放在一起比。问卷一个字都没答的时候，
+ * 那个「一致」是**编的**（2026-11-23 实测：新用户点「看一次断层」，
+ * 拿到的是「你说的和你做的在这几个维度上是一致的」—— 他根本没说过话）。
+ * 所以这里只说实情：还差几题，并把人送到问卷那儿。
+ */
+function showSelfReportPrompt(missing) {
+  const box = $('#mirror-fracture');
+  if (!box) return;
+  const firstUnanswered = QUESTIONS.find((q) => state.quizPicked[q.id] === undefined);
+  box.innerHTML = noticeBox(
+    `<b>现在还照不了。</b>问卷还差 <b>${missing}</b> 题没答 —— ` +
+    `断层是拿「你说的」跟「你做的」放在一起比，你说的还没说全，我下不了这个判断。` +
+    `<div style="margin-top:10px"><button class="btn btn--primary" id="btn-quiz-jump">去答剩下的题</button></div>`,
+    'warn'
+  );
+  $('#btn-quiz-jump')?.addEventListener('click', () => {
+    const opt = firstUnanswered
+      ? document.querySelector(`#mirror-quiz .opt[data-qid="${firstUnanswered.id}"]`)
+      : null;
+    (opt ?? $('#mirror-quiz'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+}
+
+/**
+ * 「照镜子」的统一入口 —— 工作台的「看一次断层」和问卷里的「让桌宠照照镜子」都走这里。
+ *
+ * @param {HTMLElement} [trigger] 点下去的那颗按钮（用来禁用/恢复）
+ */
+async function startMirror(trigger) {
+  const missing = quizMissingCount();
+  if (missing > 0) {
+    switchToMirrorTab();
+    showSelfReportPrompt(missing);
+    return;
+  }
+  switchToMirrorTab();
+  await runTension(trigger);
+}
+
+async function runTension(trigger) {
+  // ⚠️ **自述没说全 → 不调接口、不下判断**。
+  //    「你说的和你做的……一致」这句话的前提是**你说过**。
+  //    问卷没答完就说它 = 对用户撒谎（2026-11-23 实测踩过）。
+  const missing = quizMissingCount();
+  if (missing > 0) {
+    switchToMirrorTab();
+    showSelfReportPrompt(missing);
+    return;
+  }
+  const btn = trigger ?? $('#btn-mirror-run');
+  if (btn) btn.disabled = true;
   const box = $('#mirror-fracture');
   try {
     const report = scoreQuiz(state.quizPicked);
@@ -684,7 +755,8 @@ async function runTension() {
     }
     if (!data.has_tension || !(data.fractures ?? []).length) {
       box.innerHTML = noticeBox(
-        `<b>没找到断层。</b>你说的和你做的在这几个维度上是一致的——这本身就是个结果。`,
+        `<b>没找到断层。</b>你说的和你做的在这几个维度上是一致的——这本身就是个结果。` +
+        `<br /><span class="code">这次比的是 ${data.signal_count ?? '—'} 个真实行为信号，和你答的 ${quizAnsweredCount()} 题。</span>`,
         'warn'
       );
       pet.setState('idle');
@@ -719,15 +791,15 @@ async function runTension() {
           </div>`).join('')}
       </div>
       <div style="margin-top:14px; display:flex; gap:10px">
-        <button class="btn primary" id="btn-situation">来一道带出处的题</button>
-        <button class="btn ghost" id="btn-terrain">看地形</button>
+        <button class="btn btn--primary" id="btn-situation">来一道带出处的题</button>
+        <button class="btn btn--secondary" id="btn-terrain">看地形</button>
       </div>`;
 
     pet.setState('cheer');
     pet.say('fracture', { note: '不确定的地方在证据栏里说清楚了' });
 
-    $('#btn-situation').addEventListener('click', loadSituation);
-    $('#btn-terrain').addEventListener('click', loadTerrain);
+    $('#btn-situation')?.addEventListener('click', loadSituation);
+    $('#btn-terrain')?.addEventListener('click', loadTerrain);
   } catch (err) {
     box.innerHTML = noticeBox(showFail(err, '对照失败'), 'err');
     petSayFail(err, '对照失败');
@@ -739,7 +811,7 @@ async function runTension() {
 async function loadSituation() {
   const box = $('#mirror-situation');
   const btn = $('#btn-situation');
-  btn.disabled = true;
+  if (btn) btn.disabled = true;
   try {
     pet.setState('thinking');
     pet.say('question');
@@ -821,7 +893,7 @@ async function loadSituation() {
     box.innerHTML = noticeBox(showFail(err, '出题失败'), 'err');
     petSayFail(err, '出题失败');
   } finally {
-    btn.disabled = false;
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -910,6 +982,20 @@ async function loadTerrain() {
     }
     // 收尾一句（脚本 4:30–4:50：全景地图 + 这一句）
     pet.say('closing', { note: '三层都有了，断层上多了一座桥' });
+
+    // 闭环走通标记 —— 数字全部来自**这一次真实跑出来**的状态，一个都不编。
+    if (!demoMode) {
+      const L = state.terrain?.layers ?? {};
+      const filledLayers = ['self_reported', 'behavioral', 'situational']
+        .filter((k) => (L[k]?.blocks ?? []).length).length;
+      guide?.showDone({
+        favorites: collectedCount(state.favorites),
+        quiz: `${quizAnsweredCount()}/${QUESTIONS.length}`,
+        fractures: state.tension?.fractures?.length ?? 0,
+        situation: state.situation ? 1 : 0,
+        layers: filledLayers,
+      });
+    }
   } catch (err) {
     wrap.innerHTML = noticeBox(showFail(err, '读地形失败'), 'err');
     petSayFail(err, '读地形失败');
@@ -957,6 +1043,9 @@ function updateHeroFacts(favError) {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 async function init() {
+  // 演练模式（?demo=1）：走的是排好的脚本，不弹引导、不弹完成卡。
+  demoMode = new URLSearchParams(location.search).has('demo');
+
   // 首屏是陪伴空间（纯 2D + 桌宠），不加载 3D 山 / WebGL。
   pet = new Pet($('#pet'));
   pet.img.addEventListener('error', () => pet.onAssetError());
@@ -1042,6 +1131,9 @@ async function init() {
   // 事件
   $('#btn-feed').addEventListener('click', feed);
   $('#btn-views').addEventListener('click', loadViewpoints);
+  // 工作台的「看一次断层」= 问卷里的「让桌宠照照镜子」：同一个入口（startMirror）。
+  // 自述没说全 → 送去问卷并说清实情；说全了 → 才真的照镜子。
+  $('#btn-tension')?.addEventListener('click', (e) => startMirror(e.currentTarget));
 
   // 双模式切换（Apple HIG Step 8）：右下角按钮切 light/dark，记住选择
   const themeBtn = $('#theme-toggle');
@@ -1131,7 +1223,12 @@ async function init() {
       if (tab === 'mirror') {
         pet.setState('greet');
         // 脚本 3:00：桌宠**主动**发起照镜子
-        pet.say('mirror', { note: '你收藏的这些，跟你刚才说的不太一样' });
+        // ⚠️ 「跟你刚才说的不太一样」的前提是**你已经说过**。
+        //    一个字都没答的时候说这句 = 对用户撒谎（2026-11-23 实测踩过）。
+        //    演练模式是排好的脚本，预设答案在切页前就写进了 state，所以照说不误。
+        if (quizAnsweredCount() > 0) {
+          pet.say('mirror', { note: '你收藏的这些，跟你刚才说的不太一样' });
+        }
       } else {
         // 脚本 2:45：卡片先收进右侧栏
         pet.setState('idle');
@@ -1140,8 +1237,27 @@ async function init() {
     });
   });
 
+  // 首次上手引导（web/js/onboarding.js）
+  //
+  // ⚠️ 判据全部读**真实状态**（卡片数 / 答题数 / 断层 / 情境题 / 版图），
+  //    引导自己不发任何知乎请求 —— 它只指路，不替用户做，也不烧额度。
+  guide = initOnboarding({
+    probe: () => ({
+      cards: state.cards.length,
+      answered: quizAnsweredCount(),
+      total: QUESTIONS.length,
+      tension: Boolean(state.tension),
+      situation: Boolean(state.situation),
+      terrain: Boolean(state.terrain),
+      tab: document.querySelector('#tabs button[data-tab="mirror"]')?.classList.contains('is-on') ?? false,
+    }),
+    switchTab: (tab) => { if (tab === 'mirror') switchToMirrorTab(); },
+    autoStart: !demoMode,
+  });
+  $('#btn-guide')?.addEventListener('click', () => guide?.start(0));
+
   // 演练模式：?demo=1 自动串一遍（脚本从桌宠开始，先翻到内页，别停在日报头版）
-  if (new URLSearchParams(location.search).has('demo')) {
+  if (demoMode) {
     $('#pet')?.scrollIntoView({ block: 'center' });   // 桌宠在工作台里，脚本从它开始
     $('#tabs')?.scrollIntoView({ block: 'start' });
     const { runDemo } = await import('./demo.js');

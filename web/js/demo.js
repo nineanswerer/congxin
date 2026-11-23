@@ -40,17 +40,23 @@ export async function runDemo(ctx) {
   await wait(1800);
   await loadViewpoints();
 
+  // ⚠️ 预设答案在切 tab **之前**就写进 state：
+  //    切到「照镜子」那一刻，桌宠要说「跟你刚才说的不太一样」——
+  //    那一刻 state 里必须已经有答案，否则这句话是假的
+  //    （App 端已经改成「你没说过，它就不说」）。
+  //    画面顺序不变：选项的选中态仍然是切过去之后才亮。
+  const preset = params.get('quiz') === 'deep' ? DEEP_ANSWERS : DEEP_ANSWERS;
+  for (const [qid, idx] of Object.entries(preset)) state.quizPicked[qid] = idx;
+
   // ---- 3. 切到「照镜子」 ----
   step(3, '桌宠主动发起照镜子');
   await wait(1600);
   document.querySelector('#tabs button[data-tab="mirror"]')?.click();
 
-  // ---- 4. 答问卷（预设） ----
+  // ---- 4. 答问卷（预设）：把选中态画出来 ----
   step(4, '答问卷');
   await wait(900);
-  const preset = params.get('quiz') === 'deep' ? DEEP_ANSWERS : DEEP_ANSWERS;
   for (const [qid, idx] of Object.entries(preset)) {
-    state.quizPicked[qid] = idx;
     document
       .querySelector(`#mirror-quiz .opt[data-qid="${qid}"][data-idx="${idx}"]`)
       ?.classList.add('is-on');

@@ -1,0 +1,116 @@
+/* ---------------- 首次上手引导（web/js/onboarding.js） ----------------
+ *
+ * 三个部件：
+ *   1. `.ob`        固定在底部（压在快捷条上方）的引导卡容器
+ *   2. `.ob-target` 当前这一步要指的界面元素（描边 + 呼吸光圈）
+ *   3. `.ob__card--done` 闭环走通后的完成卡
+ *
+ * 配色一律走项目自己的 `--p-*` 令牌（浅色模式自动反相），
+ * 不写死颜色 —— 跟 app.css 同一套口径。
+ */
+
+.ob {
+  position: fixed;
+  left: 50%;
+  bottom: 76px;                 /* 让开底部 56px 的快捷操作条 */
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(92vw, 460px);
+  pointer-events: none;
+}
+.ob[hidden] { display: none !important; }
+
+.ob__card {
+  pointer-events: auto;
+  background: var(--p-surface);
+  color: var(--p-ink);
+  /* 边框跟着墨色走：浅色模式是深边、深色模式是浅边（写死白边在浅色模式下等于没有）。 */
+  border: 1px solid color-mix(in oklab, var(--p-ink) 20%, transparent);
+  border-radius: 18px;
+  padding: 14px 16px 16px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .28);
+  /* 与陪伴空间同一套玻璃质感 */
+  backdrop-filter: blur(18px) saturate(1.25);
+  -webkit-backdrop-filter: blur(18px) saturate(1.25);
+  animation: ob-in .26s ease-out;
+}
+@keyframes ob-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ob__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ob__count {
+  font: 500 12px var(--font-mono);
+  color: var(--p-accent);
+  letter-spacing: .04em;
+}
+.ob__skip {
+  border: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font: 400 13px var(--font-text);
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.ob__skip:hover { color: var(--p-ink); }
+
+.ob__title {
+  font: var(--display-weight) 17px/1.35 var(--font-display);
+  letter-spacing: var(--display-tracking);
+  margin: 8px 0 6px;
+  color: var(--p-ink);
+}
+.ob__body {
+  font: 400 14px/1.6 var(--font-text);
+  color: var(--p-muted);
+  margin: 0;
+}
+.ob__hint {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--p-accent) 14%, transparent);
+  color: var(--p-accent);
+  font: 500 12px/1.4 var(--font-text);
+  align-self: flex-start;
+}
+.ob__hint[hidden] { display: none !important; }
+
+.ob__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+.ob__foot .btn { height: 38px; }
+
+.ob__card--done .ob__title { color: var(--p-accent); }
+
+/* ---------------- 被指的元素 ---------------- */
+
+.ob-target {
+  outline: 2px solid var(--p-accent);
+  outline-offset: 3px;
+  animation: ob-pulse 1.8s ease-in-out infinite;
+}
+@keyframes ob-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(147, 241, 247, 0); }
+  50%      { box-shadow: 0 0 0 6px rgba(147, 241, 247, .18); }
+}
+
+@media (max-width: 639px) {
+  .ob { bottom: 68px; width: calc(100vw - 24px); }
+  .ob__title { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob__card { animation: none; }
+  .ob-target { animation: none; }
+}
