@@ -112,11 +112,15 @@ $env:PORT='18800'; $env:HOST='0.0.0.0'
 $env:ZHIHU_ACCESS_SECRET = [System.IO.File]::ReadAllText("$HOME\.zhihu-cli\access_secret").Trim()
 node server/src/index.js
 
-# 18801 坏密钥（失败态实测专用）
+# 18801 坏密钥（失败态实测专用）：让「凭据失效」那条分支真的走一遍
 $env:PORT='18801'; $env:HOST='127.0.0.1'
-$env:ZHIHU_ACCESS_SECRET='THIS_IS_A_DELIBERATELY_WRONG_SECRET_FOR_FAILURE_TESTING_1234567890'
+$env:ZHIHU_ACCESS_SECRET = '<随便填一串错的字符串，不要用真密钥>'
 node server/src/index.js
 ```
+
+⚠️ **18801 那行的值只是占位符**：真跑的时候自己填一串**明显是错的**字符串就行，
+**但那个字符串绝不能进仓库** —— 本仓库公开，契约自检会扫「赋值形式」的密钥并直接 FAIL
+（本次就是被它抓出来的，2026-11-23 21:4x）。
 
 探活用 `/api/quota`（`/api/health` 不存在，会 404）。
 
