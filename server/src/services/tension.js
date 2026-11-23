@@ -325,6 +325,49 @@ export async function buildTension(selfReport, { limit = 20, tone } = {}) {
 
   const hasTension = fractures.length > 0;
 
+  // ---- 自述侧「没东西可比」≠「两边一致」----
+  //
+  // ⚠️ 2026-11-23 17:4x 实测（枚举 3^6 = 729 种答法）发现：
+  //    有 **16 种**答法（2.2%）的用户 traits 里**一个可比维度都没有**
+  //    —— 全选「先跑起来 / 结果优先 / 实用优先」这类，
+  //    既没提深度型（长期主义/体系化）、也没提关系型、更没提输出型。
+  //    这时 fractures 必为空，于是前端会印「**没找到断层。你说的和你做的
+  //    在这几个维度上是一致的**」——
+  //    但事实是：**用户压根没说自己怎么做事的，无从比较**。
+  //    「一致」是**假陈述**，跟「没答就下判断」是同一类错误。
+  //
+  // → 所以自述侧没有可比维度时，也走 insufficient，
+  //    并说清「是你这边没说清，不是两边一致」。
+  const comparableDepth = matchTraits(traits, DEPTH_TRAIT_WORDS);
+  const comparableRelation = matchTraits(traits, RELATION_TRAIT_WORDS);
+  const comparableOutput = matchTraits(traits, ['写', '输出', '表达', '创作', '分享', '记录', '产出']);
+  const selfHasNothing = comparableDepth.length === 0 && comparableRelation.length === 0 && comparableOutput.length === 0;
+
+  if (!hasTension && selfHasNothing) {
+    return {
+      has_tension: false,
+      available_signals: signals.map((s) => s.id),
+      signal_count: signalCount,
+      insufficient: true,
+      insufficient_reason:
+        `读了 ${signalCount} 个行为信号（收藏、关注、创作），但你刚才那 6 题里` +
+        '说的都是「怎么做」而不是「你是什么样的人」——' +
+        '拿「你说的」跟「你做的」比，需要你先讲清自己重什么。' +
+        '换个说法再答一遍，我才有得比。',
+      self_reported: selfReported,
+      behavioral,
+      fractures: [],
+      bridge_hint: null,
+      tone: toneId,
+      pet_lines: petLines(toneId, { signalCount, hasFracture: false, insufficient: true }),
+      empty,
+      empty_notice: empty
+        ? '没有读到任何知乎行为信号。授权知乎账号后再来看看。'
+        : null,
+      warnings: [...warnings, 'self_report_not_comparable'],
+    };
+  }
+
   return {
     has_tension: hasTension,
     available_signals: signals.map((s) => s.id),

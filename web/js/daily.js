@@ -63,7 +63,12 @@ export function renderDaily(root, opts = {}) {
   const items = (favorites?.items ?? []).filter((it) => it?.url);
   const cats = favorites?.category_distribution ?? [];
   const span = favorites?.span ?? {};
-  const collected = favorites?.collected_count ?? items.length;
+  // ⚠️ **读不到 ≠ 0**（2026-11-23 17:3x 实测：坏密钥下这里原本印「收藏条数 0」）。
+  //    0 的含义是「你一条收藏都没有」，而真相是「知乎那边读不到」——
+  //    后者印 0 就是**假陈述**，官方检查第 7 条查的就是这个。
+  //    读不到就印「—」，跟这一节里的阅读跨度、额度一个口径。
+  const readFailed = Boolean(error) || !favorites;
+  const collected = readFailed ? '—' : String(favorites?.collected_count ?? items.length);
 
   // 额度：只取真实数字，拿不到就印「—」，不编。
   const apis = quota?.apis ?? [];
@@ -127,7 +132,7 @@ export function renderDaily(root, opts = {}) {
 
       <!-- 今日要闻索引 -->
       <section class="daily-section">
-        <div class="daily-section-head"><b>今日索引</b><span class="daily-section-sub">你收藏 / 读过的 ${collected} 条</span><span class="rule"></span></div>
+        <div class="daily-section-head"><b>今日索引</b><span class="daily-section-sub">${readFailed ? '今天读不到知乎上的收藏' : `你收藏 / 读过的 ${collected} 条`}</span><span class="rule"></span></div>
         <div class="daily-index">${indexRows}</div>
       </section>
 
@@ -135,7 +140,7 @@ export function renderDaily(root, opts = {}) {
       <div class="daily-cols">
         <section class="daily-section">
           <div class="daily-section-head"><b>阅读版图</b><span class="daily-section-sub">按知乎真实分类</span><span class="rule"></span></div>
-          <div class="daily-cats">${catRows || '<div class="empty-hint">暂无分类数据</div>'}</div>
+          <div class="daily-cats">${catRows || `<div class="empty-hint">${readFailed ? '分类读不到（不是「没有分类」）' : '暂无分类数据'}</div>`}</div>
         </section>
         <section class="daily-section">
           <div class="daily-section-head"><b>本期数据</b><span class="rule"></span></div>
@@ -145,7 +150,9 @@ export function renderDaily(root, opts = {}) {
             <div class="daily-fact"><span class="k">问题发现额度</span><span class="v num">${fmtQuota(discovery)}</span></div>
             <div class="daily-fact"><span class="k">用户数据额度</span><span class="v num">${fmtQuota(userData)}</span></div>
           </div>
-          <p class="daily-fineprint">数据来自你的知乎真实收藏与当日额度；每张卡片都能点回原文。往期不存档，每期都是当天快照。</p>
+          <p class="daily-fineprint">${readFailed
+            ? '这一期的数据没印出来 —— 上面写着的是读不到的原因，不是一份空的日报。'
+            : '数据来自你的知乎真实收藏与当日额度；每张卡片都能点回原文。往期不存档，每期都是当天快照。'}</p>
         </section>
       </div>
     </div>`;

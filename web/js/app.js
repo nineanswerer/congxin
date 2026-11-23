@@ -302,9 +302,16 @@ async function loadQuota() {
     if (disc) bits.push(`问题发现 剩 ${disc.remaining}/${disc.total}`);
     if (user) bits.push(`用户数据 剩 ${user.remaining}/${user.total}`);
     pill.textContent = bits.length ? bits.join(' · ') : '额度已取';
-  } catch {
-    pill.textContent = '额度没读到';
+  } catch (err) {
+    // ⚠️ 不能只写「额度没读到」就完事（2026-11-23 17:3x，P5 失败态实测）。
+    //    官方检查第 7 条要的是「**真实**提示」——
+    //    「读不到」是事实，但不给原因是**没用的真话**：
+    //    用户不知道是额度用完了、还是凭据坏了、还是网络抖。
+    //    → 拿后端那句 user_hint（跟 showFail 同一个口径），一句都不另编。
+    const hint = err instanceof ApiFail ? err.hint : '这次没读到额度。';
+    pill.textContent = hint;
     pill.classList.add('warn');
+    pill.title = hint;
   }
 }
 
@@ -745,8 +752,14 @@ async function runTension(trigger) {
     state.tension = data;
 
     if (data.insufficient) {
+      // ⚠️ 「不成立」有两种原因，标题不能写死一种（2026-11-23 17:4x 实测）：
+      //    ① 行为信号不够（收藏/关注/创作读到的不足 2 个）
+      //    ② 行为信号够，但**你答的 6 题里没说自己重什么**（后端 warnings 里有
+      //       self_report_not_comparable）—— 这种情况下说「信号不够」是**说错原因**。
+      const selfNotComparable = (data.warnings ?? []).includes('self_report_not_comparable');
       box.innerHTML = noticeBox(
-        `<b>信号不够，断层不成立。</b>${escapeHtml(data.insufficient_reason ?? '')}`,
+        `<b>${selfNotComparable ? '你还没说清自己重什么。' : '信号不够，断层不成立。'}</b>` +
+        `${escapeHtml(data.insufficient_reason ?? '')}`,
         'warn'
       );
       pet.setState('idle');
