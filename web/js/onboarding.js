@@ -53,6 +53,22 @@ function escapeText(s) {
 }
 
 /**
+ * 找**第一道还没答**的问卷题。
+ *
+ * ⚠️ 不能指整个 `#mirror-quiz` —— 那个容器有 500 多像素高，
+ *    引导卡固定在底部，中间那几道题必然被卡片压住。
+ *    指「下一道没答的题」才对：它矮、位置准、答完自动往前挪。
+ */
+function firstUnansweredQuestion() {
+  const qs = [...document.querySelectorAll('#mirror-quiz .q')];
+  for (const q of qs) {
+    const opts = [...q.querySelectorAll('.opt')];
+    if (opts.length && !opts.some((o) => o.classList.contains('is-on'))) return q;
+  }
+  return qs[0] || null;
+}
+
+/**
  * 引导的七步。
  *
  * 每一步 = 一个**真实存在的界面元素** + 一句**不含结论**的话 + 一个**完成判据**。
@@ -84,7 +100,8 @@ const STEPS = [
     id: 'quiz',
     title: '先说说你是谁（6 题）',
     body: '测的是「你怎么说自己」，不是你的能力。断层要拿你说的跟你做的比 —— 这 6 题没说全，它下不了判断。',
-    target: '#mirror-quiz',
+    target: '#mirror-quiz .q',
+    resolve: firstUnansweredQuestion,
     ensure: 'mirror',
     done: (p) => p.answered >= p.total,
     hint: (p) => `已答 ${p.answered} / ${p.total} 题`,
@@ -103,12 +120,13 @@ const STEPS = [
     title: '来一道带出处的题',
     body: '题目来自知乎上的真实问题，出处带链接 —— 不是它自己出的题。',
     target: '#btn-situation',
-    fallback: '#mirror-fracture',
+    // ⚠️ `#btn-situation` 是**跑完断层之后**才插进 DOM 的。
+    //    还没跑出来时得指个别的（照镜子面板本身），否则这一步什么都不指。
+    fallback: '#panel-mirror',
     ensure: 'mirror',
     done: (p) => p.situation,
     hint: () => '正在出题…',
-  },
-  {
+  },  {
     id: 'terrain',
     title: '看认知版图',
     body: '断层、桥、你走过的路都在这张图上。走到这一步，这一轮就通了。',
@@ -148,23 +166,98 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
   }
 
   /**
-   * 把目标滚到视口**偏上**的位置。
+   * 文档末尾的**可滚动余量**。
+   *
+   * ⚠️ 有些目标元素贴着文档末尾（比如工作台那排标签按钮）：
+   *    页面滚到底，它也只能停在视口下半截 —— 正好被底部的引导卡盖住。
+   *    这不是滚动算法能解决的：**文档就这么高，滚不出那个位置**。
+   *    所以得在文档末尾临时垫一段空白，把可滚动量补够。
+   *    引导结束就撤掉（撤时同步修正 scrollY，画面不跳）。
+   */
+  const PAD_ID = 'ob-scroll-pad';
+
+  function padEl() {
+    let p = document.getElementById(PAD_ID);
+    if (!p) {
+      p = document.createElement('div');
+      p.id = PAD_ID;
+      p.setAttribute('aria-hidden', 'true');
+      p.style.height = '0px';
+      document.body.appendChild(p);
+    }
+    return p;
+  }
+
+  function releasePad() {
+    const p = document.getElementById(PAD_ID);
+    if (!p) return;
+    const h = parseFloat(p.style.height) || 0;
+    if (!h) return;
+    const vh = window.innerHeight;
+    const before = document.documentElement.scrollHeight - vh;
+    p.style.height = '0px';
+    const after = document.documentElement.scrollHeight - vh;
+    const delta = before - after;
+    if (delta > 0 && window.scrollY > after) {
+      window.scrollTo(0, Math.max(0, window.scrollY - delta));
+    }
+  }
+
+  /**
+   * 把目标滚到**引导卡上方**的空当里。
    *
    * ⚠️ 不能用 `scrollIntoView({block:'center'})` —— 引导卡固定在底部中央，
-   *    目标落在正中就正好被卡片盖住，用户看到的还是「没指到」。
+   *    目标落在视口正中就正好被卡片盖住，用户看到的还是「没指到」。
+   * ⚠️ 也不能只按「顶部放到 30%」算 —— 首屏那只桌宠有 300 多像素高，
+   *    顶到 30% 它的**下半身**照样压在卡片底下。
+   *    所以：目标矮 → 在卡片上方居中；目标比空当还高 → 顶对齐，绝不往下压。
+   * ⚠️ 目标在文档末尾时，光调算法没用 —— 文档没那么高，滚不出那个位置。
+   *    得先垫空白（见上面的 releasePad 说明）。
    */
   function scrollToTarget(el) {
     const r = el.getBoundingClientRect();
-    const offset = Math.max(120, Math.round(window.innerHeight * 0.3));
-    const top = Math.max(0, Math.round(window.scrollY + r.top - offset));
+    const card = root.querySelector('.ob__card');
+    const cardH = card ? card.getBoundingClientRect().height : 188;
+    const vh = window.innerHeight;
+    const avail = Math.max(140, vh - 76 - cardH - 24);
+    const offset = r.height >= avail ? 80 : Math.max(80, (avail - r.height) / 2);
+    const absTop = window.scrollY + r.top;
+    const desired = Math.max(0, Math.round(absTop - offset));
+
+    // 文档不够高 → 垫空白把可滚动量补够。
+    // ⚠️ 基准必须是「**不含**垫高的文档高度」——
+    //    拿已含垫高的 scrollHeight 去比，会越垫越不够（垫一次算一次，永远差一截）。
+    const pad = padEl();
+    const cur = parseFloat(pad.style.height) || 0;
+    const baseH = document.documentElement.scrollHeight - cur;
+    const need = desired - (baseH - vh) + 24;
+    if (need > cur) {
+      pad.style.height = need + 'px';
+      // 垫高会改变可滚动量，重算一次目标位置
+      const absTop2 = window.scrollY + el.getBoundingClientRect().top;
+      scrollTo(absTop2 - offset);
+      return;
+    }
+    scrollTo(absTop - offset);
+  }
+
+  function scrollTo(top) {
+    const t = Math.max(0, Math.round(top));
     try {
-      window.scrollTo({ top, behavior: 'smooth' });
+      window.scrollTo({ top: t, behavior: 'smooth' });
     } catch {
-      window.scrollTo(0, top);
+      window.scrollTo(0, t);
     }
   }
 
   function findTarget(step) {
+    // 动态目标优先（比如「下一道没答的题」—— 答完自动往前挪）
+    if (step.resolve) {
+      try {
+        const el = step.resolve();
+        if (el && isVisible(el)) return el;
+      } catch { /* 解析失败就退回静态选择器 */ }
+    }
     for (const sel of [step.target, step.fallback].filter(Boolean)) {
       const els = [...document.querySelectorAll(sel)];
       const visible = els.find((node) => isVisible(node));
@@ -198,6 +291,15 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
     root.querySelector('[data-ob="skip"]')?.addEventListener('click', () => finish(true));
   }
 
+  /** 刷新进度提示（「已答 3 / 6 题」这种）—— 每次轮询都要跟着真实状态走。 */
+  function refreshHint(step, p) {
+    const hint = root.querySelector('[data-ob="hint"]');
+    if (!hint) return;
+    const hintText = step.hint ? step.hint(p) : '';
+    hint.textContent = hintText;
+    hint.hidden = !hintText;
+  }
+
   function render() {
     const step = STEPS[index];
     if (!step) return;
@@ -215,12 +317,10 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
 
     let p = {};
     try { p = probe ? probe() : {}; } catch { p = {}; }
-    const hintText = step.hint ? step.hint(p) : '';
-    hint.textContent = hintText;
-    hint.hidden = !hintText;
+    refreshHint(step, p);
 
     prev.disabled = index === 0;
-    next.textContent = index === STEPS.length - 1 ? '完成' : '下一步';
+    next.textContent = index >= STEPS.length - 1 ? '完成' : '下一步';
 
     // 圈住目标 + 滚到位
     clearMark();
@@ -247,6 +347,8 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
     clearInterval(timer);
     timer = null;
     clearMark();
+    // 撤掉垫出来的空白 —— 引导不留在页面上留痕
+    releasePad();
     // ⚠️ 「走通了」那张完成卡已经挂上时**不要**再藏它 ——
     //    最后一步的完成判据和 showDone() 是同一拍，谁先到都可能。
     if (!doneShown) root.hidden = true;
@@ -261,9 +363,23 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
   function check() {
     if (!running || index < 0) return;
     const step = STEPS[index];
-    if (!step.done) return;
     let p = {};
     try { p = probe ? probe() : {}; } catch { return; }
+
+    // 动态目标要**跟着用户走** —— 答完一题，圈就挪到下一道没答的题。
+    // 不这么做的话，圈会一直停在他已经答过的那道题上。
+    refreshHint(step, p);
+    if (step.resolve) {
+      const next = findTarget(step);
+      if (next && next !== marked) {
+        clearMark();
+        marked = next;
+        next.classList.add('ob-target');
+        scrollToTarget(next);
+      }
+    }
+
+    if (!step.done) return;
     if (!step.done(p)) return;
     if (index >= STEPS.length - 1) { finish(false); return; }
     show(index + 1);
