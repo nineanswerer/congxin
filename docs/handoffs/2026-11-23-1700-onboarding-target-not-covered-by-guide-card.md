@@ -23,7 +23,7 @@
 
 | 文件 | 改动 |
 | --- | --- |
-| `web/js/onboarding.js` | ① `scrollToTarget()` 改成「算位置 + 必要时垫空白」两段式；② 新增 `padEl()` / `releasePad()`，在文档末尾垫 `#ob-scroll-pad` 补可滚动量，引导结束撤掉并同步修正 `scrollY`；③ 问卷那步目标从整个 `#mirror-quiz` 改成**动态指向第一道没答的题**（新增 `firstUnansweredQuestion()` + `step.resolve`）；④ `findTarget()` 支持 `step.resolve`；⑤ `check()` 每轮重新解析动态目标 + 刷新 `hint`（新增 `refreshHint()`）；⑥ 第 6 步兜底 `#mirror-fracture` → `#panel-mirror` |
+| `web/js/onboarding.js` | ① `scrollToTarget()` 改成「算位置 + 必要时垫空白」两段式；② 新增 `padEl()` / `releasePad()`，在文档末尾垫 `#ob-scroll-pad` 补可滚动量，引导结束撤掉并同步修正 `scrollY`、**把节点一并删掉**；③ 问卷那步目标从整个 `#mirror-quiz` 改成**动态指向第一道没答的题**（新增 `firstUnansweredQuestion()` + `step.resolve`）；④ `findTarget()` 支持 `step.resolve`；⑤ `check()` 每轮重新解析动态目标 + 刷新 `hint`（新增 `refreshHint()`）；⑥ 第 6 步兜底 `#mirror-fracture` → `#panel-mirror` |
 
 ---
 
@@ -92,10 +92,23 @@
 
 ## 5. 提交
 
-- `8f0568c fix(onboarding): 引导指的目标别被引导卡盖住`
-- Context（hook 从 `.ctx/current.md` 自动填）：
-  `首次上手引导原为 P6 空缺；目标是新用户能独立走通一次「认·清」认知闭环`
-- ⚠️ **`origin/main` 已到 `8f0568c`**（含 D60 的 `6f44132`）。
+| commit | 内容 |
+| --- | --- |
+| `6f44132` | D60：首次上手引导 + 修「认·清」闭环两处死胡同 |
+| `8f0568c` | D61：引导指的目标别被引导卡盖住（垫空白 + 动态指向下一道题） |
+| `93d0933` | 文档：D61 / B27 / 本交接 |
+| `197472e` | 收尾：垫出来的空白用完就删，别在页面上留痕 |
+
+Context（hook 从 `.ctx/current.md` 自动填）：
+`首次上手引导原为 P6 空缺；目标是新用户能独立走通一次「认·清」认知闭环`
+
+✅ **`origin/main` 已到 `197472e`**（本地 = 远端）。
+
+⚠️ **推送到 GitHub 极不稳**：本机到 github.com:443 时通时不通，
+实测连续 12 次 `Recv failure: Connection was reset` / `Failed to connect`，
+DNS 只解析到 1 个 IP（57.155.223.240），TCP 层能通但**传输中被掐**。
+**没有可用代理**（`gh` CLI 的 token 也已失效，需要用户重新 `gh auth login`）。
+→ 结论：**多试几次就能推上去**，别当成真阻塞。
 
 ---
 
