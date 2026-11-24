@@ -77,11 +77,14 @@
 **钩子清单怎么重新生成**
 
 ```powershell
-# .ctx\extract-hooks.cjs（临时脚本，跑完删）：扫 web/js/*.js 的选择器字面量
-node .ctx\extract-hooks.cjs
+node scripts\extract-ui-hooks.js            # 打印我们实际依赖的 id / class / data 属性
+node scripts\extract-ui-hooks.js --write    # 把新的 id 并回 contracts\ui-contract.json
 ```
 
-⚠️ 提取时**必须过滤大写十六进制颜色**（id 只认小写开头）。
+⚠️ 提取时的两个坑（脚本注释里也写了）：
+- **不能只扫 `getElementById`** —— 代码统一走 `$ = sel => querySelector(sel)`；
+- **大写十六进制颜色会被当 id**（`terrain.js` 的 `'#B7332C'`）→ id 只认**小写开头**；
+- **class 提取有噪声**（文件名 `.webp`、句子里的点）→ 契约里的 `index_classes` 是**手工挑的少数几个**，脚本不自动进。
 
 **自检基线变了**：从 **PASS 13** 变成 **PASS 14**（新增「界面契约完整性」）。
 历史文档里的「实跑 PASS 13」是当时的记录，**不用改**；但**面向人的现行口径**（计划书、队友体验指南）已更新。

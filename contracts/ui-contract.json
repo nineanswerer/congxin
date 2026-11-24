@@ -9,7 +9,8 @@
     "index_ids / index_classes / index_data_attrs 里的钩子不许删、不许改名：我们的 JS 按它们取元素，改了就静默打断功能。",
     "我们要新增界面元素，一律在 web/js/ 里建 DOM（document.createElement / innerHTML 模板），不去改 index.html。",
     "确实要动某个钩子：先改这份文件、再改我们的 JS，两边一起提 PR；不要只改一边。",
-    "CSS 里的类名如果也是 JS 的取元素钩子（index_classes 那几项），改类名同样算动钩子。"
+    "CSS 里的类名如果也是 JS 的取元素钩子（index_classes 那几项），改类名同样算动钩子。",
+    "反过来也一样：我们的 JS 造出来的元素身上带 100 多个类名（card / daily-item / pc__* / ob__* / fracture-* …），队友改 CSS 时可以改规则内容，但别把我们要用的类名改掉；要改名先跟我们说一声，两边一起改。"
   ],
   "index_ids": [
     "btn-feed",
