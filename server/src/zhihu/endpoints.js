@@ -104,11 +104,40 @@ export async function getQuestionAnswers(questionUrl, limit = 5) {
 }
 
 /**
+ * 知乎站内搜索（zhihu_search，**5000 次/天**，与最紧的「问题发现 100/天」不是一个额度组）。
+ *
+ * 用途：新主线的第一步 —— 用户抛一个问题 → 在知乎站内找**相似的困境**。
+ *
+ * ⚠️ `Count` **上游最大 10**，传更大只会被静默截断。
+ * ⚠️ `Items[].ContentType` 决定 `Url` 指向什么：
+ *    - `Answer`  → **原回答链接**（可溯源到具体某条回答）
+ *    - `Question`→ 问题链接
+ *    - `Article` → 专栏文章链接
+ *    出处字段一律取这里的 `Title` + `Url`，**不由模型生成**（契约硬要求）。
+ */
+export async function zhihuSearch(query, count = 10) {
+  const data = await callUpstream('/api/v1/content/zhihu_search', {
+    Query: query,
+    Count: count,
+  });
+  return {
+    items: data?.Items ?? [],
+    hasMore: Boolean(data?.HasMore),
+    searchHashId: data?.SearchHashId ?? null,
+    emptyReason: data?.EmptyReason ?? null,
+  };
+}
+
+/**
  * 直答（OpenAI 兼容）。
  *
  * ⚠️ **直答是「改写者」不是「检索者」**：实测 `zhida-agent` 给不出真实知乎链接，
- *    所以出处字段一律来自上游接口，不由模型生成（契约 `POST /api/situation/question` 的硬要求）。
+ *    所以出处字段一律来自上游接口，不由模型生成（契约 `POST /api/advice` 的硬要求）。
  * ⚠️ 不要用 `zhida-agent`——用 `zhida-fast-1p5` 或 `zhida-thinking-1p5`。
+ *
+ * ⚠️ **格式要求必须写在 user 消息里**（2026-11-24 实测）：
+ *    放在 system 里，这两个模型都会**无视它**、自由发挥一篇长文；
+ *    跟材料一起放进 user 消息才肯照格式输出。详见 `services/advice.js`。
  */
 export async function chatComplete(model, messages, { temperature = 0.7 } = {}) {
   const payload = await callUpstreamPost('/v1/chat/completions', {

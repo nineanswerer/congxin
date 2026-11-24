@@ -3,26 +3,40 @@
  *
  * **为什么需要它**：
  * 决赛只有 5 分钟，中途点错一下就断节奏。这个模式把
- * 「喂材料 → 吐卡片 → 知乎补观点 → 照镜子 → 断层 → 情境题 → 作答 → 地形」
+ * 「喂材料 → 吐卡片 → 知乎补观点 → 问它 → 出方案 → 落版」
  * 按脚本自动串一遍，**中间不依赖手速**。
  *
  * 用法：
  *   http://localhost:18788/web/?demo=1
  *   http://localhost:18788/web/?demo=1&fast=1     # 截图/自测用，节奏 ×0.25
- *   http://localhost:18788/web/?demo=1&quiz=deep  # 预设一套「先想通整条路」的答案
  *
- * ⚠️ **演练也会真调知乎**：卡片接口吃「问题发现」额度（1 张卡 ≈ 2 次）。
- * 同主题有缓存，反复演同一主题基本不烧额度；换主题会真的花。
+ * ⚠️ **2026-11-24（D66）：脚本随新主线重写。**
+ *    原来第 3—8 步是「问卷 → 断层 → 情境题 → 地形」，那是认知闭环，
+ *    **已经整体下线** —— 留着就是演一套不存在的东西。
+ *    现在第 3—4 步是「翻到「问它」→ 抛一个问题 → 它上知乎找相似困境 → 出方案」。
+ *
+ * ⚠️ **演练也会真调知乎**：
+ *    - 「喂它收藏」吃**用户数据**额度；
+ *    - 「知乎上大家怎么说」吃**问题发现**额度；
+ *    - 「问它」吃**知乎搜索**（5000/天）+ **直答**（100/天）。
+ *    后端两层缓存各 5 分钟（`advice:pool:*` / `advice:full:*`），
+ *    **同一个问题重复演不烧直答额度** —— 演练与正式演示可以共用同一个问题。
  */
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** 预设答案：q1—q6 全选 A ——「先想通整条路 / 完整方法 / 原理 / 成体系 / 关系 / 想透做体系」。 */
-const DEEP_ANSWERS = { q1: 0, q2: 0, q3: 0, q4: 0, q5: 0, q6: 0 };
+/**
+ * 演练用的那个问题。
+ *
+ * ⚠️ 选它是有理由的：知乎上**真的有人写过**这个问题（2026-11-24 实测
+ * `zhihu_search` 返回 10 条真实回答），所以现场一定能出方案 + 出处，
+ * 不会演成一句「没搜到」。
+ */
+const DEMO_QUESTION = '工作压力大到睡不着怎么办';
 
 export async function runDemo(ctx) {
   const {
-    state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro,
+    feed, loadViewpoints, askAdvice, showOutro,
   } = ctx;
 
   const params = new URLSearchParams(location.search);
@@ -40,61 +54,26 @@ export async function runDemo(ctx) {
   await wait(1800);
   await loadViewpoints();
 
-  // ⚠️ 预设答案在切 tab **之前**就写进 state：
-  //    切到「照镜子」那一刻，桌宠要说「跟你刚才说的不太一样」——
-  //    那一刻 state 里必须已经有答案，否则这句话是假的
-  //    （App 端已经改成「你没说过，它就不说」）。
-  //    画面顺序不变：选项的选中态仍然是切过去之后才亮。
-  const preset = params.get('quiz') === 'deep' ? DEEP_ANSWERS : DEEP_ANSWERS;
-  for (const [qid, idx] of Object.entries(preset)) state.quizPicked[qid] = idx;
-
-  // ---- 3. 切到「照镜子」 ----
-  step(3, '桌宠主动发起照镜子');
+  // ---- 3. 切到「问它」 ----
+  step(3, '翻到「问它」这一栏');
   await wait(1600);
   document.querySelector('#tabs button[data-tab="mirror"]')?.click();
 
-  // ---- 4. 答问卷（预设）：把选中态画出来 ----
-  step(4, '答问卷');
-  await wait(900);
-  for (const [qid, idx] of Object.entries(preset)) {
-    document
-      .querySelector(`#mirror-quiz .opt[data-qid="${qid}"][data-idx="${idx}"]`)
-      ?.classList.add('is-on');
-  }
+  // ---- 4. 抛一个问题 → 它上知乎找相似困境 → 出方案 ----
+  //
+  // ⚠️ 先把话**打进输入框**再问：观众要看见「它接的是我说的话」，
+  //    凭空冒出答案像是它自己想的。
+  step(4, '抛一个问题 → 知乎找相似困境 → 给方案');
+  await wait(1500);
+  const input = document.querySelector('#ask-input');
+  if (input) input.value = DEMO_QUESTION;
+  await askAdvice(DEMO_QUESTION, input);
 
-  // ---- 5. 断层 ----
-  step(5, '自述 vs 行为 → 断层');
-  await wait(700);
-  await runTension();
-
-  // ---- 6. 情境题 ----
-  step(6, '出一道带出处的题');
-  await wait(1600);
-  await loadSituation();
-
-  // ---- 7. 作答 → 地形 ----
-  const q = state.situation;
-  if (q && (q.options ?? []).length) {
-    step(7, '作答 → 地形生长');
-    await wait(1500);
-    await answerSituation(q, q.options[0].key);
-  } else {
-    // **不许静默跳过**：面板上已经有后端给的真提示（空数据 ≠ 失败），
-    // 这里补一句让观众知道「不是卡住了」，然后照样把地形拉出来。
-    step(7, '这次没出到题（面板上是真提示），地形照常看');
-    await wait(600);
-  }
-
-  // ---- 8. 地形 ----
-  step(8, '看地形');
-  await wait(900);
-  await loadTerrain();
-
-  // ---- 9. 落版（脚本 4:50—5:00 那一拍）----
-  step(9, '落版');
-  await wait(900);
+  // ---- 5. 落版（脚本 4:50—5:00 那一拍）----
+  step(5, '落版');
+  await wait(1400);
   showOutro?.();
 
-  step(10, '完');
+  step(6, '完');
   return true;
 }

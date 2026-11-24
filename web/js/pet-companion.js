@@ -2,16 +2,18 @@
  * 桌宠伴侣（借鉴 my-neuro 的交互形态，落到本项目的诚实边界内）
  *
  * my-neuro 是「全本地 1 秒响应的开源 AI 桌面伴侣」：Live2D 形象 + 语音/字幕 +
- * 长期记忆 + 主动对话。本项目没有 LLM/语音后端 —— 所以这里只借它的**交互形态**：
+ * 长期记忆 + 主动对话。本项目**接了后端**（2026-11-24 D66 新主线），所以这里借它的**交互形态**：
  *   1. 常驻、可拖拽的桌宠（不再只在工作台那一屏）
  *   2. 情绪状态（来自真实事件的拟态，不冒充真实情感）
  *   3. 主动搭话（页面打开 / 收藏回来 / 本机足迹更新 等真实事件触发）
- *   4. 打字对话（本地规则：真实数据问题查真实接口结果；其余用 tone 台词目录）
+ *   4. 打字对话（**它自己的数据**走本地；**真问题**走后端 → 上知乎找相似困境 → 给方案）
  *   5. 本机长期记忆（localStorage，明示只在这台浏览器）
  *
  * 诚实口径（必须）：
- *   - 不接 LLM，不伪装成「AI 理解了你」。能答的只有真实数据 + 台词目录。
- *   - 每一条回答都标来源：『它查到的』或『它记着的』。
+ *   - 它答的方案**不是它对用户的了解**，是**知乎上别人写过的经验**。
+ *     它把那些回答找出来、判断适不适合你、整理成能照着做的步骤，
+ *     并把出处原样带回来 —— 但那些经验本来就不是它的，是那些答题人的。
+ *   - 每一条回答都标来源：『它查到的』/『知乎上找到的』/『它记着的』。
  *     （2026-11-23 22:3x 拟真审计：原来写『真实数据 / 台词目录』——
  *      「台词目录」是实现术语，摆在界面上等于把内部结构给用户看。）
  *   - 记忆不上传、不跨设备，界面明示。
@@ -35,6 +37,10 @@ export class PetCompanion {
     this.pet = pet;
     this.getFacts = opts.getFacts ?? (() => ({}));   // 由 app 注入真实数据快照
     this.getTone = opts.getTone ?? (() => null);      // 由 app 注入当前 tone 目录
+    // 由 app 注入：**拿一个真问题去后端问方案**（2026-11-24 新主线）。
+    // 返回 `{summary, plan, caveat, sources, empty, empty_notice}`。
+    this.ask = opts.ask ?? null;
+    this.busy = false;
     this.memory = loadMemory();
     this.open = false;
     this.buildDom();
@@ -57,10 +63,10 @@ export class PetCompanion {
       <div class="pc__panel" id="pc-panel" hidden>
         <div class="pc__log" id="pc-log" aria-live="polite"></div>
         <form class="pc__form" id="pc-form">
-          <input class="pc__input" id="pc-input" maxlength="60" autocomplete="off" placeholder="问它：今天读了多少？" aria-label="和桌宠说话" />
+          <input class="pc__input" id="pc-input" maxlength="100" autocomplete="off" placeholder="问它一件事，比如：工作压力大怎么办" aria-label="和桌宠说话" />
           <button class="pc__send" type="submit" aria-label="发送"><i class="ri-send-plane-2-line" aria-hidden="true"></i></button>
         </form>
-        <p class="pc__disclaimer">本地回应：只答真实数据（收藏 / 进度 / 足迹 / 额度）和它自己记着的话，不是 AI 大模型。记忆只在这台浏览器。</p>
+        <p class="pc__disclaimer">它会拿你的问题去知乎上找遇到同样问题的人怎么处理，答案和出处都从那里来 —— 那些经验本来是那些答题人的。记忆只在这台浏览器。</p>
       </div>
     `;
     document.body.appendChild(root);
@@ -73,10 +79,10 @@ export class PetCompanion {
     this.form = root.querySelector('#pc-form');
     this.input = root.querySelector('#pc-input');
 
-    // 首条欢迎：如实说明记忆状态
+    // 首条欢迎：如实说明记忆状态 + 它能做什么（**真问题它接得住**）
     const greet = this.memory.turns > 0
       ? `你之前跟我聊过 ${this.memory.turns} 句。想问什么？`
-      : '你好，我是刘看山。问我今天读了多少、额度还剩多少都行。';
+      : '你好，我是刘看山。有想不通的事直接说 —— 我去知乎上找找，看有没有人遇到过一样的。';
     this.append('pet', greet, '它记着的');
   }
 
@@ -155,23 +161,81 @@ export class PetCompanion {
     if (note) this.append('sys', note, '');
   }
 
-  /** 用户打字 → 本地规则回应。可查真实数据的查真实数据，其余用台词目录。 */
-  send() {
+  /**
+   * 用户打字 → 回应。
+   *
+   * 两条路（2026-11-24 D66 新主线）：
+   * ① **它自己的数据**（今天读了多少 / 进度 / 足迹 / 额度）→ 本地规则直接答，不烧额度；
+   * ② **真问题** → 后端 → 知乎搜索找相似困境 → 直答判断适用性 → 给方案 + 出处。
+   */
+  async send() {
     const q = (this.input?.value || '').trim();
     if (!q) return;
+    if (this.busy) return;
     this.input.value = '';
     this.append('me', q, '');
     this.memory.turns += 1;
     saveMemory(this.memory);
 
-    const facts = this.getFacts();
-    const answer = this.resolve(q, facts);
-    this.setMood(answer.mood);
-    this.append('pet', answer.text, answer.source);
+    // ① 本地能答的先答 —— 这些数字它本来就知道，不该去烧知乎额度
+    const local = this.resolveLocal(q, this.getFacts());
+    if (local) {
+      this.setMood(local.mood);
+      this.append('pet', local.text, local.source);
+      return;
+    }
+
+    // ② 答不了 → 上知乎找相似困境
+    if (!this.ask) {
+      const cat = this.getTone();
+      this.append('pet', cat?.lines?.offer ?? '这个问题我还在学着接。', '它记着的');
+      return;
+    }
+
+    this.busy = true;
+    this.setMood('thinking');
+    this.append('pet', '我去知乎上找找，看有没有人遇到过一样的。', '它去查了');
+    try {
+      const data = await this.ask(q);
+      if (!data || data.empty) {
+        // ⚠️ 空数据 ≠ 失败 —— 用后端给的那句真话，不自己编文案。
+        this.setMood('idle');
+        this.append('pet', data?.empty_notice ?? '这次没搜到相关的内容。', '知乎上找到的');
+        return;
+      }
+      this.setMood('cheer');
+      this.append('pet', this.adviceText(data), '知乎上找到的', this.adviceLinks(data));
+    } catch (err) {
+      this.setMood('idle');
+      this.append('pet', '这次没找到答案 —— 我不给你一个查无出处的说法。', '它去查了');
+    } finally {
+      this.busy = false;
+    }
   }
 
-  /** 本地规则引擎：诚实返回 { text, source, mood }。 */
-  resolve(q, facts) {
+  /** 方案 → 一段能直接读的纯文本（**不用** Markdown，浮窗里只渲染纯文本）。 */
+  adviceText(data) {
+    const parts = [];
+    if (data.summary) parts.push(data.summary);
+    const plan = data.plan ?? [];
+    if (plan.length) {
+      parts.push(plan.map((s, i) => `${i + 1}. ${s.text ?? ''}`).join('\n'));
+    }
+    if (data.caveat) parts.push(`（${data.caveat}）`);
+    return parts.join('\n\n') || '这次没整理出方案。';
+  }
+
+  /** 出处 → 可点的链接。**每个 URL 都来自上游真实数据**（模型只回了编号）。 */
+  adviceLinks(data) {
+    const srcs = data.sources ?? [];
+    return srcs.map((s) => ({
+      text: `${s.question_title ?? '知乎原回答'}${s.author_name ? ` · ${s.author_name}` : ''}`,
+      url: s.answer_url ?? s.question_url ?? '',
+    })).filter((l) => l.url);
+  }
+
+  /** 本地规则引擎：答得了就答。**答不了返回 null** —— 交给后端去知乎找。 */
+  resolveLocal(q, facts) {
     const s = q.toLowerCase();
     const count = facts.count ?? todayProgress().count ?? 0;
     const prog = todayProgress();
@@ -219,29 +283,37 @@ export class PetCompanion {
       return { text: cat?.lines?.opening ?? '我在这儿，陪你干活。', source: FROM_TONE, mood: 'greet' };
     }
 
-    // 其余：用台词目录回应。
-    // ⚠️ 不再把「台词目录」这个实现术语说给用户听（拟真），
-    //    但**诚实那层意思留着**：它给的不是查出来的答案，只是陪你的话。
-    const cat = this.getTone();
-    const line = cat?.lines?.park ?? cat?.lines?.offer;
-    return {
-      text: line ? `${line}（这句是陪你的，不是我查出来的）` : '这句我接不住——我只会陪你读、陪你聊，不会回答问题。',
-      source: FROM_TONE,
-      mood: 'thinking',
-    };
+    // 其余：**这里答不了** → 返回 null，走后端去知乎找相似困境。
+    // ⚠️ 原来这里直接拿台词目录兜底，等于「拿陪你的话冒充答案」——
+    //    新主线里真问题有真答案可给了，不能再用陪你的话搪塞。
+    return null;
   }
 
-  /** 追加一条消息到对话面板。 */
-  append(who, text, source) {
+  /**
+   * 追加一条消息到对话面板。
+   *
+   * @param {'pet'|'me'|'sys'} who
+   * @param {string} text
+   * @param {string} [source] 给人看的来源标签
+   * @param {{text:string,url:string}[]} [links] 出处链接（**URL 必须来自上游真实数据**）
+   */
+  append(who, text, source, links) {
     // 首屏气泡跟着对话走：只显示桌宠说的话，纯文本写入，不套 HTML
     if (who === 'pet') {
       // 只改文字节点，保留前面的 Remix Icon（气泡结构 = icon + span）
       const bubbleText = document.getElementById('ch-bubble-text');
       if (bubbleText) bubbleText.textContent = text.length > 34 ? `${text.slice(0, 34)}…` : text;
     }
+    // 方案是多行的 → 正文用 pre-wrap，**不靠 CSS**（CSS 是队友的地盘，
+    // 我们改了会被覆盖；内联样式自己说了算）。
+    const linkHtml = Array.isArray(links) && links.length
+      ? `<div class="pc__links">${links
+          .map((l) => `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.text)}</a>`)
+          .join('')}</div>`
+      : '';
     const el = document.createElement('div');
     el.className = `pc__msg pc__msg--${who}`;
-    el.innerHTML = `${who === 'me' ? '<b>你</b>' : who === 'sys' ? '<b>·</b>' : '<b>看山</b>'}<span>${escapeHtml(text)}</span>${source ? `<small>${escapeHtml(source)}</small>` : ''}`;
+    el.innerHTML = `${who === 'me' ? '<b>你</b>' : who === 'sys' ? '<b>·</b>' : '<b>看山</b>'}<span style="white-space:pre-wrap">${escapeHtml(text)}</span>${source ? `<small>${escapeHtml(source)}</small>` : ''}${linkHtml}`;
     this.log.appendChild(el);
     this.log.scrollTop = this.log.scrollHeight;
     while (this.log.children.length > 30) this.log.removeChild(this.log.firstChild);

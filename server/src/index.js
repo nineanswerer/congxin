@@ -4,21 +4,21 @@
  * 技术底座（D22）：前端 + Node 单进程，**零数据库、零中间件**，
  * 会话放进程内 Map。部署走知乎 AI Works 源码发布。
  *
- * 当前实现的接口（对应 contracts/api.json v0.6 的 **14 个路径**，**全部已实现**）：
+ * 当前实现的接口（对应 contracts/api.json v0.7 的 **11 个路径**，**全部已实现**）：
  *   GET  /api/quota
  *   GET  /api/behavior/favorites
  *   GET  /api/behavior/followees
  *   GET  /api/behavior/contents
- *   POST /api/behavior/tension
- *   POST /api/situation/question
- *   GET  /api/terrain
- *   POST /api/terrain/answer
  *   GET  /api/tone
  *   GET  /api/auth/profile
  *   GET  /api/auth/login
  *   GET  /api/auth/callback
  *   POST /api/auth/logout
  *   POST /api/cards
+ *   POST /api/advice          ← 「问它」：新主线（2026-11-24 / D66）
+ *
+ * ⚠️ 认知闭环那四个路径（`/api/behavior/tension`、`/api/situation/question`、
+ *    `/api/terrain`、`/api/terrain/answer`）**已随闭环下线删除** —— 别再往回加。
  */
 
 import express from 'express';
@@ -27,7 +27,7 @@ import { toApiError } from './lib/errors.js';
 import { cacheStats } from './lib/cache.js';
 import { quotaRouter } from './routes/quota.js';
 import { behaviorRouter } from './routes/behavior.js';
-import { cognitionRouter } from './routes/cognition.js';
+import { adviceRouter } from './routes/advice.js';
 import { toneRouter } from './routes/tone.js';
 import { authRouter } from './routes/auth.js';
 import { cardsRouter } from './routes/cards.js';
@@ -83,7 +83,7 @@ app.use(authContextMiddleware);
 
 app.use(quotaRouter);
 app.use(behaviorRouter);
-app.use(cognitionRouter);
+app.use(adviceRouter);
 app.use(toneRouter);
 app.use(authRouter);
 app.use(cardsRouter);

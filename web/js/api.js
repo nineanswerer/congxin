@@ -83,21 +83,21 @@ export const getFollowees = (limit = 9) => apiGet('/api/behavior/followees', { l
 /** 创作信号：用户自己写过什么（脚本 4:05 那句「你自己也写过一句」的原料）。 */
 export const getContents = (limit = 5) => apiGet('/api/behavior/contents', { limit }).then((r) => r.data);
 
-/** 自述 vs 行为 → 断层。 */
-export const getTension = (selfReport, tone) =>
-  apiPost('/api/behavior/tension', { self_report: selfReport, tone }).then((r) => r.data);
-
-/** 情境题（每题必带知乎出处）。 */
-export const getSituation = ({ topic, count = 2, layer, difficulty, selfReport, answered }) =>
-  apiPost('/api/situation/question', {
-    topic,
-    count,
-    layer: layer ?? 'situational',
-    difficulty: difficulty ?? 'medium',
-    self_report: selfReport ?? null,
-    answered_sources: answered ?? [],
-    tone: null,
-  }).then((r) => r.data);
+/**
+ * 「问它」—— **新主线**（2026-11-24 决策 D66）。
+ *
+ * 用户抛一个问题 → 桌宠去知乎找**相似的困境** → 判断这些对策适不适合他 →
+ * 给出一个能照着做的方案。**出处全部来自上游真实数据**，模型只回编号。
+ *
+ * ⚠️ 额度：知乎搜索 5000/天 + 直答 100/天（**每次问一次烧 1 次直答**）→ 后端有 5 分钟缓存，
+ *    同一个问题重复问不烧额度。
+ *
+ * @param {object} opts
+ * @param {string} opts.question 你的问题（一句话说清什么事）
+ * @param {string} [opts.tone] 语气 id
+ */
+export const getAdvice = ({ question, tone }) =>
+  apiPost('/api/advice', { question, tone: tone ?? null }).then((r) => r.data);
 
 /**
  * 知识卡片：**知乎问题 + 真实回答**这一对。
@@ -127,18 +127,6 @@ export const getCards = ({ topic, count = 2, seenSources, tone, sameQuestion }) 
     tone: tone ?? null,
     seen_sources: seenSources ?? [],
     same_question: sameQuestion ? true : false,
-  }).then((r) => r.data);
-
-/** 三层认知地形（后端只给参数，前端负责渲染）。 */
-export const getTerrain = (tone) => apiGet('/api/terrain', { tone }).then((r) => r.data);
-
-/** 提交作答 → 地形生长。 */
-export const answerTerrain = ({ questionId, answerKey, freeText, tone }) =>
-  apiPost('/api/terrain/answer', {
-    question_id: questionId,
-    answer_key: answerKey ?? null,
-    free_text: freeText ?? null,
-    tone: tone ?? null,
   }).then((r) => r.data);
 
 /** 当前身份：OAuth / 开发期自读。 */

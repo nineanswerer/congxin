@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "updated": "2026-11-24",
-  "purpose": "web/index.html 归队友（5zdz5）所有，但我们的 JS 靠一批 id / class / data 属性取元素。这份文件把「不许动的钩子」冻结下来，scripts/check-contract.ps1 第 14 项会校验：队友改坏一个钩子，提交当场报 FAIL。",
+  "purpose": "web/index.html 归队友（5zdz5）所有，但我们的 JS 靠一批 id / class / data 属性取元素。这份文件把「不许动的钩子」冻结下来，scripts/check-contract.ps1 第 14 项会校验：队友改坏一个钩子，提交当场报 FAIL。\n\n⚠️ **2026-11-24（D66）：认知闭环下线，六个旧钩子已释放。** `btn-tension` / `btn-terrain` / `mirror-quiz` / `mirror-fracture` / `mirror-situation` / `mirror-terrain` 对应的功能**已经不存在了**（后端接口、前端渲染、引导指向全部删除），所以它们**不再受保护** —— 队友可以放心从 index.html 里删掉。我们这边的「问它」面板是**在 `web/js/` 里用 JS 重新搭的**（`#panel-mirror` 的内容由 `app.js` 的 `renderAskPanel()` 整个换掉），**不改 index.html 一个字**。",
   "index_html_owner": "5zdz5",
   "contract_owner": "nineanswerer",
   "rules": [
@@ -10,14 +10,13 @@
     "我们要新增界面元素，一律在 web/js/ 里建 DOM（document.createElement / innerHTML 模板），不去改 index.html。",
     "确实要动某个钩子：先改这份文件、再改我们的 JS，两边一起提 PR；不要只改一边。",
     "CSS 里的类名如果也是 JS 的取元素钩子（index_classes 那几项），改类名同样算动钩子。",
-    "反过来也一样：我们的 JS 造出来的元素身上带 100 多个类名（card / daily-item / pc__* / ob__* / fracture-* …），队友改 CSS 时可以改规则内容，但别把我们要用的类名改掉；要改名先跟我们说一声，两边一起改。"
+    "反过来也一样：我们的 JS 造出来的元素身上带几十个类名（card / daily-item / pc__* / ob__* …），队友改 CSS 时可以改规则内容，但别把我们要用的类名改掉；要改名先跟我们说一声，两边一起改。",
+    "⚠️ **已释放的钩子**（认知闭环那一批）不在上面两份名单里 —— 看到 index.html 里还留着 `btn-tension` / `btn-terrain` / `mirror-*` 那几个，**那是待清理的历史残留，删掉即可**，我们这边已经不引用它们了。"
   ],
   "index_ids": [
     "btn-feed",
     "btn-guide",
     "btn-outro",
-    "btn-tension",
-    "btn-terrain",
     "btn-views",
     "ch-bubble-text",
     "ch-count",
@@ -35,10 +34,6 @@
     "flow-list",
     "flow-views",
     "materials",
-    "mirror-fracture",
-    "mirror-quiz",
-    "mirror-situation",
-    "mirror-terrain",
     "nav-detail",
     "nav-status",
     "outro",
@@ -63,10 +58,9 @@
     "data-tab"
   ],
   "js_owned_ids": [
-    "btn-mirror-run",
-    "btn-quiz-jump",
-    "btn-reset-quiz",
-    "btn-situation",
+    "ask-input",
+    "ask-result",
+    "btn-ask",
     "pc-form",
     "pc-input",
     "pc-log",
@@ -76,19 +70,15 @@
   ],
   "js_owned_classes": [
     "ob__card",
-    "opt",
-    "terrain-wrap"
+    "pc__links"
   ],
   "js_owned_data_attrs": [
-    "data-block-id",
+    "data-ask-example",
     "data-drag",
-    "data-fracture-id",
     "data-idx",
     "data-ob",
     "data-pet-bubble",
     "data-pet-img",
-    "data-pet-state",
-    "data-qid",
-    "data-terrain"
+    "data-pet-state"
   ]
 }

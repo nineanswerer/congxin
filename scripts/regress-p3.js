@@ -12,18 +12,21 @@
  * ## 它验什么
  *
  *   不是「接口通不通」（那太浅），而是**台上要出现的那些东西在不在**：
- *   9 条真实收藏、3 张带出处真卡、同题两答、断层标签、情境题带出处、
- *   作答长出地形、语气 14 句、错误信封有中文提示。
+ *   9 条真实收藏、3 张带出处真卡、同题两答、
+ *   「问它」：一句真问题 → 知乎相似困境 → 适用性判断 → 能照着做的方案 → 每一步都能指回知乎原文、
+ *   语气 14 句、错误信封有中文提示，
+ *   以及**认知闭环那批接口确实下线了**（打过去必须是 404）。
  *
  * ## 额度
  *
- *   ⚠️ **会烧知乎额度**：完整跑一次 ≈ **11 次「问题发现」**。
- *      每日 00:00 重置、不结转。**跑之前先看额度。**
- *      命中 5 分钟缓存的步骤会标 `cached`，**不烧**。
- *   `--light` 只跑不烧额度的那几步（收藏 / 关注 / 创作 / 语气 / 额度 / 登录态 / 错误信封）。
+ *   ⚠️ **会烧知乎额度**：
+ *      - 完整跑一次 ≈ **1 次知乎搜索（5000/天）** + **1 次直答（100/天）**（+ 卡片那几步的上游）
+ *      - 每日 00:00 重置、不结转。**跑之前先看额度。**
+ *      - 命中 5 分钟缓存的步骤会标 `cached`，**不烧**。
+ *   `--light` 只跑不烧额度的部分（收藏 / 关注 / 创作 / 语气 / 额度 / 登录态 / 错误信封 / 下线接口）。
  *
  * 用法：
- *   node scripts/regress-p3.js                # 完整跑（≈11 次问题发现）
+ *   node scripts/regress-p3.js                # 完整跑
  *   node scripts/regress-p3.js --light        # 只跑不烧额度的部分
  *   node scripts/regress-p3.js --base http://localhost:18787
  */
@@ -35,6 +38,9 @@ const BASE = (baseIndex > -1 ? args[baseIndex + 1] : process.env.REGRESS_BASE) |
 
 /** 回归用的会话 id —— 免得跟别的会话的问卷/作答串味。 */
 const SESSION = 'regress-p3';
+
+/** 「问它」回归用的问题 —— 跟 Demo 脚本同一个，出来的东西台上能直接讲。 */
+const QUESTION = process.env.REGRESS_QUESTION || '工作压力大到睡不着怎么办';
 
 const results = [];
 
@@ -73,7 +79,9 @@ function quotaOf(quotaJson, apiId) {
   return hit ? hit.remaining : null;
 }
 
-const ok = (v) => (v ? '✅' : '❌');
+/** 知乎域名（含 zhuanlan）—— 出处必须是它，否则就是编的。 */
+const isZhihuUrl = (u) => /^https?:\/\/([\w-]+\.)*zhihu\.com\//.test(String(u ?? ''));
+
 const brief = (s, n = 60) => (String(s ?? '').length > n ? String(s).slice(0, n) + '…' : String(s ?? ''));
 
 console.log(`=== P3 闭环回归 · ${BASE} · ${light ? '轻量（不烧额度）' : '完整'} ===`);
@@ -82,8 +90,9 @@ console.log(`=== P3 闭环回归 · ${BASE} · ${light ? '轻量（不烧额度�
 const quotaBefore = await call('GET', '/api/quota');
 if (quotaBefore.status === 200) {
   console.log(
-    `额度快照：问题发现剩 ${quotaBefore.json?.data?.apis?.find((a) => a.api_id === 'question_discovery')?.remaining ?? '?'}/100` +
-      ` ｜ 知乎用户数据剩 ${quotaBefore.json?.data?.apis?.find((a) => a.api_id === 'user_data')?.remaining ?? '?'}/10000`
+    `额度快照：知乎搜索剩 ${quotaOf(quotaBefore.json, 'zhihu_search')}/5000` +
+      ` ｜ 直答剩 ${quotaOf(quotaBefore.json, 'zhida_openai')}/100` +
+      ` ｜ 问题发现剩 ${quotaOf(quotaBefore.json, 'question_discovery')}/100`
   );
 } else {
   console.log(`⚠️ 额度接口没通（${quotaBefore.status}）—— 后端在跑吗？`);
@@ -159,8 +168,31 @@ step(
   missing.status === 404 && Boolean(errEnvelope?.user_hint) && /[一-龥]/.test(errEnvelope?.user_hint ?? '')
 );
 
+// ---------------------------------------------------------------- 认知闭环已下线
+// D66：断层 / 情境题 / 认知地形整条线拆掉了 —— 打过去必须是 404。
+// 这条是**守卫**：哪天有人把老接口接回来，这里立刻红。
+const RETIRED = [
+  { method: 'POST', path: '/api/behavior/tension', body: { self_report: { type: 'INTJ', dimension_scores: {}, traits: [] } } },
+  { method: 'POST', path: '/api/situation/question', body: { topic: '软件测试', count: 1 } },
+  { method: 'POST', path: '/api/terrain/answer', body: { question_id: 'x', answer_key: null } },
+  { method: 'GET', path: '/api/terrain', body: null },
+];
+const retiredResults = [];
+for (const r of RETIRED) {
+  const res = await call(r.method, r.path, r.body);
+  retiredResults.push(`${r.method} ${r.path} → ${res.status}`);
+}
+const allGone = retiredResults.every((line) => line.endsWith('404'));
+step(
+  '守卫',
+  '认知闭环接口确实下线了（D66）',
+  '4 个老接口全部 404',
+  retiredResults.join(' ｜ '),
+  allGone
+);
+
 if (!light) {
-  // ------------------------------------------------------------ 0:30 喂材料 → 吐卡
+  // ------------------------------------------------------------ 0:50 喂材料 → 吐卡
   const cards = await call('POST', '/api/cards', { topic: '软件测试', count: 3 });
   const cardList = cards.json?.data?.cards ?? [];
   const withSource = cardList.filter(
@@ -181,7 +213,7 @@ if (!light) {
       '点「出处」能回到知乎原回答',
       'answer_url 是 zhihu.com 的真实链接',
       cardList[0].source?.answer_url ?? '（无）',
-      /https?:\/\/(www\.)?zhihu\.com\//.test(cardList[0].source?.answer_url ?? '')
+      isZhihuUrl(cardList[0].source?.answer_url)
     );
   }
 
@@ -201,106 +233,70 @@ if (!light) {
     views.status === 200 && sameQ && diffA
   );
 
-  // ------------------------------------------------------------ 3:10 问卷 → 断层
-  const selfReport = {
-    type: 'INTJ',
-    dimension_scores: { Fi: 0.8, Ti: 0.7, Se: 0.2, Ne: 0.3 },
-    traits: ['长期主义', '体系化', '重视逻辑一致'],
-  };
-  const tension = await call('POST', '/api/behavior/tension', { self_report: selfReport });
-  const tData = tension.json?.data;
-  const fracture = tData?.fractures?.[0];
+  // ------------------------------------------------------------ 3:25 「问它」整条链路
+  const advice = await call('POST', '/api/advice', { question: QUESTION });
+  const a = advice.json?.data;
+  const plan = a?.plan ?? [];
+  const sources = a?.sources ?? [];
+  const verdictOk = ['applicable', 'partially_applicable', 'not_applicable'].includes(a?.verdict);
   step(
     '3:25',
-    '照镜子 → 断层（自述 vs 行为）',
-    'has_tension + 断层标签 + 行为侧证据',
-    tension.status === 200
-      ? `${tension.status} · 信号 ${tData?.signal_count ?? '?'} 个 · 断层 ${tData?.fractures?.length ?? 0} 条 · 强度 ${fracture?.intensity ?? '?'} · 证据 ${fracture?.behavioral_side?.evidence?.length ?? 0} 条`
-      : `${tension.status} · ${brief(tension.json?.error?.message)}`,
-    tension.status === 200 && tData?.has_tension === true && (fracture?.behavioral_side?.evidence?.length ?? 0) > 0
+    '「问它」：抛一个问题 → 知乎相似困境 → 判断 → 方案',
+    '200 + 非空 + 三档判断之一 + 一句话结论 + 至少 1 步方案 + 至少 1 条出处',
+    advice.status === 200
+      ? `${advice.status} · 判断=${a?.verdict} · 结论="${brief(a?.summary, 40)}" · ${plan.length} 步 · ${sources.length} 条出处 · 候选 ${a?.candidate_count ?? '?'} 条 · cached=${advice.json?.meta?.cached}`
+      : `${advice.status} · ${brief(advice.json?.error?.message)}`,
+    advice.status === 200 && a?.empty === false && verdictOk && Boolean(a?.summary) && plan.length >= 1 && sources.length >= 1
   );
-  if (fracture) {
+
+  // ------------------------------------------------------------ 3:30 出处对账
+  // **这是整条链路最要紧的一拍**：出处必须能点回知乎原文，
+  // 而且方案每一步标的依据编号，必须都能在出处列表里找到。
+  const refSet = new Set(sources.map((s) => s.ref));
+  const orphans = [...new Set(plan.flatMap((s) => s.source_indexes ?? []).filter((n) => !refSet.has(n)))];
+  const allZhihu = sources.every(
+    (s) => isZhihuUrl(s.answer_url) && isZhihuUrl(s.question_url) && Boolean(s.question_title)
+  );
+  const uniqueRefs = refSet.size === sources.length;
+  const stepsIndexed = plan.every((s, i) => s.index === i + 1 && Boolean(s.text) && (s.source_indexes ?? []).length > 0);
+  step(
+    '3:30',
+    '出处对账：每一步的依据都能指回知乎原文',
+    '出处全是 zhihu.com 真链接 + 编号不重号 + 每步都有依据编号 + 没有悬空编号',
+    `${sources.length} 条出处 · 全真链接=${allZhihu} · 编号不重号=${uniqueRefs} · 步骤编号连续=${stepsIndexed}` +
+      (orphans.length ? ` · 悬空编号=${orphans.join(',')}` : ' · 悬空编号=无'),
+    allZhihu && uniqueRefs && stepsIndexed && orphans.length === 0
+  );
+
+  if (plan[0] && sources[0]) {
     step(
-      '3:25',
-      '断层标签（脚本里逐字对照的那句）',
-      '「你说你重「长期主义」，但你收藏的 67%（6/9 条）是「怎么立刻上手」…」',
-      fracture.label,
-      /你说你重/.test(fracture.label ?? '') && /怎么立刻上手/.test(fracture.label ?? '')
-    );
-    step(
-      '3:50',
-      '行为侧数据陈述句',
-      '含 778 天 / 6 天',
-      fracture.behavioral_side?.summary ?? '（无）',
-      /778/.test(fracture.behavioral_side?.summary ?? '')
+      '3:32',
+      '每一步的依据编号，对得上出处里的编号',
+      `第 1 步的依据编号 ⊆ 出处编号`,
+      `第 1 步依据 [${(plan[0].source_indexes ?? []).join(',')}] · 出处编号 [${[...refSet].join(',')}] · 首条出处 ${brief(sources[0].answer_url, 70)}`,
+      (plan[0].source_indexes ?? []).every((n) => refSet.has(n))
     );
   }
 
-  // ------------------------------------------------------------ 4:15 情境题
-  const situation = await call('POST', '/api/situation/question', {
-    topic: '软件测试',
-    self_report: selfReport,
-    count: 1,
-  });
-  const sData = situation.json?.data;
-  const question = sData?.questions?.[0];
+  // ------------------------------------------------------------ 3:35 再问一次 → 命中缓存
+  const again = await call('POST', '/api/advice', { question: QUESTION });
   step(
-    '4:15',
-    '情境题（必带知乎出处）',
-    '200 + 题面 + 问题标题 + 原回答链接',
-    situation.status === 200
-      ? `${situation.status} · ${sData?.questions?.length ?? 0} 题 · "${brief(question?.stem, 40)}" · 出处 ${question?.source?.question_url ? '有' : '无'}`
-      : `${situation.status} · ${brief(situation.json?.error?.message)}`,
-    situation.status === 200 && (sData?.questions?.length ?? 0) > 0 && Boolean(question?.source?.question_url)
-  );
-
-  // ------------------------------------------------------------ 4:25 作答 → 地形
-  if (question) {
-    const answer = await call('POST', '/api/terrain/answer', {
-      question_id: question.id,
-      answer_key: question.options?.[0]?.key ?? null,
-    });
-    const aData = answer.json?.data;
-    step(
-      '4:25',
-      '作答 → 地形长出一块新地块',
-      '200 + 长出新地块（桥看数据，不强求）',
-      answer.status === 200
-        ? `${answer.status} · 块 ${aData?.block?.id ?? '无'}（${aData?.block?.label ?? '?'}）· 桥 ${aData?.new_bridges?.length ?? 0} 座`
-        : `${answer.status} · ${brief(answer.json?.error?.message)}`,
-      answer.status === 200 && Boolean(aData?.block)
-    );
-  }
-
-  // ------------------------------------------------------------ 4:30 地形全景
-  const terrain = await call('GET', '/api/terrain');
-  // 注意形状：data.terrain.layers 是**对象**（键 = self_reported / behavioral / situational），
-  // 不是数组 —— 数组会取到 undefined。
-  const terrainData = terrain.json?.data?.terrain ?? terrain.json?.data ?? {};
-  const rawLayers = terrainData.layers ?? {};
-  const layerCount = Array.isArray(rawLayers) ? rawLayers.length : Object.keys(rawLayers).length;
-  const layerNames = Array.isArray(rawLayers)
-    ? rawLayers.map((l) => l?.label).join(' / ')
-    : Object.values(rawLayers)
-        .map((l) => l?.label)
-        .join(' / ');
-  step(
-    '4:30',
-    '2.5D 认知地图',
-    '200 + 三层都有内容 + 有断层标记',
-    terrain.status === 200
-      ? `${terrain.status} · ${layerCount} 层（${layerNames}）· 断层标记 ${terrainData.fractures?.length ?? '?'} 处 · 桥 ${terrainData.bridges?.length ?? '?'} 座`
-      : `${terrain.status} · ${brief(terrain.json?.error?.message)}`,
-    terrain.status === 200 && layerCount >= 3 && (terrainData.fractures?.length ?? 0) > 0
+    '3:35',
+    '同一个问题再问一次 → 命中缓存（不烧直答额度）',
+    '200 + meta.cached=true',
+    again.status === 200 ? `${again.status} · cached=${again.json?.meta?.cached}` : `${again.status}`,
+    again.status === 200 && again.json?.meta?.cached === true
   );
 }
 
 // ---------------------------------------------------------------- 额度（跑之后）
 const quotaAfter = await call('GET', '/api/quota');
 if (quotaAfter.status === 200) {
-  const before = quotaBefore.json?.data?.apis?.find((a) => a.api_id === 'question_discovery')?.remaining;
-  const after = quotaAfter.json?.data?.apis?.find((a) => a.api_id === 'question_discovery')?.remaining;
-  console.log(`\n额度：问题发现 ${before} → ${after}（差值 ${before - after}）`);
+  const sBefore = quotaOf(quotaBefore.json, 'zhihu_search');
+  const sAfter = quotaOf(quotaAfter.json, 'zhihu_search');
+  const mBefore = quotaOf(quotaBefore.json, 'zhida_openai');
+  const mAfter = quotaOf(quotaAfter.json, 'zhida_openai');
+  console.log(`\n额度：知乎搜索 ${sBefore} → ${sAfter}（差值 ${sBefore - sAfter}） ｜ 直答 ${mBefore} → ${mAfter}（差值 ${mBefore - mAfter}）`);
   console.log('⚠️ 知乎的额度计数**有延迟**（实测跑完要等 15 秒左右才变），这里的差值可能不准 —— 以跑完后过一会儿再查为准。');
 }
 

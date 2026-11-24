@@ -15,15 +15,11 @@
   "tags": [
     {
       "name": "behavior",
-      "description": "行为对照：收藏 / 关注 / 创作三个信号 + 张力"
+      "description": "行为对照：收藏 / 关注 / 创作三个信号"
     },
     {
-      "name": "situation",
-      "description": "情境题生成"
-    },
-    {
-      "name": "terrain",
-      "description": "认知闭环：三层认知地形与断层"
+      "name": "advice",
+      "description": "问它：抛问题 → 知乎找相似困境 → 判断适用性 → 给方案 + 出处"
     },
     {
       "name": "platform",
@@ -502,657 +498,6 @@
               "query": {},
               "maps_to": "activity",
               "note": "上游返回 Metrics / Audience / CreationCounts / Followers 等一大包，我们只取 Metrics 里的计数。"
-            }
-          ]
-        }
-      }
-    },
-    "/api/behavior/tension": {
-      "post": {
-        "tags": [
-          "behavior"
-        ],
-        "operationId": "postBehaviorTension",
-        "summary": "自述 vs 行为的张力信号（认知闭环第一步）",
-        "description": "把用户的**自述**和**真实行为信号**放在一起比，算出**断层**。\n\n这是整个作品的立身之本——传统 MBTI 把偏差当误差，这里把偏差当**最值钱的地标**。\n\n### 底线（硬约束，写进实现）\n\n**至少要有两个独立可用的行为信号，断层才成立。** 只有一个信号时，产品会退化成「自述 vs 自述」，价值塌一半。\n→ 所以本接口**必须**返回 `signal_count` 与 `insufficient`；信号不足时**照实返回不足**，由前端如实提示，**不许拿一个信号硬撑出断层**。\n\n### 自述从哪来\n\n**自测问卷在前端**（静态题库 + 前端计分），前端算完把 `{ type, dimension_scores, traits }` 传给本接口。后端不负责出题，也不负责算 MBTI。\n\n### 置信度怎么给\n\n`confidence` 由**信号数量**与**样本量**共同决定，`confidence_note` 必须用中文写清楚**这个结论是怎么来的、哪里不确定**——这正是「不把推断说成事实」的产品底线。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TensionRequest"
-              },
-              "examples": {
-                "default": {
-                  "summary": "自述 INTJ，问有没有断层",
-                  "value": {
-                    "self_report": {
-                      "type": "INTJ",
-                      "dimension_scores": {
-                        "Fi": 0.8,
-                        "Ti": 0.7,
-                        "Se": 0.2,
-                        "Ne": 0.3
-                      },
-                      "traits": [
-                        "长期主义",
-                        "重视逻辑一致"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "张力信号",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TensionResponse"
-                },
-                "examples": {
-                  "ok": {
-                    "summary": "有断层",
-                    "value": {
-                      "data": {
-                        "has_tension": true,
-                        "available_signals": [
-                          "favorites",
-                          "followees"
-                        ],
-                        "signal_count": 2,
-                        "insufficient": false,
-                        "insufficient_reason": null,
-                        "self_reported": {
-                          "type": "INTJ",
-                          "dimensions": [
-                            {
-                              "dimension": "Fi",
-                              "score": 0.8,
-                              "label": "内倾情感"
-                            },
-                            {
-                              "dimension": "Ti",
-                              "score": 0.7,
-                              "label": "内倾思维"
-                            }
-                          ]
-                        },
-                        "behavioral": {
-                          "categories": [
-                            {
-                              "category": "可立刻上手的工具教程",
-                              "count": 4,
-                              "ratio": 0.44
-                            }
-                          ],
-                          "focus": "收藏集中在可立刻上手的工具教程与速查清单。"
-                        },
-                        "fractures": [
-                          {
-                            "id": "frac_01",
-                            "axis": "self_reported_vs_favorites",
-                            "label": "你说你重长期主义，但你收藏的 44% 是三步能跑通的工具教程。",
-                            "self_reported_side": {
-                              "summary": "自述为长期主义、重视逻辑一致",
-                              "evidence": []
-                            },
-                            "behavioral_side": {
-                              "summary": "收藏以可立刻上手的工具教程为主",
-                              "evidence": [
-                                {
-                                  "title": "软件测试笔记（上）：隐藏测试",
-                                  "url": "https://zhuanlan.zhihu.com/p/361291526"
-                                }
-                              ]
-                            },
-                            "intensity": 0.72,
-                            "confidence": 0.6,
-                            "confidence_note": "由 2 个信号推断（收藏、关注）。创作信号本次不可用（该账号没有可用的公开创作），结论仅供参考。"
-                          }
-                        ],
-                        "bridge_hint": "答下面这道题，能看出你在「关系」和「原则」之间真正先顾哪一个。",
-                        "empty": false,
-                        "empty_notice": null
-                      },
-                      "meta": {
-                        "source": "zhihu:user.collections+user.followees+user.contents",
-                        "fetched_at": 1766229000,
-                        "cached": false,
-                        "cache_age_s": 0,
-                        "pet_state": "thinking",
-                        "quota": {
-                          "api_id": "user_data",
-                          "total": 10000,
-                          "used": 4,
-                          "remaining": 9996
-                        },
-                        "warnings": []
-                      }
-                    }
-                  },
-                  "insufficient": {
-                    "summary": "信号不足（不是错误，是如实说不足）",
-                    "value": {
-                      "data": {
-                        "has_tension": false,
-                        "available_signals": [
-                          "favorites"
-                        ],
-                        "signal_count": 1,
-                        "insufficient": true,
-                        "insufficient_reason": "只读到 1 个独立行为信号（收藏）。至少需要 2 个，断层才成立——否则这只是「自述 vs 自述」。",
-                        "self_reported": {
-                          "type": "INTJ",
-                          "dimensions": [
-                            {
-                              "dimension": "Fi",
-                              "score": 0.8,
-                              "label": "内倾情感"
-                            }
-                          ]
-                        },
-                        "behavioral": {
-                          "categories": [
-                            {
-                              "category": "技术实践",
-                              "count": 4,
-                              "ratio": 0.44
-                            }
-                          ],
-                          "focus": "收藏集中在技术实践。"
-                        },
-                        "fractures": [],
-                        "bridge_hint": null,
-                        "empty": false,
-                        "empty_notice": null
-                      },
-                      "meta": {
-                        "source": "zhihu:user.collections",
-                        "fetched_at": 1766229000,
-                        "cached": false,
-                        "cache_age_s": 0,
-                        "pet_state": "idle",
-                        "quota": {
-                          "api_id": "user_data",
-                          "total": 10000,
-                          "used": 1,
-                          "remaining": 9999
-                        },
-                        "warnings": [
-                          "insufficient_signals"
-                        ]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "502": {
-            "$ref": "#/components/responses/UpstreamError"
-          }
-        },
-        "x-upstream": {
-          "quota_class": "user_data + creator",
-          "calls": [
-            {
-              "path": "(复用) /api/behavior/favorites + /api/behavior/followees + /api/behavior/contents",
-              "method": "GET",
-              "maps_to": "behavioral.*",
-              "note": "**本接口不额外调上游**——直接复用三个行为信号接口的结果与服务端缓存。开发期读 Access Secret 所属账号，上线后读登录用户，形状相同。"
-            }
-          ]
-        }
-      }
-    },
-    "/api/terrain": {
-      "get": {
-        "tags": [
-          "terrain"
-        ],
-        "operationId": "getTerrain",
-        "summary": "三层认知地形结构",
-        "description": "返回认知地形的**全部参数**：三层（说的你 / 做的你 / 情境下的你）、断层、桥。\n\n**后端只给参数，前端负责渲染。** 前端用 SVG + CSS `perspective` 画成 2.5D 分层地图；断层特写处用 Three.js 做一次真实推镜，参数取 `fractures[].axis_x` / `axis_y`。\n\n### 坐标约定\n\n- `position.x` / `position.y`：**0—1 归一化坐标**，x 是横向、y 是层内纵向\n- `height`：**0—1**，层内相对高度（决定地形块的视觉体量）\n- `axis_x` / `axis_y`：断层在平面上的位置，**断层特写的 3D 相机推到这里**\n- `intensity`：断层强度 0—1，决定视觉张力和配色\n\n### 没有数据时\n\n`layers` 里对应的块是空数组，`empty: true` + `empty_notice` 说明缺哪一层。**不要用假地形填坑。**",
-        "parameters": [
-          {
-            "name": "include_geometry",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": true
-            },
-            "description": "是否返回渲染用的坐标与高度。只看结构时可关掉。"
-          },
-          {
-            "name": "tone",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "$ref": "#/components/schemas/ToneId"
-            },
-            "description": "桌宠台词的语气。省略 = 默认语气（`gentle`）。"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "认知地形",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TerrainResponse"
-                },
-                "examples": {
-                  "ok": {
-                    "summary": "正常返回",
-                    "value": {
-                      "data": {
-                        "layers": {
-                          "self_reported": {
-                            "label": "说的你",
-                            "type": "INTJ",
-                            "blocks": [
-                              {
-                                "id": "blk_s1",
-                                "kind": "core",
-                                "label": "内倾情感",
-                                "dimension": "Fi",
-                                "summary": "自述里的核心倾向",
-                                "position": {
-                                  "x": 0.32,
-                                  "y": 0.58
-                                },
-                                "height": 0.8
-                              }
-                            ]
-                          },
-                          "behavioral": {
-                            "label": "做的你",
-                            "blocks": [
-                              {
-                                "id": "blk_b1",
-                                "kind": "observed",
-                                "label": "可立刻上手的工具教程",
-                                "summary": "收藏里占比最高的一类",
-                                "position": {
-                                  "x": 0.34,
-                                  "y": 0.42
-                                },
-                                "height": 0.55
-                              }
-                            ]
-                          },
-                          "situational": {
-                            "label": "情境下的你",
-                            "blocks": [
-                              {
-                                "id": "blk_n1",
-                                "kind": "grown",
-                                "label": "同类型的人更合得来吗",
-                                "summary": "答完第 1 题长出的地形块",
-                                "question_id": "src_7f2a1c9e4b6d0358",
-                                "position": {
-                                  "x": 0.68,
-                                  "y": 0.5
-                                },
-                                "height": 0.4
-                              }
-                            ]
-                          }
-                        },
-                        "fractures": [
-                          {
-                            "id": "frac_01",
-                            "from_layer": "self_reported",
-                            "to_layer": "behavioral",
-                            "label": "你说你重长期主义，但你收藏的 44% 是三步能跑通的工具教程。",
-                            "axis_x": 0.33,
-                            "axis_y": 0.5,
-                            "intensity": 0.72,
-                            "confidence": 0.6,
-                            "confidence_note": "由 2 个信号推断（收藏、关注）。创作信号本次不可用。"
-                          }
-                        ],
-                        "bridges": [
-                          {
-                            "id": "bridge_01",
-                            "links": [
-                              "blk_s1",
-                              "blk_n1"
-                            ],
-                            "label": "这道题答出了你自述里的内倾情感"
-                          }
-                        ],
-                        "empty": false,
-                        "empty_notice": null
-                      },
-                      "meta": {
-                        "source": "derived:tension+answers",
-                        "fetched_at": 1766229000,
-                        "cached": true,
-                        "cache_age_s": 12,
-                        "pet_state": "idle",
-                        "quota": null,
-                        "warnings": []
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/terrain/answer": {
-      "post": {
-        "tags": [
-          "terrain"
-        ],
-        "operationId": "postTerrainAnswer",
-        "summary": "提交情境题回答 → 地形生长",
-        "description": "用户答完一道情境题，**「情境下的你」层长出一块地形**。\n\n回答记录存在服务端进程内（无数据库，D22）。同一个会话内的多次作答会累积成地形。\n\n### 生长规则由后端定，前端只负责画\n\n前端拿到 `block`（新长出的地形块）与 `terrain`（更新后的完整地形）直接渲染即可，**不要在前端自己算高度或位置**——那样两端口径会漂移。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TerrainAnswerRequest"
-              },
-              "examples": {
-                "default": {
-                  "summary": "选了 A",
-                  "value": {
-                    "question_id": "src_7f2a1c9e4b6d0358",
-                    "answer_key": "A",
-                    "free_text": null
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "地形已更新",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TerrainAnswerResponse"
-                },
-                "examples": {
-                  "ok": {
-                    "summary": "正常返回",
-                    "value": {
-                      "data": {
-                        "updated": true,
-                        "block": {
-                          "id": "blk_n2",
-                          "kind": "grown",
-                          "label": "同类型的人更合得来吗",
-                          "summary": "你选了「让，因为对方更在意这段关系」——在关系与原则之间，你先顾了关系。",
-                          "question_id": "src_7f2a1c9e4b6d0358",
-                          "position": {
-                            "x": 0.71,
-                            "y": 0.46
-                          },
-                          "height": 0.35
-                        },
-                        "new_fractures": [],
-                        "new_bridges": [
-                          {
-                            "id": "bridge_02",
-                            "links": [
-                              "blk_s1",
-                              "blk_n2"
-                            ],
-                            "label": "这道题答出了你自述里的内倾情感"
-                          }
-                        ],
-                        "terrain": {
-                          "$ref": "#/components/schemas/TerrainData"
-                        },
-                        "empty": false,
-                        "empty_notice": null
-                      },
-                      "meta": {
-                        "source": "derived:answers",
-                        "fetched_at": 1766229000,
-                        "cached": false,
-                        "cache_age_s": 0,
-                        "pet_state": "emitting",
-                        "quota": null,
-                        "warnings": []
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "404": {
-            "description": "题目不存在或已过期",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                },
-                "examples": {
-                  "default": {
-                    "value": {
-                      "error": {
-                        "code": "QUESTION_NOT_FOUND",
-                        "message": "question_id 不在当前会话里",
-                        "user_hint": "这道题已经失效了，重新出一道吧",
-                        "retryable": false,
-                        "retry_after_ms": null,
-                        "upstream": null,
-                        "detail": "question_id=src_7f2a1c9e4b6d0358"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/situation/question": {
-      "post": {
-        "tags": [
-          "situation"
-        ],
-        "operationId": "postSituationQuestion",
-        "summary": "情境题生成",
-        "description": "生成一道**有知乎出处的**情境题。\n\n链路（已实测可行，2026-11-17）：\n\n```\n问题发现  GET  /api/v1/user/question_recommendations?Query=<主题>&Count=N\n   ↓      → 真实问题标题 + 完整 URL\n回答摘要  GET  /api/v1/content/question_answers?QuestionUrl=<完整URL>&Offset=0&Limit=N\n   ↓      → 真实回答摘要 + 原回答链接\n情境题生成 POST /v1/chat/completions (zhida-fast-1p5 | zhida-thinking-1p5)\n   ↓      → 把上面两段真实材料改写成情境题\n```\n\n⚠️ **直答是「改写者」不是「检索者」。** `zhida-agent` 实测两次都明确回答「我无法访问知乎站内的问题列表」，返回的是自编题面、**零个** `zhihu.com/question/...` 链接。因此**出处字段一律来自前两步上游接口，不由模型生成**；模型只负责把真实材料改写成题面。\n\n⚠️ 拿不到出处就**报错**，不返回没有 `source` 的题。",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SituationQuestionRequest"
-              },
-              "examples": {
-                "default": {
-                  "summary": "以 MBTI 主题生成情境题",
-                  "value": {
-                    "topic": "MBTI",
-                    "layer": "situational",
-                    "count": 1,
-                    "answered_sources": [],
-                    "self_report": {
-                      "type": "INTJ"
-                    },
-                    "difficulty": "medium"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "情境题（每题都带出处）",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SituationQuestionResponse"
-                },
-                "examples": {
-                  "ok": {
-                    "summary": "正常返回",
-                    "value": {
-                      "data": {
-                        "questions": [
-                          {
-                            "id": "src_7f2a1c9e4b6d0358",
-                            "kind": "situation_question",
-                            "title": "同类型的人更合得来吗？",
-                            "content": null,
-                            "stem": "你和一个跟你 MBTI 完全相同的朋友同时遇到一个必须由一个人让步的冲突。你会让，还是不让？",
-                            "options": [
-                              {
-                                "key": "A",
-                                "label": "让，因为对方更在意这段关系"
-                              },
-                              {
-                                "key": "B",
-                                "label": "不让，因为让步会破坏我坚持的原则"
-                              }
-                            ],
-                            "difficulty": "medium",
-                            "layer": "situational",
-                            "targets": {
-                              "dimension": "Fi",
-                              "traits": [
-                                "内倾情感",
-                                "价值优先"
-                              ]
-                            },
-                            "source": {
-                              "question_title": "认同和自己相同 mbti 的人合得来吗？",
-                              "question_url": "https://www.zhihu.com/question/661168384",
-                              "answer_url": "https://www.zhihu.com/question/661168384/answer/2100000001",
-                              "answer_content_type": "answer",
-                              "answer_token": "2100000001",
-                              "answer_summary": "同类型之间在思维惯性上确实更容易互相理解，但在冲突处理上常常因为「都太固执」而更僵。"
-                            },
-                            "created_at": 1766229000,
-                            "generated_by": "zhida-fast-1p5"
-                          }
-                        ],
-                        "candidates": [
-                          {
-                            "question_title": "认同和自己相同 mbti 的人合得来吗？",
-                            "question_url": "https://www.zhihu.com/question/661168384",
-                            "answer_count": 12
-                          }
-                        ],
-                        "empty": false,
-                        "empty_notice": null
-                      },
-                      "meta": {
-                        "source": "zhihu:user.question_recommendations+content.question_answers+v1.chat.completions",
-                        "fetched_at": 1766229000,
-                        "cached": false,
-                        "cache_age_s": 0,
-                        "pet_state": "cheer",
-                        "quota": {
-                          "api_id": "question_discovery",
-                          "total": 100,
-                          "used": 6,
-                          "remaining": 94
-                        },
-                        "warnings": []
-                      }
-                    }
-                  },
-                  "empty": {
-                    "summary": "捞不到可用题目（不是错误）",
-                    "value": {
-                      "data": {
-                        "questions": [],
-                        "candidates": [],
-                        "empty": true,
-                        "empty_notice": "知乎上暂时没有与这个主题相关、且带回答的讨论。换个说法再试一次。"
-                      },
-                      "meta": {
-                        "source": "zhihu:user.question_recommendations",
-                        "fetched_at": 1766229000,
-                        "cached": false,
-                        "cache_age_s": 0,
-                        "pet_state": "idle",
-                        "quota": null,
-                        "warnings": []
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "429": {
-            "$ref": "#/components/responses/RateLimited"
-          },
-          "502": {
-            "$ref": "#/components/responses/UpstreamError"
-          },
-          "504": {
-            "$ref": "#/components/responses/Timeout"
-          }
-        },
-        "x-upstream": {
-          "quota_class": "question_discovery（问题发现 + 回答摘要共用 100/天）",
-          "verified": "2026-11-17 16:2x—17:0x 实测",
-          "calls": [
-            {
-              "path": "/api/v1/user/question_recommendations",
-              "method": "GET",
-              "query": {
-                "Query": "string",
-                "Count": "int"
-              },
-              "maps_to": "candidates[]",
-              "note": "上游字段只有 Title 与 Url；**没有 Paging**。⚠️ 实测（2026-11-17）上游对**全大写英文词召回不稳**：`Query=MBTI` 连续 3 次返回 0 条，`Query=mbti` 稳定 5 条，额度充足——**不是额度问题，是字面匹配对大小写敏感**。后端的处理：主查一次，查不到才降级到小写再试一次，并写 `query_lowercase_fallback` 警告。"
-            },
-            {
-              "path": "/api/v1/content/question_answers",
-              "method": "GET",
-              "query": {
-                "QuestionUrl": "string（必填）",
-                "Offset": "int",
-                "Limit": "int"
-              },
-              "maps_to": "source.answer_*",
-              "note": "上游 Data.Items[] = {ContentType, ContentToken, Url, Summary}；Paging{IsEnd,NextOffset,Totals}。Summary 是官方服务摘要，不是 AI 生成。"
-            },
-            {
-              "path": "/v1/chat/completions",
-              "method": "POST",
-              "body": {
-                "model": "zhida-fast-1p5 | zhida-thinking-1p5",
-                "messages": "[...含上面两段真实材料...]",
-                "stream": false
-              },
-              "maps_to": "stem / options",
-              "note": "OpenAI 兼容。**不要用 zhida-agent 取出处**——实测它给不出真实链接。"
             }
           ]
         }
@@ -1779,6 +1124,140 @@
           "verified": "2026-11-18 实测"
         }
       }
+    },
+    "/api/advice": {
+      "post": {
+        "tags": [
+          "advice"
+        ],
+        "operationId": "postAdvice",
+        "summary": "问它：抛一个问题 → 知乎找相似困境 → 判断适用性 → 给能照着做的方案",
+        "description": "**新主线（2026-11-24，D66）的主接口。** 用户抛给桌宠一个问题，桌宠去知乎找**遇到同样问题的人**怎么处理的，从真实回答里挑出对策，判断这些对策适不适合他这个具体情况，最后给出一个**能照着做**的方案。\n\n**链路**（`server/src/services/advice.js`）：\n1. **知乎搜索** `GET /api/v1/content/zhihu_search?Query=<问题>&Count=10` → 10 条**真实回答**（问题标题 + 作者 + 正文 + 原回答链接）。\n2. 按上游排序取前 6 条当候选，正文各截断 700 字。\n3. **直答** `zhida-thinking-1p5` → 判断适用性 + 给方案步骤 + **引用编号**。\n4. **对账**：模型只回编号，真实 URL 由后端从上游数据里映射回去。\n\n**三条硬规则**（与全项目一致）：\n1. **出处必填**：方案里的每一条建议都要能指回知乎原文。模型**只允许回编号**，真实 URL 一个字段都不由模型生成 —— **模型不可能编造出处**。\n2. **空数据 ≠ 失败**：知乎搜不到 → 200 + `empty: true` + 中文 `empty_notice`。\n3. **失败必须是真话**：直答没给出可核对的引用 → **不给方案**，返回 `empty: true` + 真话提示。宁可回一句「这次没对上出处」，也不给一个看着像样但查无出处的答案。\n\n**为什么搜「知乎搜索」而不是「问题发现」**（2026-11-24 实测）：`content/zhihu_search` **5000 次/天**，且实测返回的 10 条**全是 `Answer` 类型**，`Url` 就是原回答链接（`/question/<qid>/answer/<aid>`）—— 出处三件套两个 URL 都能从这一条数据推出来，不需要额外上游调用。而问题发现组只有 **100 次/天**，太紧。\n\n**额度**：知乎搜索 5000/天 + 直答 **100/天**。直答很紧 → **两层缓存各 5 分钟**：\n- `advice:pool:<问题>` —— 搜索结果，换个语气重问不必再搜；\n- `advice:full:<问题>:<语气>` —— 完整结果，**同一个问题重复问不再烧直答额度**（演示要反复问同一个问题，这条很关键）。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdviceRequest"
+              },
+              "examples": {
+                "ok": {
+                  "summary": "抛一件正在遇到的事",
+                  "value": {
+                    "question": "工作压力大到睡不着怎么办",
+                    "tone": "gentle"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "方案 + 出处（空数据时 plan / sources 为空 + empty=true）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdviceResponse"
+                },
+                "examples": {
+                  "ok": {
+                    "summary": "正常返回",
+                    "value": {
+                      "data": {
+                        "question": "工作压力大到睡不着怎么办",
+                        "verdict": "partially_applicable",
+                        "summary": "知乎上多数人的做法是先处理睡眠本身，再谈工作。",
+                        "plan": [
+                          {
+                            "index": 1,
+                            "text": "先把今天的任务砍到三件，剩下的明早再排。",
+                            "source_indexes": [
+                              1,
+                              3
+                            ]
+                          }
+                        ],
+                        "caveat": "材料里没有覆盖长期高压的情况，这套只管这一阵。",
+                        "sources": [
+                          {
+                            "ref": 1,
+                            "question_title": "工作压力大到睡不着怎么办？",
+                            "question_url": "https://www.zhihu.com/question/123456789",
+                            "answer_url": "https://www.zhihu.com/question/123456789/answer/2222222222",
+                            "answer_content_type": "answer",
+                            "author_name": "某位知乎用户",
+                            "authority_level": null,
+                            "vote_up_count": 128,
+                            "comment_count": 17
+                          }
+                        ],
+                        "empty": false,
+                        "empty_notice": null,
+                        "candidate_count": 6,
+                        "tone": "gentle",
+                        "pet_lines": {
+                          "opening": "我在这儿，陪你干活。"
+                        }
+                      },
+                      "meta": {
+                        "source": "zhihu:content.zhihu_search+v1.chat.completions",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "emitting",
+                        "quota": null,
+                        "warnings": []
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "空数据（不是失败）",
+                    "value": {
+                      "data": {
+                        "question": "火星上的房地产泡沫",
+                        "verdict": "not_applicable",
+                        "summary": null,
+                        "plan": [],
+                        "caveat": null,
+                        "sources": [],
+                        "empty": true,
+                        "empty_notice": "知乎上暂时没搜到跟这个问题相关的内容。换个说法再问我一次。",
+                        "candidate_count": 0,
+                        "tone": "gentle",
+                        "pet_lines": {
+                          "opening": "我在这儿，陪你干活。"
+                        }
+                      },
+                      "meta": {
+                        "source": "zhihu:content.zhihu_search+v1.chat.completions",
+                        "fetched_at": 1766229000,
+                        "cached": false,
+                        "cache_age_s": 0,
+                        "pet_state": "idle",
+                        "quota": null,
+                        "warnings": [
+                          "search_empty_reason"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "入参不对（问题为空 / 太长）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2115,58 +1594,6 @@
           }
         }
       },
-      "ChoiceOption": {
-        "type": "object",
-        "required": [
-          "key",
-          "label"
-        ],
-        "properties": {
-          "key": {
-            "type": "string",
-            "examples": [
-              "A"
-            ]
-          },
-          "label": {
-            "type": "string",
-            "description": "选项正文。"
-          },
-          "hint": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "选项的补充说明，可空。"
-          }
-        }
-      },
-      "CognitionTarget": {
-        "type": "object",
-        "required": [
-          "dimension",
-          "traits"
-        ],
-        "description": "这道题在对焦什么。维度可以是 MBTI 四轴、认知功能（Fi/Si/Ti…）或自定义标签——具体取值等方向拍板后定，**先按字符串处理，不要写死枚举**。",
-        "properties": {
-          "dimension": {
-            "type": "string",
-            "examples": [
-              "Fi"
-            ]
-          },
-          "traits": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "examples": [
-              "内倾情感",
-              "价值优先"
-            ]
-          }
-        }
-      },
       "SourceCard": {
         "type": "object",
         "required": [
@@ -2187,8 +1614,7 @@
           "kind": {
             "type": "string",
             "enum": [
-              "knowledge_card",
-              "situation_question"
+              "knowledge_card"
             ],
             "description": "`knowledge_card` = 知识摘要卡（原方向）；`situation_question` = 情境题（新方向）。"
           },
@@ -2768,140 +2194,6 @@
           }
         }
       },
-      "SituationQuestionRequest": {
-        "type": "object",
-        "required": [
-          "topic"
-        ],
-        "properties": {
-          "topic": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64,
-            "description": "主题词，直接作为 `question_recommendations` 的 `Query`。例：`MBTI`、`人格测试`、`认识自己`。"
-          },
-          "layer": {
-            "type": "string",
-            "enum": [
-              "self_reported",
-              "behavioral",
-              "situational"
-            ],
-            "default": "situational",
-            "x-label": "self_reported = 说的你；behavioral = 做的你；situational = 情境下的你",
-            "description": "这道题属于哪一层。两个方向共用：原方向用来选卡片主题，新方向用来决定往哪一层地形上生长。"
-          },
-          "count": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 3,
-            "default": 1
-          },
-          "answered_sources": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "format": "uri"
-            },
-            "default": [],
-            "description": "已答过的题目 URL，用于去重，避免重复出题。"
-          },
-          "self_report": {
-            "oneOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "description": "自报类型，如 `INTJ`。"
-                  },
-                  "notes": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  }
-                }
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "用户自述的可选输入。有值时，后端会让情境题去**对照**自述，是「断层」信号的输入之一。"
-          },
-          "difficulty": {
-            "type": "string",
-            "enum": [
-              "easy",
-              "medium",
-              "hard"
-            ],
-            "default": "medium"
-          },
-          "seed": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "可选随机种子，传入后同样的请求生成同样的题（调试与 mock 用）。"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          }
-        }
-      },
-      "SituationQuestionData": {
-        "type": "object",
-        "required": [
-          "questions",
-          "empty"
-        ],
-        "properties": {
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/SourceCard"
-            }
-          },
-          "candidates": {
-            "type": "array",
-            "description": "本次从知乎捞到的候选问题池（看板用，让「知乎是原料来源」这件事在界面上可见）。",
-            "items": {
-              "type": "object",
-              "properties": {
-                "question_title": {
-                  "type": "string"
-                },
-                "question_url": {
-                  "type": "string",
-                  "format": "uri"
-                },
-                "answer_count": {
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              }
-            }
-          },
-          "empty": {
-            "type": "boolean"
-          },
-          "empty_notice": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          },
-          "pet_lines": {
-            "$ref": "#/components/schemas/PetLines"
-          }
-        }
-      },
       "ToneId": {
         "type": "string",
         "enum": [
@@ -3182,21 +2474,6 @@
           }
         }
       },
-      "SituationQuestionResponse": {
-        "type": "object",
-        "required": [
-          "data",
-          "meta"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/SituationQuestionData"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
-          }
-        }
-      },
       "QuotaResponse": {
         "type": "object",
         "required": [
@@ -3221,572 +2498,6 @@
                 "type": "integer"
               }
             }
-          },
-          "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
-          }
-        }
-      },
-      "SelfReport": {
-        "type": "object",
-        "required": [
-          "type"
-        ],
-        "description": "用户的自述。**由前端问卷算好后传上来**——后端不负责出题，也不负责算 MBTI（省人时，交互也更顺）。",
-        "properties": {
-          "type": {
-            "type": "string",
-            "description": "自报类型，如 `INTJ`。"
-          },
-          "dimension_scores": {
-            "type": "object",
-            "description": "各维度得分 0—1，键是维度名（`Fi` / `Ti` / `Se` / `Ne` …）。",
-            "additionalProperties": {
-              "type": "number"
-            }
-          },
-          "traits": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "用户自己写的特质词，如「长期主义」。这些词是断层文案的重要原料。"
-          }
-        }
-      },
-      "TensionRequest": {
-        "type": "object",
-        "required": [
-          "self_report"
-        ],
-        "properties": {
-          "self_report": {
-            "$ref": "#/components/schemas/SelfReport"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          }
-        }
-      },
-      "TensionSide": {
-        "type": "object",
-        "description": "断层的一侧。**必须带证据**——没有证据的判断就是断言，不许出现。",
-        "properties": {
-          "summary": {
-            "type": "string"
-          },
-          "evidence": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryEvidence"
-            }
-          }
-        }
-      },
-      "Fracture": {
-        "type": "object",
-        "required": [
-          "id",
-          "axis",
-          "label",
-          "intensity",
-          "confidence",
-          "confidence_note"
-        ],
-        "description": "**断层 = 产品主角**，不是误差。",
-        "properties": {
-          "id": {
-            "type": "string",
-            "examples": [
-              "frac_01"
-            ]
-          },
-          "axis": {
-            "type": "string",
-            "enum": [
-              "self_reported_vs_favorites",
-              "self_reported_vs_followees",
-              "self_reported_vs_contents",
-              "behavioral_vs_situational"
-            ],
-            "description": "这条断层是哪两个维度对不上。"
-          },
-          "label": {
-            "type": "string",
-            "description": "给用户看的一句话，必须具体（带数字、带证据），不许空泛。"
-          },
-          "self_reported_side": {
-            "$ref": "#/components/schemas/TensionSide"
-          },
-          "behavioral_side": {
-            "$ref": "#/components/schemas/TensionSide"
-          },
-          "intensity": {
-            "type": "number",
-            "description": "断层强度 0—1，决定视觉张力与配色。"
-          },
-          "confidence": {
-            "type": "number",
-            "description": "置信度 0—1，由信号数量与样本量决定。"
-          },
-          "confidence_note": {
-            "type": "string",
-            "description": "**必须用中文写清楚这个结论怎么来的、哪里不确定**。这是「不把推断说成事实」的产品底线。"
-          }
-        }
-      },
-      "TensionData": {
-        "type": "object",
-        "required": [
-          "has_tension",
-          "signal_count",
-          "insufficient",
-          "fractures"
-        ],
-        "properties": {
-          "has_tension": {
-            "type": "boolean"
-          },
-          "available_signals": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "favorites",
-                "followees",
-                "contents"
-              ]
-            },
-            "description": "本次**实际可用**的信号。创作信号样本为 0 时不出现。"
-          },
-          "signal_count": {
-            "type": "integer",
-            "description": "**至少 2 才算有效**。少于 2 时 `insufficient` 为 true。"
-          },
-          "insufficient": {
-            "type": "boolean"
-          },
-          "insufficient_reason": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "信号不足时写清楚缺什么、要怎么办。这段话前端要显示给用户。"
-          },
-          "self_reported": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string"
-              },
-              "dimensions": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "dimension": {
-                      "type": "string"
-                    },
-                    "score": {
-                      "type": "number"
-                    },
-                    "label": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "behavioral": {
-            "type": "object",
-            "properties": {
-              "categories": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/CategoryBucket"
-                }
-              },
-              "focus": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              }
-            }
-          },
-          "fractures": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Fracture"
-            },
-            "description": "信号不足时**必须是空数组**，不许拿一个信号硬撑出断层。"
-          },
-          "bridge_hint": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "一句引导语，把用户引向情境题。桌宠用它开口。"
-          },
-          "empty": {
-            "type": "boolean"
-          },
-          "empty_notice": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          },
-          "pet_lines": {
-            "$ref": "#/components/schemas/PetLines"
-          }
-        }
-      },
-      "TensionResponse": {
-        "type": "object",
-        "required": [
-          "data",
-          "meta"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/TensionData"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
-          }
-        }
-      },
-      "TerrainBlock": {
-        "type": "object",
-        "required": [
-          "id",
-          "kind",
-          "label",
-          "position",
-          "height"
-        ],
-        "description": "一块地形。**后端给坐标与高度，前端只画。**",
-        "properties": {
-          "id": {
-            "type": "string",
-            "examples": [
-              "blk_s1"
-            ]
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "core",
-              "observed",
-              "grown"
-            ],
-            "description": "`core` = 自述层的核心块；`observed` = 行为层观测块；`grown` = 答完情境题长出的块。"
-          },
-          "label": {
-            "type": "string"
-          },
-          "dimension": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "summary": {
-            "type": "string"
-          },
-          "question_id": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "只有 `grown` 块有。"
-          },
-          "position": {
-            "type": "object",
-            "required": [
-              "x",
-              "y"
-            ],
-            "properties": {
-              "x": {
-                "type": "number",
-                "description": "0—1 归一化横向坐标。"
-              },
-              "y": {
-                "type": "number",
-                "description": "0—1 归一化层内纵向坐标。"
-              }
-            }
-          },
-          "height": {
-            "type": "number",
-            "description": "0—1，层内相对高度，决定视觉体量。"
-          }
-        }
-      },
-      "TerrainLayer": {
-        "type": "object",
-        "required": [
-          "label",
-          "blocks"
-        ],
-        "properties": {
-          "label": {
-            "type": "string",
-            "description": "层的显示名：`说的你` / `做的你` / `情境下的你`。"
-          },
-          "type": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "自述层的 MBTI 类型。"
-          },
-          "blocks": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/TerrainBlock"
-            }
-          }
-        }
-      },
-      "FractureMark": {
-        "type": "object",
-        "required": [
-          "id",
-          "from_layer",
-          "to_layer",
-          "label",
-          "axis_x",
-          "axis_y",
-          "intensity"
-        ],
-        "description": "地形上的断层标记。**`axis_x` / `axis_y` 就是断层特写 3D 推镜的落点。**",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "from_layer": {
-            "type": "string",
-            "enum": [
-              "self_reported",
-              "behavioral",
-              "situational"
-            ]
-          },
-          "to_layer": {
-            "type": "string",
-            "enum": [
-              "self_reported",
-              "behavioral",
-              "situational"
-            ]
-          },
-          "label": {
-            "type": "string"
-          },
-          "axis_x": {
-            "type": "number"
-          },
-          "axis_y": {
-            "type": "number"
-          },
-          "intensity": {
-            "type": "number"
-          },
-          "confidence": {
-            "type": "number"
-          },
-          "confidence_note": {
-            "type": "string"
-          }
-        }
-      },
-      "Bridge": {
-        "type": "object",
-        "required": [
-          "id",
-          "links",
-          "label"
-        ],
-        "description": "**桥** = 一致的地方。「认清」不只是看到不一致，也要看到自己身上确实稳的那部分。",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "links": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "连接的地形块 id（≥2 个）。"
-          },
-          "label": {
-            "type": "string"
-          }
-        }
-      },
-      "TerrainData": {
-        "type": "object",
-        "required": [
-          "layers",
-          "fractures",
-          "bridges"
-        ],
-        "properties": {
-          "layers": {
-            "type": "object",
-            "required": [
-              "self_reported",
-              "behavioral",
-              "situational"
-            ],
-            "properties": {
-              "self_reported": {
-                "$ref": "#/components/schemas/TerrainLayer"
-              },
-              "behavioral": {
-                "$ref": "#/components/schemas/TerrainLayer"
-              },
-              "situational": {
-                "$ref": "#/components/schemas/TerrainLayer"
-              }
-            }
-          },
-          "fractures": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FractureMark"
-            }
-          },
-          "bridges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Bridge"
-            }
-          },
-          "empty": {
-            "type": "boolean"
-          },
-          "empty_notice": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "缺哪一层就写明缺哪层。**不要用假地形填坑。**"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          },
-          "pet_lines": {
-            "$ref": "#/components/schemas/PetLines"
-          }
-        }
-      },
-      "TerrainResponse": {
-        "type": "object",
-        "required": [
-          "data",
-          "meta"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/TerrainData"
-          },
-          "meta": {
-            "$ref": "#/components/schemas/ResponseMeta"
-          }
-        }
-      },
-      "TerrainAnswerRequest": {
-        "type": "object",
-        "required": [
-          "question_id"
-        ],
-        "properties": {
-          "question_id": {
-            "type": "string",
-            "description": "必须是当前会话里发过的情境题 id。"
-          },
-          "answer_key": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "选择题答案键（`A` / `B` …）。"
-          },
-          "free_text": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "开放题的回答文本。"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          }
-        }
-      },
-      "TerrainAnswerData": {
-        "type": "object",
-        "required": [
-          "updated",
-          "block",
-          "terrain"
-        ],
-        "properties": {
-          "updated": {
-            "type": "boolean"
-          },
-          "block": {
-            "$ref": "#/components/schemas/TerrainBlock"
-          },
-          "new_fractures": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FractureMark"
-            }
-          },
-          "new_bridges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Bridge"
-            }
-          },
-          "terrain": {
-            "$ref": "#/components/schemas/TerrainData"
-          },
-          "empty": {
-            "type": "boolean"
-          },
-          "empty_notice": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "tone": {
-            "$ref": "#/components/schemas/ToneId"
-          },
-          "pet_lines": {
-            "$ref": "#/components/schemas/PetLines"
-          }
-        }
-      },
-      "TerrainAnswerResponse": {
-        "type": "object",
-        "required": [
-          "data",
-          "meta"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/TerrainAnswerData"
           },
           "meta": {
             "$ref": "#/components/schemas/ResponseMeta"
@@ -4045,35 +2756,233 @@
         "deprecated": true,
         "description": "已废弃：与 `ErrorResponse` 完全重复，保留仅为兼容早期草稿。**新代码一律用 `ErrorResponse`。**",
         "type": "object"
+      },
+      "AdviceRequest": {
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "description": "抛给桌宠的问题。**必填**，空字符串或超过 100 字会返回 400。",
+        "properties": {
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "用户正在遇到的一件事（一句话）。**必填。**"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/ToneId"
+          }
+        }
+      },
+      "AdviceVerdict": {
+        "type": "string",
+        "enum": [
+          "applicable",
+          "partially_applicable",
+          "not_applicable"
+        ],
+        "description": "**适用性判断**三档。`applicable` = 这些办法对你这个具体情况适用；`partially_applicable` = 挑着看；`not_applicable` = 跟你这情况对不上（材料里没有针对它的办法）。"
+      },
+      "AdviceStep": {
+        "type": "object",
+        "required": [
+          "index",
+          "text",
+          "source_indexes"
+        ],
+        "description": "方案里的一步。**每一步都要能指回依据**。",
+        "properties": {
+          "index": {
+            "type": "integer",
+            "description": "第几步，从 1 开始。"
+          },
+          "text": {
+            "type": "string",
+            "description": "能立刻开始做的具体动作。"
+          },
+          "source_indexes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "description": "这一步依据的候选编号（对应 `sources[].ref`）。\n\n⚠️ **逐步骤优先**：模型给某一步标了编号就用它（更精确，2026-11-24 实测确实逐条给了）；没标的退回到「这一组依据」（整体引用列表）。\n   → 前端显示成「依据 N、M 条」这种**一组**的说法，**不许**说成「这一步就来自第 N 条」。"
+          }
+        }
+      },
+      "AdviceSource": {
+        "type": "object",
+        "required": [
+          "ref",
+          "question_title",
+          "question_url",
+          "answer_url"
+        ],
+        "description": "一条依据 —— **知乎上的一条真实回答**。\n\n⚠️ **出处三件套（问题标题 / 问题 URL / 原回答 URL）全部来自上游数据，一个字段都不由模型生成。** 模型只回编号（`ref`），后端据此映射回真实 URL —— 所以模型**不可能编造出处**。",
+        "properties": {
+          "ref": {
+            "type": "integer",
+            "description": "编号，与模型返回的引用编号对应。"
+          },
+          "question_title": {
+            "type": "string",
+            "description": "知乎问题标题。"
+          },
+          "question_url": {
+            "type": "string",
+            "description": "知乎问题链接。"
+          },
+          "answer_url": {
+            "type": "string",
+            "description": "**原回答链接**（`/question/<qid>/answer/<aid>`）。"
+          },
+          "answer_content_type": {
+            "type": "string",
+            "description": "`answer` 或 `article`。"
+          },
+          "author_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "回答者昵称。"
+          },
+          "authority_level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "上游给的权威等级（没有就是 null，**不许编**）。"
+          },
+          "vote_up_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "赞同数（读不到就是 null）。"
+          },
+          "comment_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "评论数（读不到就是 null）。"
+          }
+        }
+      },
+      "AdviceData": {
+        "type": "object",
+        "required": [
+          "question",
+          "verdict",
+          "summary",
+          "plan",
+          "caveat",
+          "sources",
+          "empty",
+          "empty_notice",
+          "candidate_count",
+          "tone",
+          "pet_lines"
+        ],
+        "description": "方案 + 出处。**空数据走 200 + `empty: true` + 中文 `empty_notice`**（`plan` / `sources` 是空数组，不是 null），与失败严格区分。",
+        "properties": {
+          "question": {
+            "type": "string",
+            "description": "本次问的问题（原样回显）。"
+          },
+          "verdict": {
+            "$ref": "#/components/schemas/AdviceVerdict"
+          },
+          "summary": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "一句话结论：这些办法适不适合这个具体情况。"
+          },
+          "plan": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdviceStep"
+            },
+            "description": "能照着做的步骤。**为空时说明这次没给出方案**（要么空数据，要么没对上出处）。"
+          },
+          "caveat": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "什么情况下这套不适用，或者材料里缺了什么。"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdviceSource"
+            },
+            "description": "依据的知乎原回答。**每个 URL 都能点回知乎。**"
+          },
+          "empty": {
+            "type": "boolean",
+            "description": "没给出方案时为 true。**空数据 ≠ 失败。**"
+          },
+          "empty_notice": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "中文真实提示，前端直接显示。"
+          },
+          "candidate_count": {
+            "type": "integer",
+            "description": "这次实际进了模型的那批候选条数。"
+          },
+          "tone": {
+            "$ref": "#/components/schemas/ToneId"
+          },
+          "pet_lines": {
+            "$ref": "#/components/schemas/PetLines"
+          }
+        }
+      },
+      "AdviceResponse": {
+        "type": "object",
+        "required": [
+          "data",
+          "meta"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AdviceData"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ResponseMeta"
+          }
+        }
       }
     }
   },
   "x-contract": {
-    "version": "v0.6",
-    "frozen_at": "2026-11-19",
+    "version": "v0.7",
+    "frozen_at": "2026-11-24",
     "owner": "nineanswerer",
     "reviewer": "5zdz5",
-    "status": "**方向已定**（2026-11-17）：桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。**14 个路径全部冻结，全部已实现**（其中 4 个登录路径的 OAuth 真联调待 12-05 凭证到位，开发期走 developer_account 模式）。**v0.6（2026-11-19）给 `POST /api/cards` 加了可选参数 `same_question`**：传 true 时返回**同一个知乎问题下的多条回答**（「吵起来的两边」要的数据），不传则行为完全不变。",
-    "frozen_scope": "三个行为对照接口 + 情境题生成接口 + 张力 / 地形 / 地形生长三个认知闭环接口 + 通用信封 + 桌宠状态机 + 额度透传 + 语气目录 + 登录与会话（OAuth）四个路径 + 知识卡片产出 + 知识卡片产出的「同题两答」模式（`POST /api/cards` 的可选参数 `same_question`）",
+    "status": "**方向已换（2026-11-24，D66）**：桌宠仍是交互主体，但「认·清」认知闭环**整体下线**（断层 / 情境题 / 认知地形四个路径与三个 service 全部删除），主线换成「**问它**」—— 抛一个问题 → 知乎找相似困境 → 判断适用性 → 给能照着做的方案 + 出处。**11 个路径全部冻结，全部已实现**（其中 4 个登录路径的 OAuth 真联调待 12-05 凭证到位，开发期走 developer_account 模式）。",
+    "frozen_scope": "三个行为对照接口 + **「问它」主接口（`POST /api/advice`）** + 通用信封 + 桌宠状态机 + 额度透传 + 语气目录 + 登录与会话（OAuth）四个路径 + 知识卡片产出 + 知识卡片产出的「同题两答」模式（`POST /api/cards` 的可选参数 `same_question`）",
     "frozen_endpoints": [
       "GET /api/behavior/favorites",
       "GET /api/behavior/followees",
       "GET /api/behavior/contents",
-      "POST /api/behavior/tension",
-      "POST /api/situation/question",
-      "GET /api/terrain",
-      "POST /api/terrain/answer",
       "GET /api/quota",
       "GET /api/tone",
       "GET /api/auth/profile",
       "GET /api/auth/login",
       "GET /api/auth/callback",
       "POST /api/auth/logout",
-      "POST /api/cards"
+      "POST /api/cards",
+      "POST /api/advice"
     ],
-    "open_scope": [
-      "桌宠在「照镜子」环节的**台词生成**：先用模板 + 张力数据拼（稳定、零成本），有余力再接直答生成（`zhida-fast-1p5`）。**默认走模板**，不做也能演。"
-    ],
+    "open_scope": "「问它」的**判断环节**目前接的是**直答**（`zhida-thinking-1p5`）。队里讨论过接 JeV（只给结构化判断、不产文字），本轮**不接** —— 它写不了「给出方案」那一段文字，且要多一个第三方 key 与部署环境变量。**后面想换成 JeV 随时能换**：判断环节已经被隔离在 `services/advice.js` 里。",
     "change_rule": "接口形状变了，先改本文件，再改 `contracts/CONTRACTS.md`，同一次提交；改完跑 `scripts/check-contract.ps1`。"
   },
   "x-auth": {
@@ -4221,35 +3130,39 @@
     ]
   },
   "x-directions": {
-    "note": "**方向已定（2026-11-17）**：不是两条并列的产品线，是**一条产品线里的两段**。",
+    "note": "**方向已换（2026-11-24，D66）**：不是两条并列的产品线，是**一条产品线里的两段**。",
     "decision": {
-      "headline": "**桌宠是交互主体，「认·清」认知闭环是桌宠里的一个功能环节。**",
-      "what_it_is_not": "不是推翻原方向重做。队友的「认·清」构想**完整保留**为产品的一个亮点模块；D14「桌宠是主体、知识卡片是产出物」**原样成立，不需要修订**。"
+      "headline": "**桌宠是交互主体，「问它」是桌宠里最核心的那一段。**",
+      "what_it_is_not": "⚠️ **「认·清」认知闭环已于 2026-11-24 整体下线**（D66）：断层 / 情境题 / 认知地形三个接口、三个 service、前端渲染全部删除。D14「桌宠是主体、知识卡片是产出物」**原样成立，不需要修订**。",
+      "revoked": [
+        "「认·清」认知闭环（断层 / 情境题 / 认知地形）—— **已撤销**（D66，2026-11-24）",
+        "D29 结论 2「问卷 + 三信号对照出断层」—— **已撤销**（D66，2026-11-24）"
+      ]
     },
     "structure": {
       "main_flow": "资料 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点",
-      "mirror_step": "桌宠主动发起「照镜子」→ 自述 → 行为对照 → **断层出现** → 情境题 → 答完长出一块地形",
-      "key_point": "「照镜子」是主流程的**一段**，不是并列的第二条线。桌宠在同一个后端进程里同时提供这两段能力。"
+      "ask_step": "**问它**：用户抛一个问题 → 知乎搜索找相似困境 → 直答判断适用性 → 给能照着做的方案 + 出处三件套（出处全部来自上游，模型只回编号）",
+      "revoked_mirror_step": "⚠️ **已撤销**（D66，2026-11-24）：桌宠主动发起「照镜子」→ 自述 → 行为对照 → 断层出现 → 情境题 → 答完长出一块地形",
+      "key_point": "「问它」是主流程的**一段**，不是并列的第二条线。桌宠在同一个后端进程里同时提供这两段能力。"
     },
     "how_the_two_share_one_backend": [
-      "「做的你」= 三个行为信号接口 → **认知闭环与主流程共用同一份后端代码**",
-      "「情境下的你」= 情境题 → 检索链路（问题发现 + 回答摘要）**与主流程「知乎补观点」完全相同**，只是下游一个出卡片、一个出题",
-      "「说的你」= 自述 → **问卷在前端**（静态题库 + 前端计分），后端只收结果，省人时"
+      "「做的你」= 三个行为信号接口 → **与主流程共用同一份后端代码**",
+      "「知乎上别人怎么处理的」= 知乎搜索 + 直答 → **与卡片链路共用上游客户端**（`zhihu/client.js`），只是下游一个出卡片、一个出方案",
+      "「出场白」= 语气目录（`contracts/tone.json`）→ **14 句一个字都没动**（P1 纪律），新主线里暂时用不到的那几句**也不删**，等用户拍板"
     ],
     "demo_shape": {
       "minutes_3": "主流程：桌宠吃资料、吐卡片、点开知乎原回答、补观点",
-      "minutes_15": "照镜子环节：桌宠发现「你说你是 X，但你收藏的 67% 是 Y」→ 断层出现 → 抛情境题",
+      "minutes_5": "问它：抛一个问题 → 它上知乎找相似困境 → 给方案 + 出处（每条都能点回知乎原回答）",
       "rule": "**Demo 主叙事是「桌宠在陪你干活」，不是「我们检索了知乎」。** Demo 里出现太多「检索 → 展示观点对照」的界面，会被评审打成 01「AI × 知识与探索」，而不是 02「AI × 陪伴与交互」。"
     },
-    "terrain_form": {
-      "decided": "**2.5D 分层认知地图（SVG + CSS `perspective`）+ 断层特写用真 3D 推镜（Three.js 只用在这一处）**",
-      "why": "自由漫游 3D 要 12—18 人时做不完；刘看山没有 3D 模型（自建要 20—30 人时）；评审 3 分钟可能走丢。2.5D 一眼看懂三层 + 断层，手机也能用。",
-      "boundary": "**后端只给参数**（归一化坐标、高度、强度、置信度），**前端负责渲染**。后端不引任何渲染库，前端也不需要理解后端算法。"
+    "revoked_terrain_form": {
+      "decided": "⚠️ **已撤销**（D66，2026-11-24）：2.5D 分层认知地图（SVG + CSS `perspective`）+ 断层特写用真 3D 推镜（Three.js 只用在这一处）。**认知地形不再做**。",
+      "why": "原方案的算力与工时投入换不回同等收益；同一份工时投到「问它」的判断质量与出处可靠性上，对 02 赛道更值。"
     },
     "behavior_signals": {
-      "decided": "**收藏 + 关注 + 创作 三个信号都做**",
+      "decided": "**收藏 + 关注 + 创作 三个信号都做**（这三个接口本身保留，仍是日报与底栏的数据来源）",
       "degrade_rule": "创作信号样本可能为 0（实测账号只有 1 条 `pin`）→ 此时 `signal_count` 变成 2，`insufficient` 仍为 false，但必须写进 `confidence_note`。",
-      "hard_bottom_line": "**至少 2 个独立可用信号，断层才成立。** 只有 1 个时必须返回 `insufficient: true` + `insufficient_reason`，**不许拿一个信号硬撑出断层**。"
+      "hard_bottom_line": "⚠️ 这条底线原本服务于「断层」，断层下线后不再产出断层 —— 但**诚实口径不变**：读不到就说读不到，不拿一个信号硬撑。"
     }
   }
 }

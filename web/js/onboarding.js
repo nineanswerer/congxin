@@ -1,7 +1,7 @@
 /**
- * 首次上手引导 —— 让新用户**自己**走通一次「认·清」认知闭环。
+ * 首次上手引导 —— 让新用户**自己**走通一次「问它」。
  *
- * ## 为什么必须有它（2026-11-23 实测，干净 profile）
+ * ## 为什么必须有它（2026-11-23 实测，干净 profile；2026-11-24 按新主线重写）
  *
  * 新用户进页面：首屏能看见 9 条真实收藏，桌宠也说「要不我先啃一口」，
  * 但**页面上没有任何一处告诉他「认·清」闭环怎么走**。
@@ -13,19 +13,23 @@
  * 违反项目自己的底线「台词不许早于事实」。照镜子面板那颗主按钮
  * （「让桌宠照照镜子」）更是连 click handler 都没绑上（id 撞了）。
  *
+ * ⚠️ **2026-11-24（D66）：认知闭环整体下线，引导跟着换主线。**
+ *    旧的七步（问卷 → 断层 → 情境题 → 地形）对应的功能**已经不存在了**，
+ *    留着就是指着不存在的东西 —— 现在是**四步**：喂收藏 → 翻到「问它」→ 问一件事。
+ *
  * ## 三条纪律（改这个文件前先读）
  *
  * 1. **引导只指路，不替用户做**。它圈出按钮、滚到位，但每一刀都得用户自己按。
- *    所以「完成」的判定**全部来自真实状态**（卡片数 / 答题数 / 断层数 /
- *    情境题 / 版图），不是点击次数 —— 走通了才算走通。
- * 2. **引导里不许出现结论**。没答完问卷，引导只说「还差几题」，
- *    绝不说「你没断层」「你很一致」。结论只能来自真实数据。
+ *    所以「完成」的判定**全部来自真实状态**（卡片数 / 问过几次 / 有没有拿到方案），
+ *    不是点击次数 —— 走通了才算走通。
+ * 2. **引导里不许出现结论**。没问出方案，引导只说「正在知乎上找…」，
+ *    绝不说「它帮到你了」这种它还没做过的陈述。结论只能来自真实数据。
  * 3. **引导不烧额度**。它自己不发任何知乎请求，只读前端已有的状态。
  *
  * ## 存储（都只存在这台浏览器里，跟 `congxin.pet.memory.v1` 一个口径：不上传、不跨设备）
  *
  * - `congxin.onboard.v1` —— 引导看过没有（{seen, skipped, at}）
- * - `congxin.loop.v1`    —— 认知闭环走通没有（{at, stats}）
+ * - `congxin.loop.v1`    —— 「问它」走通没有（{at, stats}）
  */
 
 const KEY_GUIDE = 'congxin.onboard.v1';
@@ -53,26 +57,15 @@ function escapeText(s) {
 }
 
 /**
- * 找**第一道还没答**的问卷题。
- *
- * ⚠️ 不能指整个 `#mirror-quiz` —— 那个容器有 500 多像素高，
- *    引导卡固定在底部，中间那几道题必然被卡片压住。
- *    指「下一道没答的题」才对：它矮、位置准、答完自动往前挪。
- */
-function firstUnansweredQuestion() {
-  const qs = [...document.querySelectorAll('#mirror-quiz .q')];
-  for (const q of qs) {
-    const opts = [...q.querySelectorAll('.opt')];
-    if (opts.length && !opts.some((o) => o.classList.contains('is-on'))) return q;
-  }
-  return qs[0] || null;
-}
-
-/**
- * 引导的七步。
+ * 引导的四步（2026-11-24 D66：从七步认知闭环换成四步「问它」）。
  *
  * 每一步 = 一个**真实存在的界面元素** + 一句**不含结论**的话 + 一个**完成判据**。
  * 判据读的是真实状态，所以「走到下一步」= 「这一步真的做成了」。
+ *
+ * ⚠️ 目标 id 全部是**我们自己在 web/js 里建的 DOM**（`#ask-input`），
+ *    或者 index.html 里队友给的老钩子（`#ch-pet` / `#btn-feed` / `#tabs`）。
+ *    认知闭环那几个钩子（`#mirror-quiz` / `#btn-tension` / `#btn-terrain` …）
+ *    已经随闭环下线**释放**给队友了 —— 引导里不许再指向它们。
  */
 const STEPS = [
   {
@@ -91,50 +84,19 @@ const STEPS = [
   },
   {
     id: 'tab',
-    title: '「认·清」在这一栏',
-    body: '点「照镜子 · 认知闭环」。接下来四步都在这一栏里。',
+    title: '「问它」在这一栏',
+    body: '点「问它 · 找答案」。下一步就在这一栏里。',
     target: '#tabs button[data-tab="mirror"]',
     done: (p) => p.tab,
   },
   {
-    id: 'quiz',
-    title: '先说说你是谁（6 题）',
-    body: '测的是「你怎么说自己」，不是你的能力。断层要拿你说的跟你做的比 —— 这 6 题没说全，它下不了判断。',
-    target: '#mirror-quiz .q',
-    resolve: firstUnansweredQuestion,
+    id: 'ask',
+    title: '说一件你正遇到的事',
+    body: '它去知乎上找**遇到同样问题的人**怎么处理的，判断适不适合你，再给你一个能照着做的方案。方案里的每一条都能点回知乎原回答。',
+    target: '#ask-input',
     ensure: 'mirror',
-    done: (p) => p.answered >= p.total,
-    hint: (p) => `已答 ${p.answered} / ${p.total} 题`,
-  },
-  {
-    id: 'mirror',
-    title: '让它照照镜子',
-    body: '自述 vs 你收藏里真正读了什么。断层、证据、置信度全在这儿。',
-    target: '#btn-mirror-run',
-    ensure: 'mirror',
-    done: (p) => p.tension,
-    hint: () => '正在把你说的和你做的放一起看…',
-  },
-  {
-    id: 'situation',
-    title: '来一道带出处的题',
-    body: '题目来自知乎上的真实问题，出处带链接 —— 不是它自己出的题。',
-    target: '#btn-situation',
-    // ⚠️ `#btn-situation` 是**跑完断层之后**才插进 DOM 的。
-    //    还没跑出来时得指个别的（照镜子面板本身），否则这一步什么都不指。
-    fallback: '#panel-mirror',
-    ensure: 'mirror',
-    done: (p) => p.situation,
-    hint: () => '正在出题…',
-  },  {
-    id: 'terrain',
-    title: '看认知版图',
-    body: '断层、桥、你走过的路都在这张图上。走到这一步，这一轮就通了。',
-    target: '#btn-terrain',
-    fallback: '#mirror-terrain',
-    ensure: 'mirror',
-    done: (p) => p.terrain,
-    hint: () => '正在画…',
+    done: (p) => p.advice,
+    hint: (p) => (p.asked > 0 && !p.advice ? '这次没对上出处，它正在说实话…' : '正在知乎上找相似的人…'),
   },
 ];
 
@@ -406,23 +368,21 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
     show,
     /** 引导看过没有（跳过也算看过 —— 不再自动弹，但「带我走一遍」随时能重开）。 */
     seenBefore: () => Boolean(readJson(KEY_GUIDE)?.seen),
-    /** 闭环走通的记录。 */
+    /** 「问它」走通的记录。 */
     loop: () => readJson(KEY_LOOP),
     /**
-     * 闭环走通的那张卡 —— 数字全部来自这次真实跑出来的状态。
-     * @param {object} stats {favorites, quiz, fractures, situation, layers}
+     * 走通的那张卡 —— 数字全部来自这次真实跑出来的状态。
+     * @param {object} stats {favorites, asked, sources}
      */
     showDone(stats) {
       const first = !readJson(KEY_LOOP);
       writeJson(KEY_LOOP, { at: new Date().toISOString(), stats });
-      // 只在**第一次**走通时弹这张卡 —— 复看地形不该被一张卡挡住。
+      // 只在**第一次**走通时弹这张卡 —— 再问一次不该被一张卡挡住。
       if (!first) return;
       const rows = [
         stats.favorites != null ? `真实收藏 ${stats.favorites} 条` : null,
-        stats.quiz ? `问卷 ${stats.quiz}` : null,
-        stats.fractures != null ? `断层 ${stats.fractures} 条` : null,
-        stats.situation ? `情境题 ${stats.situation} 道` : null,
-        stats.layers != null ? `认知版图 ${stats.layers}/3 层` : null,
+        stats.asked != null ? `问过 ${stats.asked} 次` : null,
+        stats.sources != null ? `依据 ${stats.sources} 条知乎原回答` : null,
       ].filter(Boolean);
       clearMark();
       doneShown = true;
@@ -430,7 +390,7 @@ export function initOnboarding({ probe, switchTab, autoStart = false, onFinish, 
       root.innerHTML = `
         <div class="ob__card ob__card--done" role="status">
           <div class="ob__top"><span class="ob__count">这一轮走通了</span></div>
-          <h3 class="ob__title">你刚刚自己走完了一次「认·清」</h3>
+          <h3 class="ob__title">你刚刚自己问通了「问它」</h3>
           <p class="ob__body">${rows.map((r) => escapeText(r)).join(' · ')} —— 这些数字都是这一次真实跑出来的。</p>
           <div class="ob__foot">
             <button class="btn btn--secondary" type="button" data-ob="again">再走一遍</button>

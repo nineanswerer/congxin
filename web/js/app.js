@@ -10,18 +10,26 @@
  *
  * 全部来自 `GET /api/tone`（契约层 `contracts/tone.json` 是唯一真源）。
  *
+ * ## 两条主线（2026-11-24 决策 D66）
+ *
+ * 1. **主流程**（flow 栏）：收藏 → 桌宠咀嚼 → 吐带出处的卡片 → 追问 → 知乎补观点。
+ * 2. **「问它」**（mirror 栏，`web/index.html` 里的 `#panel-mirror`）：
+ *    你抛一件事 → 它去知乎找**相似的困境** → 判断适不适合你 → 给一个能照着做的方案。
+ *
+ * ⚠️ 「认·清认知闭环」（断层 / 情境题 / 认知地形）已随 D66 下线 ——
+ *    认知地图不做了，闭环那三个接口、三个 service、前端一整套渲染都拆掉了。
+ *    台词目录 14 句**一个字没动**（P1 纪律：产出内容只能人拍板）。
+ *
  * ## 渲染在后端之外
  *
- * 后端只给参数（坐标 / 高度 / 强度 / 置信度），2.5D 地图怎么画是前端的事（D29 结论 6）。
+ * 后端只给参数与出处，前端负责怎么摆。
  */
 
 import {
-  apiGet, getTone, getFavorites, getContents, getTension, getSituation, getCards, getTerrain, answerTerrain,
+  apiGet, getTone, getFavorites, getContents, getCards, getAdvice,
   getProfile, getQuota, ApiFail,
 } from './api.js';
 import { Pet, escapeHtml } from './pet.js';
-import { QUESTIONS, scoreQuiz, DIMENSION_LABELS } from './quiz.js';
-import { renderTerrain, zoomFracture } from './terrain.js';
 import { recordDailyRead, trailDays } from './mountain-trail.js';
 import { PetCompanion } from './pet-companion.js';
 import { initOutro, showOutro } from './outro.js';
@@ -36,12 +44,12 @@ const state = {
   favorites: null,
   cards: [],
   viewpoints: [],
-  tension: null,
-  terrain: null,
-  quizPicked: {},
   topic: '',
-  ownQuote: null,
   quota: null,
+  /** 「问它」的结果（最近一次）。null = 还没问过。 */
+  advice: null,
+  /** 「问它」问过几次（本机计数）。 */
+  adviceCount: 0,
 };
 
 let pet = null;
@@ -194,37 +202,6 @@ function materialTopicCandidates() {
   }
   // 3. n-gram 兜底
   push(deriveTopic(items.map((i) => i.title)));
-  return out;
-}
-
-/**
- * 主题词候选（情境题侧）——**材料优先，特质词兜底**。
- *
- * ## 为什么材料必须排在特质词前面（2026-11-19 修）
- *
- * 桌宠出题前那句是「那这道呢——**你打算怎么让它用上**」——
- * 「它」指的是**你刚喂进去的那堆材料**。
- * 如果主题词用问卷里的抽象特质词（「长期主义」），知乎的问题发现会按这个词
- * 召回一批**跟材料毫无关系**的问题（实测：出题变成「基金 30 年定投」，
- * 而收藏全是软件测试 / UML / Ubuntu）→ **台词悬空、题与材料不搭**。
- *
- * 所以顺序改成：
- *   1. **`state.topic`** —— 这轮喂它、吐卡片时**实际用的那个主题**（材料侧来的，
- *      且已经证明能捞到带回答的真问题）；
- *   2. **材料侧候选**（answer 型收藏标题 = 真问题标题，最可靠）；
- *   3. **问卷特质词** —— 只在前两个都没有时兜底。
- */
-function topicCandidates() {
-  const out = [];
-  const push = (t) => {
-    const s = String(t ?? '').trim();
-    if (!s || s.length < 2 || s.length > 24) return;
-    if (out.includes(s)) return;
-    out.push(s);
-  };
-  push(state.topic);
-  for (const t of materialTopicCandidates()) push(t);
-  for (const t of scoreQuiz(state.quizPicked).traits ?? []) push(t);
   return out;
 }
 
@@ -672,402 +649,247 @@ async function loadViewpoints() {
   }
 }
 
-// ---------------------------------------------------------------- 照镜子
+// ---------------------------------------------------------------- 问它（2026-11-24 新主线 · D66）
 
-function renderQuiz() {
-  const box = $('#mirror-quiz');
-  box.innerHTML = `
-    <div class="sec-title">
-      <b>先说说你是谁</b>
-      <span class="tag">6 题 · 前端计分</span>
-      <span class="rule"></span>
-      <span>测的是「你怎么说自己」，不是你的能力</span>
-    </div>
-    <div class="quiz" style="margin-top:12px">
-      ${QUESTIONS.map((q) => `
-        <div class="q" data-q="${q.id}">
-          <div class="qtitle">${escapeHtml(q.title)}</div>
-          ${q.sub ? `<div class="qsub">${escapeHtml(q.sub)}</div>` : ''}
-          <div class="opts">
-            ${q.options.map((o, i) => `
-              <button class="opt${state.quizPicked[q.id] === i ? ' is-on' : ''}" data-qid="${q.id}" data-idx="${i}">
-                <span class="k">${escapeHtml(o.k)}</span>${escapeHtml(o.text)}
-              </button>`).join('')}
-          </div>
-        </div>`).join('')}
-    </div>
-    <div style="margin-top:14px; display:flex; gap:10px">
-      <button class="btn btn--primary" id="btn-mirror-run">让桌宠照照镜子</button>
-      <button class="btn btn--secondary" id="btn-reset-quiz">重选</button>
-    </div>`;
+/**
+ * 「问它」面板 —— 你抛一件事，它去知乎找**遇到同样问题的人**怎么处理的。
+ *
+ * ## 为什么住在 `#panel-mirror` 里
+ *
+ * `web/index.html` 是**队友的地盘**（D65），我们不碰它。
+ * 原来那块是「照镜子 · 认知闭环」面板（`#panel-mirror` + 4 个空 div：
+ * `mirror-quiz` / `mirror-fracture` / `mirror-situation` / `mirror-terrain`）。
+ * 认知闭环下线后那 4 个 div 没人用了 —— 我们**把面板内容整个换掉**
+ * （`panel.innerHTML = ...`），队友什么时候从他文件里删掉那 4 个 div 都行，**不影响我们跑**。
+ *
+ * ⚠️ 那个 tab 按钮的标题（「照镜子 · 认知闭环」）也在 index.html 里，同样是队友的地盘 →
+ *    我们**只在它还是旧值时**才改掉它；他要是自己改过标题，我们的代码就不动（免得两边打架）。
+ *
+ * ## 样式为什么用内联
+ *
+ * `web/css/` 归队友（D65）。我们新增的界面**不新增 CSS 文件、不改他的样式**，
+ * 需要的样式全部内联在这段 JS 里 —— 两边零冲突。
+ */
+const ASK_TAB_OLD_TITLE = '照镜子 · 认知闭环';
+const ASK_TAB_NEW_TITLE = '问它 · 它帮你找答案';
 
-  $$('#mirror-quiz .opt').forEach((b) => {
+/** 演示用的示例问题 —— 都是**真实的困境**，不是编出来的文案。 */
+const ASK_EXAMPLES = [
+  '工作压力大到睡不着怎么办',
+  '和父母总因为催婚吵架',
+  '实习期被同事甩锅',
+];
+
+/** 内联样式（见上面的「样式为什么用内联」）。 */
+const ASK_STYLE = {
+  row: 'display:flex; gap:10px; flex-wrap:wrap; align-items:center',
+  input:
+    'flex:1 1 260px; padding:10px 12px; border-radius:10px; ' +
+    'border:1px solid rgba(127,127,127,.35); background:transparent; color:inherit; font:inherit',
+  card:
+    'border:1px solid rgba(127,127,127,.28); border-radius:12px; padding:14px 16px; margin-top:12px',
+  step:
+    'display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px dashed rgba(127,127,127,.25)',
+  src:
+    'display:block; margin-top:6px; padding:9px 11px; border-radius:9px; ' +
+    'border:1px solid rgba(127,127,127,.22); text-decoration:none',
+};
+
+/** 建「问它」面板（内容全部由 JS 生成，不改 index.html）。 */
+function renderAskPanel() {
+  const panel = $('#panel-mirror');
+  if (!panel) return;
+
+  // tab 标题：只在还是旧值时才改（队友自己改过就不动）
+  const tabBtn = document.querySelector('#tabs button[data-tab="mirror"]');
+  if (tabBtn && tabBtn.textContent.trim() === ASK_TAB_OLD_TITLE) {
+    tabBtn.textContent = ASK_TAB_NEW_TITLE;
+  }
+
+  panel.innerHTML = `
+    <div class="sec-title" style="flex-wrap:wrap">
+      <b style="white-space:nowrap">问它一件事</b>
+      <span class="tag" style="white-space:nowrap;flex:0 0 auto">知乎找答案</span>
+      <span class="rule" style="flex:0 0 36px"></span>
+      <span style="flex:1 1 240px;min-width:0">你说你的事，它去找<b>知乎上遇到同样问题的人</b>怎么处理的</span>
+    </div>
+    <div style="${ASK_STYLE.row}; margin-top:12px">
+      <input id="ask-input" maxlength="100" autocomplete="off"
+             placeholder="比如：工作压力大到睡不着怎么办"
+             aria-label="说一件你正遇到的事"
+             style="${ASK_STYLE.input}" />
+      <button class="btn btn--primary" id="btn-ask">让它帮我想想</button>
+    </div>
+    <div style="${ASK_STYLE.row}; margin-top:10px">
+      ${ASK_EXAMPLES.map(
+        (q) => `<button class="btn btn--secondary" data-ask-example="${escapeHtml(q)}">${escapeHtml(q)}</button>`
+      ).join('')}
+    </div>
+    <div id="ask-result" style="margin-top:16px"></div>
+    ${ZHIHU_LOGIN_HINT}
+  `;
+
+  $('#btn-ask')?.addEventListener('click', () => {
+    const input = $('#ask-input');
+    askAdvice(input?.value ?? '', input);
+  });
+  $('#ask-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('#btn-ask')?.click(); }
+  });
+  $$('#panel-mirror [data-ask-example]').forEach((b) => {
     b.addEventListener('click', () => {
-      const { qid, idx } = b.dataset;
-      state.quizPicked[qid] = Number(idx);
-      $$(`#mirror-quiz .opt[data-qid="${qid}"]`).forEach((x) => x.classList.remove('is-on'));
-      b.classList.add('is-on');
+      const input = $('#ask-input');
+      if (input) input.value = b.dataset.askExample ?? '';
+      $('#btn-ask')?.click();
     });
   });
-  $('#btn-reset-quiz')?.addEventListener('click', () => {
-    state.quizPicked = {};
-    renderQuiz();
-  });
-  // ⚠️ 这个按钮**不能**再叫 `btn-tension` —— 工作台「看一次断层」已经用了这个 id，
-  //    `$('#btn-tension')` 只会返回**第一个**（工作台那个），
-  //    于是这颗主按钮永远拿不到 handler（2026-11-23 实测：点了没反应）。
-  $('#btn-mirror-run')?.addEventListener('click', (e) => startMirror(e.currentTarget));
 }
 
-/** 问卷答了几题 / 还差几题。 */
-function quizAnsweredCount() {
-  return Object.keys(state.quizPicked).length;
-}
-function quizMissingCount() {
-  return QUESTIONS.filter((q) => state.quizPicked[q.id] === undefined).length;
-}
-
-/** 切到「照镜子 · 认知闭环」标签页（复用它自己的点击处理器，状态不会走偏）。 */
-function switchToMirrorTab() {
-  const btn = document.querySelector('#tabs button[data-tab="mirror"]');
-  if (btn && !btn.classList.contains('is-on')) btn.click();
+/** 三档判断 → 人话标签（不能把 `applicable` 这种机器词摆给用户看）。 */
+function verdictLabel(v) {
+  if (v === 'applicable') return { text: '这些办法对你适用', tone: 'ok' };
+  if (v === 'partially_applicable') return { text: '部分适用 —— 挑着看', tone: 'warn' };
+  return { text: '这些办法跟你这情况对不上', tone: 'warn' };
 }
 
 /**
- * 自述没说全 → **不许下判断**，也不许说「你说的一致」。
+ * 问一次 —— 「抛一个问题 → 找相似困境 → 判断适用性 → 给方案」。
  *
- * 断层是拿「你说的」跟「你做的」放在一起比。问卷一个字都没答的时候，
- * 那个「一致」是**编的**（2026-11-23 实测：新用户点「看一次断层」，
- * 拿到的是「你说的和你做的在这几个维度上是一致的」—— 他根本没说过话）。
- * 所以这里只说实情：还差几题，并把人送到问卷那儿。
+ * ⚠️ **台词不许早于事实**：先出方案，再让桌宠开口；
+ *    失败/对不上时它说的是**真话**，不是一句安慰话。
  */
-function showSelfReportPrompt(missing) {
-  const box = $('#mirror-fracture');
-  if (!box) return;
-  const firstUnanswered = QUESTIONS.find((q) => state.quizPicked[q.id] === undefined);
-  box.innerHTML = noticeBox(
-    `<b>现在还照不了。</b>问卷还差 <b>${missing}</b> 题没答 —— ` +
-    `断层是拿「你说的」跟「你做的」放在一起比，你说的还没说全，我下不了这个判断。` +
-    `<div style="margin-top:10px"><button class="btn btn--primary" id="btn-quiz-jump">去答剩下的题</button></div>`,
-    'warn'
-  );
-  $('#btn-quiz-jump')?.addEventListener('click', () => {
-    const opt = firstUnanswered
-      ? document.querySelector(`#mirror-quiz .opt[data-qid="${firstUnanswered.id}"]`)
-      : null;
-    (opt ?? $('#mirror-quiz'))?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  });
-}
-
-/**
- * 「照镜子」的统一入口 —— 工作台的「看一次断层」和问卷里的「让桌宠照照镜子」都走这里。
- *
- * @param {HTMLElement} [trigger] 点下去的那颗按钮（用来禁用/恢复）
- */
-async function startMirror(trigger) {
-  const missing = quizMissingCount();
-  if (missing > 0) {
-    switchToMirrorTab();
-    showSelfReportPrompt(missing);
+async function askAdvice(question, inputEl) {
+  const q = String(question ?? '').trim();
+  if (!q) {
+    toast('先说一件事吧', 'warn');
     return;
   }
-  switchToMirrorTab();
-  await runTension(trigger);
-}
-
-async function runTension(trigger) {
-  // ⚠️ **自述没说全 → 不调接口、不下判断**。
-  //    「你说的和你做的……一致」这句话的前提是**你说过**。
-  //    问卷没答完就说它 = 对用户撒谎（2026-11-23 实测踩过）。
-  const missing = quizMissingCount();
-  if (missing > 0) {
-    switchToMirrorTab();
-    showSelfReportPrompt(missing);
-    return;
-  }
-  const btn = trigger ?? $('#btn-mirror-run');
+  const box = $('#ask-result');
+  const btn = $('#btn-ask');
   if (btn) btn.disabled = true;
-  const box = $('#mirror-fracture');
   try {
-    const report = scoreQuiz(state.quizPicked);
     pet.setState('thinking');
-    pet.say('mirror');
-    box.innerHTML = noticeBox('正在把你的话和你收藏的东西放在一起看……');
+    pet.sayText('我去知乎上找找，看有没有人遇到过一样的。');
+    if (box) box.innerHTML = noticeBox('正在知乎上找相似的人怎么处理的……');
+    if (inputEl) inputEl.value = '';
 
-    // 创作信号：脚本 4:05 那一拍要用的「你自己也写过一句」。
-    // ⚠️ **在这里就取材**（断层这一拍，比 4:05 早半分钟）——
-    //    等到点「看地形」才取，主持一点得慢了就来不及（会降级成数据陈述）。
-    //    不 await、不阻塞；取不到就降级，**不报错、不编**。
-    state.ownQuote = null;
-    getContents(3)
-      .then((contents) => { state.ownQuote = pickOwnQuote(contents); })
-      .catch(() => { state.ownQuote = null; });
+    const data = await getAdvice({ question: q, tone: state.tone?.tone });
+    state.advice = data;
+    state.adviceCount += 1;
 
-    const data = await getTension(report, state.tone?.tone);
-    state.tension = data;
-
-    if (data.insufficient) {
-      // ⚠️ 「不成立」有两种原因，标题不能写死一种（2026-11-23 17:4x 实测）：
-      //    ① 行为信号不够（收藏/关注/创作读到的不足 2 个）
-      //    ② 行为信号够，但**你答的 6 题里没说自己重什么**（后端 warnings 里有
-      //       self_report_not_comparable）—— 这种情况下说「信号不够」是**说错原因**。
-      const selfNotComparable = (data.warnings ?? []).includes('self_report_not_comparable');
-      box.innerHTML = noticeBox(
-        `<b>${selfNotComparable ? '你还没说清自己重什么。' : '信号不够，断层不成立。'}</b>` +
-        `${escapeHtml(data.insufficient_reason ?? '')}`,
-        'warn'
-      );
+    if (data.empty) {
+      // ⚠️ 空数据 ≠ 失败 —— 显示后端给的那句真话，不自己编文案。
+      if (box) box.innerHTML = noticeBox(escapeHtml(data.empty_notice ?? '这次没找到相关的内容。'), 'warn');
+      revealAskResult(box);
       pet.setState('idle');
-      pet.say('insufficient');
-      return;
-    }
-    if (!data.has_tension || !(data.fractures ?? []).length) {
-      box.innerHTML = noticeBox(
-        `<b>没找到断层。</b>你说的和你做的在这几个维度上是一致的——这本身就是个结果。` +
-        `<br /><span class="code">这次比的是 ${data.signal_count ?? '—'} 个真实行为信号，和你答的 ${quizAnsweredCount()} 题。</span>`,
-        'warn'
-      );
-      pet.setState('idle');
-      pet.sayText('你说的和你做的，这回没打架。');
+      pet.sayText('这次没找到能对得上的。我不给你一个查无出处的答案。');
       return;
     }
 
-    box.innerHTML = `
-      <div class="sec-title">
-        <b>断层</b>
-        <span class="tag amber">自述 vs 行为</span>
-        <span class="rule"></span>
-        <span>${data.fractures.length} 条</span>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:12px; margin-top:12px">
-        ${data.fractures.map((f) => `
-          <div class="fracture" data-fracture="${escapeHtml(f.id)}">
-            <div class="label">${escapeHtml(f.label)}</div>
-            <div class="side"><b>你说的：</b>${escapeHtml(f.self_reported_side?.summary ?? '')}</div>
-            <div class="side"><b>你做的：</b>${escapeHtml(f.behavioral_side?.summary ?? '')}</div>
-            <div class="bars">
-              <span>强度 <b>${Math.round((f.intensity ?? 0) * 100)}%</b></span>
-              <span>置信度 <b>${Math.round((f.confidence ?? 0) * 100)}%</b></span>
-            </div>
-            <div class="note">${escapeHtml(f.confidence_note ?? '')}</div>
-            ${(f.behavioral_side?.evidence ?? []).length ? `
-              <div class="evidence">
-                ${f.behavioral_side.evidence.map((e) => `
-                  <a href="${escapeHtml(e.url)}" target="_blank" rel="noopener">${escapeHtml(e.title ?? '证据')}</a>
-                `).join('')}
-              </div>` : ''}
-          </div>`).join('')}
-      </div>
-      <div style="margin-top:14px; display:flex; gap:10px">
-        <button class="btn btn--primary" id="btn-situation">来一道带出处的题</button>
-        <button class="btn btn--secondary" id="btn-terrain">看地形</button>
-      </div>`;
-
+    if (box) box.innerHTML = renderAdvice(data);
+    revealAskResult(box);
     pet.setState('cheer');
-    pet.say('fracture', { note: '不确定的地方在证据栏里说清楚了' });
-
-    $('#btn-situation')?.addEventListener('click', loadSituation);
-    $('#btn-terrain')?.addEventListener('click', loadTerrain);
+    // 「出处是真的」这句话，来自台词目录 —— 它说的正是这件事。
+    pet.say('source');
   } catch (err) {
-    box.innerHTML = noticeBox(showFail(err, '对照失败'), 'err');
-    petSayFail(err, '对照失败');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function loadSituation() {
-  const box = $('#mirror-situation');
-  const btn = $('#btn-situation');
-  if (btn) btn.disabled = true;
-  try {
-    pet.setState('thinking');
-    pet.say('question');
-    box.innerHTML = noticeBox('正在出题……');
-
-    // 主题词按可靠性挨个试（见 topicCandidates 的注释）。
-    // 单个主题词失败**不算整段失败**：换个说法再来一次。
-    const candidates = topicCandidates();
-    if (!candidates.length) {
-      box.innerHTML = noticeBox('还没有主题词。先答完上面的问卷，或者喂点收藏给它。', 'warn');
-      pet.setState('idle');
-      return;
-    }
-
-    let data = null;
-    let usedTopic = '';
-    let lastNotice = '';
-    let lastErr = null;
-    // 避开卡片已经用过的知乎问题 —— 情境题得是**另一个**真问题，不是把卡片重讲一遍
-    const seen = [
-      ...state.cards.map((c) => c.source?.question_url),
-      ...state.viewpoints.map((c) => c.source?.question_url),
-    ].filter(Boolean);
-    for (const topic of candidates.slice(0, 3)) {
-      try {
-        const res = await getSituation({
-          topic,
-          count: 1,
-          selfReport: state.tension?.self_reported,
-          answered: seen,
-        });
-        if (!res.empty && (res.questions ?? []).length) {
-          data = res;
-          usedTopic = topic;
-          break;
-        }
-        lastNotice = res.empty_notice ?? lastNotice;
-      } catch (err) {
-        // 这个主题词翻车了 —— 记下来，换下一个；全试完还不行就把真错误抛出去
-        lastErr = err;
-      }
-    }
-
-    if (!data) {
-      if (lastErr) throw lastErr;
-      box.innerHTML = noticeBox(escapeHtml(lastNotice || '这次没出到题。'), 'warn');
-      pet.setState('idle');
-      return;
-    }
-    state.situationTopic = usedTopic;
-    const q = data.questions[0];
-    state.situation = q;
-
-    box.innerHTML = `
-      <div class="sec-title">
-        <b>${escapeHtml(q.stem ?? '')}</b>
-        <span class="rule"></span>
-      </div>
-      <div class="card situation" style="margin-top:12px">
-        <div class="kicker">来自知乎的真实问题</div>
-        <div class="title">${escapeHtml(q.source?.question_title ?? '')}</div>
-        <div class="quote">${escapeHtml(q.source?.answer_summary ?? '')}</div>
-        <a class="src" href="${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '#')}"
-           target="_blank" rel="noopener"
-           title="${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '')}">知乎原回答<span class="link">${escapeHtml(shortHost(q.source?.answer_url ?? q.source?.question_url ?? ''))}</span></a>
-        <div class="srcurl">${escapeHtml(q.source?.answer_url ?? q.source?.question_url ?? '')}</div>
-      </div>
-      ${ZHIHU_LOGIN_HINT}
-      <div class="choices" style="margin-top:12px">
-        ${(q.options ?? []).map((o) => `
-          <button class="choice" data-key="${escapeHtml(o.key)}">${escapeHtml(o.label)}</button>
-        `).join('')}
-      </div>`;
-
-    $$('#mirror-situation .choice').forEach((b) => {
-      b.addEventListener('click', () => answerSituation(q, b.dataset.key));
-    });
-  } catch (err) {
-    box.innerHTML = noticeBox(showFail(err, '出题失败'), 'err');
-    petSayFail(err, '出题失败');
+    if (box) box.innerHTML = noticeBox(showFail(err, '没找到答案'), 'err');
+    revealAskResult(box);
+    petSayFail(err, '没找到答案');
   } finally {
     if (btn) btn.disabled = false;
   }
 }
 
-async function answerSituation(q, key) {
-  const box = $('#mirror-situation');
-  try {
-    pet.setState('thinking');
-    const res = await answerTerrain({
-      questionId: q.id,
-      answerKey: key,
-      tone: state.tone?.tone,
-    });
-    box.innerHTML = `
-      <div class="card" style="border-left: 3px solid var(--accent-primary)">
-        <div class="kicker">地形长出了一块</div>
-        <div class="title">${escapeHtml(res.block?.label ?? '')}</div>
-        <div class="quote">${escapeHtml(res.block?.summary ?? '')}</div>
-        ${(res.new_bridges ?? []).length ? `<div class="meta">新桥：${res.new_bridges.map((b) => escapeHtml(b.label)).join('、')}</div>` : ''}
-      </div>`;
-    pet.setState('play');
-    pet.say('bridge');
-    await sleep(1500);
-    await loadTerrain();
-  } catch (err) {
-    box.innerHTML = noticeBox(showFail(err, '作答失败'), 'err');
-    petSayFail(err, '作答失败');
-  }
-}
-
 /**
- * 从「用户自己写过的内容」里挑一句能念的话 —— 脚本 4:05 那句「你自己也写过一句」的原料。
+ * 把答案滚进视野。
  *
- * ⚠️ **只取真实原文，不改写、不编**（契约规则：台词里不许写会变的引文，
- *    要显示就从创作信号里取原文拼）。**只取第一句** —— 整篇 pin 念出来是灾难。
+ * ## 为什么非得写这一段
+ *
+ * 工作台是队友设计的「固定高度窗口」：`.app-frame__body` 自己滚动，
+ * 页面滚动**滚不到窗口内部**。答案渲染在 `#ask-result`（窗口内部），
+ * 不主动滚一下的话 —— 用户点完「让它帮我想想」，屏幕上什么都没变，
+ * 会以为这功能没通。
  */
-function pickOwnQuote(contents) {
-  const items = contents?.items ?? [];
-  for (const it of items) {
-    const raw = String(it.summary ?? it.content ?? it.body ?? '').trim();
-    if (!raw) continue;
-    const m = raw.match(/^[\s\S]{0,80}?[。！？]/);
-    const s = (m ? m[0] : raw.slice(0, 40)).trim();
-    if (s.length >= 8) return s;
-  }
-  return null;
+function revealAskResult(box) {
+  if (!box) return;
+  // 右下角常驻着一只悬浮桌宠（`.pc`），留出它的高度，别压住最后一条出处。
+  box.style.scrollMarginBottom = '96px';
+  requestAnimationFrame(() => {
+    try {
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch {
+      /* 老浏览器不认 scrollIntoView 的参数 —— 滚不动也不影响结果 */
+    }
+  });
 }
 
-async function loadTerrain() {
-  const wrap = $('#mirror-terrain');
-  try {
-    const data = await getTerrain(state.tone?.tone);
-    state.terrain = data;
+/** 一步方案的依据标注（**编号就是出处区块里的编号**，能对上）。 */
+function srcNote(refs) {
+  const list = Array.isArray(refs) ? refs : [];
+  if (!list.length) return '';
+  return `<span style="opacity:.62; font-size:12px; margin-left:8px">依据 ${list.map((n) => escapeHtml(String(n))).join('、')} 条</span>`;
+}
 
-    // 创作信号：脚本 4:05 那一拍备料（用户自己写过的那句话）。
-    // ⚠️ **不 await** —— 不阻塞地形渲染；取不到就降级成数据陈述，
-    //    **不报错、不编、也不拿假引文充数**。
-    //    （断层那一拍已经取过一次；这里再取一次是刷新，服务端有缓存，不额外烧额度。）
-    getContents(3)
-      .then((contents) => { state.ownQuote = pickOwnQuote(contents); })
-      .catch(() => { state.ownQuote = null; });
+/** 方案 + 出处的渲染。出处**全部是上游真实 URL**（模型只回了编号）。 */
+function renderAdvice(data) {
+  const v = verdictLabel(data.verdict);
+  const plan = data.plan ?? [];
+  const sources = data.sources ?? [];
 
-    renderTerrain(wrap, data, (f) => {
-      zoomFracture(wrap, true);
-      pet.setState('thinking');
-      // 脚本 4:05：**先说用户自己写过的那句**（真实原文，取自创作信号）。
-      // 没有创作内容就照实退回数据陈述 —— **不编、也不拿假引文充数**。
-      // （断层 label / 强度 / 置信度在上面的断层面板里已经给全了，这里不重复。）
-      if (state.ownQuote) {
-        pet.sayText(`你自己也写过一句——<br /><b>「${escapeHtml(state.ownQuote)}」</b>`, {
-          note: '这句是你自己写的',
-        });
-      } else {
-        pet.sayText(
-          `<b>${escapeHtml(f.label)}</b><br />强度 ${Math.round((f.intensity ?? 0) * 100)}% ·
-         置信度 ${Math.round((f.confidence ?? 0) * 100)}%`,
-          { note: f.confidence_note ?? '' }
-        );
-      }
-    });
-    if (data.empty_notice) {
-      // 塞进 `.terrain-wrap`（它才是定位上下文），否则会锚到 `.stage` 上飘到别处
-      const tw = wrap.querySelector('.terrain-wrap');
-      (tw ?? wrap).insertAdjacentHTML('beforeend',
-        `<div class="notice warn" style="position:absolute;left:14px;top:14px;right:14px;z-index:3">
-           ${escapeHtml(data.empty_notice)}</div>`);
-    }
-    // 收尾一句（脚本 4:30–4:50：全景地图 + 这一句）
-    pet.say('closing', { note: '三层都有了，断层上多了一座桥' });
+  const steps = plan.length
+    ? `<div style="${ASK_STYLE.row}; flex-direction:column; align-items:stretch; margin-top:10px">
+        ${plan
+          .map(
+            (s) => `<div style="${ASK_STYLE.step}">
+              <b style="min-width:22px">${escapeHtml(String(s.index ?? ''))}</b>
+              <span>${escapeHtml(s.text ?? '')}${srcNote(s.source_indexes)}</span>
+            </div>`
+          )
+          .join('')}
+      </div>`
+    : '';
 
-    // 闭环走通标记 —— 数字全部来自**这一次真实跑出来**的状态，一个都不编。
-    if (!demoMode) {
-      const L = state.terrain?.layers ?? {};
-      const filledLayers = ['self_reported', 'behavioral', 'situational']
-        .filter((k) => (L[k]?.blocks ?? []).length).length;
-      guide?.showDone({
-        favorites: collectedCount(state.favorites),
-        quiz: `${quizAnsweredCount()}/${QUESTIONS.length}`,
-        fractures: state.tension?.fractures?.length ?? 0,
-        situation: state.situation ? 1 : 0,
-        layers: filledLayers,
-      });
-    }
-  } catch (err) {
-    wrap.innerHTML = noticeBox(showFail(err, '读地形失败'), 'err');
-    petSayFail(err, '读地形失败');
-  }
+  const srcHtml = sources.length
+    ? `<div style="margin-top:14px">
+        <div class="sec-title" style="margin-top:0;flex-wrap:wrap">
+          <b style="white-space:nowrap">依据</b>
+          <span class="rule" style="flex:0 0 36px"></span>
+          <span style="flex:1 1 auto;min-width:0">${sources.length} 条知乎出处 · 都能点回原文</span>
+        </div>
+        ${sources
+          .map(
+            (s) => `<a style="${ASK_STYLE.src}" href="${escapeHtml(s.answer_url ?? s.question_url ?? '#')}"
+               target="_blank" rel="noopener">
+              <div>[${escapeHtml(String(s.ref ?? ''))}] ${escapeHtml(s.question_title ?? '')}</div>
+              <div style="opacity:.72; font-size:12px; margin-top:3px">
+                ${escapeHtml(s.author_name ?? '匿名')}${s.vote_up_count != null ? ` · ${s.vote_up_count} 赞同` : ''}
+              </div>
+            </a>`
+          )
+          .join('')}
+      </div>`
+    : '';
+
+  const caveat = data.caveat
+    ? `<div style="margin-top:12px; opacity:.8; font-size:13px">${escapeHtml(data.caveat)}</div>`
+    : '';
+
+  return `
+    <div style="${ASK_STYLE.card}">
+      <div class="sec-title" style="margin-top:0;flex-wrap:wrap">
+        <b style="flex:1 1 auto;min-width:0">${escapeHtml(data.summary || v.text)}</b>
+        <span class="tag ${v.tone === 'ok' ? '' : 'amber'}" style="white-space:nowrap;flex:0 0 auto">${escapeHtml(v.text)}</span>
+      </div>
+      ${steps}
+      ${caveat}
+      ${srcHtml}
+    </div>`;
+}
+
+/** 切到「问它」标签页（复用它自己的点击处理器，状态不会走偏）。 */
+function switchToAskTab() {
+  const btn = document.querySelector('#tabs button[data-tab="mirror"]');
+  if (btn && !btn.classList.contains('is-on')) btn.click();
 }
 
 // ---------------------------------------------------------------- 底栏
@@ -1081,11 +903,11 @@ function renderStrip() {
   }
   const top = (f.category_distribution ?? [])[0];
   const span = f.span ?? {};
-  // ⚠️ 2026-11-23 22:3x（拟真审计）：没跑过对照时写「还没比」，
-  //    不是「—个独立行为信号」—— 那个破折号读起来像坏了，
-  //    而且 D62 的规矩是「读不到 ≠ 0」。
-  const sig = state.tension?.signal_count;
-  const sigHtml = sig == null ? '还没比<i>信号</i>' : `${sig}<i>个独立行为信号</i>`;
+  // ⚠️ 2026-11-24：第四块原来是「独立行为信号数」（认知闭环的产物）——
+  //    认知闭环下线后那个数没有了，改成**新主线自己的真实计数**：
+  //    「问过几次」。0 不是「读不到」，是**真的还没问过**（本机计数，不上接口）。
+  const asked = state.adviceCount;
+  const sigHtml = asked > 0 ? `${asked}<i>次问过它</i>` : '还没<i>问过它</i>';
   strip.innerHTML = `
     <div class="stat hl"><div class="n">${f.collected_count ?? 0}<i>条收藏</i></div><div class="l">真实账号数据</div></div>
     <div class="sep"></div>
@@ -1093,7 +915,7 @@ function renderStrip() {
     <div class="sep"></div>
     <div class="stat"><div class="n">${span.span_days ?? 0}<i>天跨度 / 集中在 ${span.distinct_days ?? 0} 天</i></div><div class="l">任务驱动型收藏</div></div>
     <div class="sep"></div>
-    <div class="stat amber"><div class="n">${sigHtml}</div><div class="l">收藏 · 关注 · 创作</div></div>
+    <div class="stat amber"><div class="n">${sigHtml}</div><div class="l">知乎找答案</div></div>
     <div class="sep"></div>
     <div class="proof">
       数字与链接均为 <b>真实账号实测</b><br />
@@ -1139,13 +961,25 @@ async function init() {
   }
 
   // 桌宠伴侣（借鉴 my-neuro 的常驻交互）：可拖拽、主动搭话、打字对话、本机记忆。
-  // 数据全部来自真实接口快照与台词目录，不接 LLM、不编造。
+  // 数据全部来自真实接口快照与台词目录；真问题走后端去知乎找相似困境，不编造。
   companion = new PetCompanion(pet, {
     getFacts: () => ({
       count: collectedCount(state.favorites),
       quota: state.quota,
     }),
     getTone: () => state.tone,
+    // ⚠️ 走**同一个** `/api/advice` 接口 —— 浮窗和工作台「问它」面板共用后端
+    //    那两层 5 分钟缓存（`advice:pool:*` / `advice:full:*`），
+    //    所以同一个问题在两处问，**只烧一次直答额度**。
+    ask: async (question) => {
+      const data = await getAdvice({ question, tone: state.tone?.tone });
+      state.advice = data;
+      state.adviceCount += 1;
+      // 「问过它 N 次」那几个数字要跟着变（首屏对话轮数 + 底栏第四块）
+      updateHeroFacts(null);
+      renderStrip();
+      return data;
+    },
   });
 
   // 首屏两只入口都打开同一个常驻对话面板，情绪素材共用
@@ -1159,7 +993,7 @@ async function init() {
   // 顶栏详情（身份 + 今日额度，点胶囊展开）
   initNavDetail();
 
-  renderQuiz();
+  renderAskPanel();
   renderCards();
   await loadProfile();
   await loadQuota();   // 日报要用真实额度，等它回来
@@ -1199,9 +1033,10 @@ async function init() {
   // 事件
   $('#btn-feed').addEventListener('click', feed);
   $('#btn-views').addEventListener('click', loadViewpoints);
-  // 工作台的「看一次断层」= 问卷里的「让桌宠照照镜子」：同一个入口（startMirror）。
-  // 自述没说全 → 送去问卷并说清实情；说全了 → 才真的照镜子。
-  $('#btn-tension')?.addEventListener('click', (e) => startMirror(e.currentTarget));
+  // ⚠️ 工作台那颗「看一次断层」按钮（`#btn-tension`）在 `web/index.html` 里 ——
+  //    那是**队友的地盘**（D65），而认知闭环已经下线（D66），这颗按钮背后没有功能了。
+  //    我们**不再绑它的 handler**（绑了也是坏的），请队友把它从 index.html 里删掉。
+  //    契约 `contracts/ui-contract.json` 里的 `btn-tension` 也已释放 —— 不再是钩子。
 
   // 双模式切换（Apple HIG Step 8）：右下角按钮切 light/dark，记住选择
   const themeBtn = $('#theme-toggle');
@@ -1290,13 +1125,9 @@ async function init() {
       $('#panel-mirror').classList.toggle('hidden', tab !== 'mirror');
       if (tab === 'mirror') {
         pet.setState('greet');
-        // 脚本 3:00：桌宠**主动**发起照镜子
-        // ⚠️ 「跟你刚才说的不太一样」的前提是**你已经说过**。
-        //    一个字都没答的时候说这句 = 对用户撒谎（2026-11-23 实测踩过）。
-        //    演练模式是排好的脚本，预设答案在切页前就写进了 state，所以照说不误。
-        if (quizAnsweredCount() > 0) {
-          pet.say('mirror', { note: '你收藏的这些，跟你刚才说的不太一样' });
-        }
+        // 切到「问它」这一栏时，桌宠**主动**开口 —— 但只说一句**不承诺结果**的话
+        // （它还没去找过答案，不能说「我找到了」）。
+        pet.sayText('有想不通的事就说一声，我上知乎替你翻翻。');
       } else {
         // 脚本 2:45：卡片先收进右侧栏
         pet.setState('idle');
@@ -1307,20 +1138,27 @@ async function init() {
 
   // 首次上手引导（web/js/onboarding.js）
   //
-  // ⚠️ 判据全部读**真实状态**（卡片数 / 答题数 / 断层 / 情境题 / 版图），
+  // ⚠️ 判据全部读**真实状态**（卡片数 / 问过几次 / 拿到方案没有），
   //    引导自己不发任何知乎请求 —— 它只指路，不替用户做，也不烧额度。
   guide = initOnboarding({
     probe: () => ({
       cards: state.cards.length,
-      answered: quizAnsweredCount(),
-      total: QUESTIONS.length,
-      tension: Boolean(state.tension),
-      situation: Boolean(state.situation),
-      terrain: Boolean(state.terrain),
+      asked: state.adviceCount,
+      advice: Boolean(state.advice && !state.advice.empty),
       tab: document.querySelector('#tabs button[data-tab="mirror"]')?.classList.contains('is-on') ?? false,
     }),
-    switchTab: (tab) => { if (tab === 'mirror') switchToMirrorTab(); },
+    switchTab: (tab) => { if (tab === 'mirror') switchToAskTab(); },
     autoStart: !demoMode,
+    // 走通了（不是「跳过」）→ 弹那张完成卡，**数字全部来自真实状态**。
+    // ⚠️ 原来这条线没人调 `showDone()` —— 走完了没有反馈（2026-11-24 换主线时补上）。
+    onFinish: ({ skipped }) => {
+      if (skipped) return;
+      guide?.showDone({
+        favorites: collectedCount(state.favorites),
+        asked: state.adviceCount,
+        sources: state.advice?.sources?.length ?? 0,
+      });
+    },
   });
   $('#btn-guide')?.addEventListener('click', () => guide?.start(0));
 
@@ -1329,7 +1167,7 @@ async function init() {
     $('#pet')?.scrollIntoView({ block: 'center' });   // 桌宠在工作台里，脚本从它开始
     $('#tabs')?.scrollIntoView({ block: 'start' });
     const { runDemo } = await import('./demo.js');
-    runDemo({ state, feed, loadViewpoints, runTension, loadSituation, answerSituation, loadTerrain, showOutro });
+    runDemo({ state, feed, loadViewpoints, askAdvice, showOutro });
   }
 }
 

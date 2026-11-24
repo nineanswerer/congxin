@@ -17,7 +17,7 @@
       8. 是否已有交接记录（WARN）
       9. 各 AI 平台指针文件是否都指向 AGENTS.md 与 BOOTSTRAP.md（漏一个 = 那个平台收不到协议）
      10. post-checkout hook 是否带开工清单
-     11. API 契约 api.json 是否存在、可解析、14 个核心接口齐全、出处三件套与 user_hint 必填、登录两模式齐全、卡片沿用 SourceCard
+     11. API 契约 api.json 是否存在、可解析、11 个核心接口齐全、出处三件套与 user_hint 必填、登录两模式齐全、卡片沿用 SourceCard、「问它」无出处不给方案、已撤销的认知闭环接口不许回来
      12. 分类体系 taxonomy.json 是否存在、可解析、类目字段齐全、unknown 兜底在位
      13. 语气契约 tone.json 是否存在、可解析、**默认语气是不是 gentle**、两个语气台词是否齐全
 
@@ -275,17 +275,14 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
             '/api/behavior/favorites',
             '/api/behavior/followees',
             '/api/behavior/contents',
-            '/api/behavior/tension',
-            '/api/situation/question',
-            '/api/terrain',
-            '/api/terrain/answer',
             '/api/quota',
             '/api/tone',
             '/api/auth/profile',
             '/api/auth/login',
             '/api/auth/callback',
             '/api/auth/logout',
-            '/api/cards'
+            '/api/cards',
+            '/api/advice'
         )
         $missingPaths = @()
         foreach ($rp in $requiredPaths) {
@@ -295,9 +292,14 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         $sourceRequired = @($apiDoc.components.schemas.SourceRef.required) -contains 'question_url'
         $hintRequired = @($apiDoc.components.schemas.ErrorResponse.properties.error.required) -contains 'user_hint'
         $emptyFlag = @($apiDoc.components.schemas.FavoritesSignal.required) -contains 'empty'
-        # 认知闭环底线：断层必须带 signal_count 与 insufficient（信号不足时不能硬撑断层）
-        $tensionRequired = @($apiDoc.components.schemas.TensionData.required)
-        $tensionFlag = ($tensionRequired -contains 'signal_count') -and ($tensionRequired -contains 'insufficient')
+        # 「问它」底线：方案必须有出处（sources）+ 空数据标志（empty / empty_notice）+ 候选条数
+        # ⚠️ 2026-11-24（D66）：原来这里查的是 `TensionData` 的 signal_count / insufficient ——
+        #    认知闭环下线了，那套底线**跟着换了**：现在要守的是「没有出处就不给方案」。
+        $adviceRequired = @($apiDoc.components.schemas.AdviceData.required)
+        $adviceFlag = ($adviceRequired -contains 'sources') -and
+                      ($adviceRequired -contains 'empty') -and
+                      ($adviceRequired -contains 'empty_notice') -and
+                      ($adviceRequired -contains 'candidate_count')
         # 语气默认值也是拍板过的（用户 2026-11-18），契约层必须写死 gentle
         $toneDefault = $apiDoc.components.schemas.ToneId.default
         # 登录（OAuth）：两种模式必须写死，且「没登录」与「登录了」前端要能分开
@@ -308,28 +310,36 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         # 出处三件套：问题标题 + 问题 URL + **原回答 URL** 必须齐（官方检查第 6/7 条查的就是没有出处的卡片）
         $sourceTriple = (@($apiDoc.components.schemas.SourceRef.required) -contains 'answer_url') -and
                          ($apiDoc.components.schemas.SourceRef.properties.answer_url.type -eq 'string')
-        # 卡片与情境题必须共用 SourceCard，不许新造一套
+        # 卡片必须沿用 SourceCard 的 kind 枚举（⚠️ `situation_question` 已随认知闭环下线移除）
         $cardKinds = @($apiDoc.components.schemas.SourceCard.properties.kind.enum)
-        $cardKindOk = ($cardKinds -contains 'knowledge_card') -and ($cardKinds -contains 'situation_question')
+        $cardKindOk = ($cardKinds -contains 'knowledge_card')
         # 卡片数据：cards / empty / empty_notice 必填（空数据≠失败）
         $cardsRequired = @($apiDoc.components.schemas.CardsData.required)
         $cardsOk = ($cardsRequired -contains 'cards') -and ($cardsRequired -contains 'empty') -and ($cardsRequired -contains 'empty_notice')
+        # 「问它」的出处也得齐：模型只回编号，真实 URL 由后端映射 → 契约层必须写死 answer_url 必填
+        $adviceSourceTriple = (@($apiDoc.components.schemas.AdviceSource.required) -contains 'answer_url') -and
+                              (@($apiDoc.components.schemas.AdviceSource.required) -contains 'question_url')
+        # ⚠️ 认知闭环已经下线：这三个路径**不许再回来**（回来了就是两套主线并存，自相矛盾）
+        $revokedPaths = @('/api/behavior/tension', '/api/terrain', '/api/terrain/answer', '/api/situation/question')
+        $revokedAlive = @($revokedPaths | Where-Object { $apiDoc.paths.PSObject.Properties[$_] })
 
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
+        if ($revokedAlive.Count -gt 0) { $why += ('已撤销的认知闭环接口又回来了：' + ($revokedAlive -join ', ')) }
         if (-not $sourceRequired) { $why += 'SourceRef 未把 question_url 设为必填' }
         if (-not $hintRequired) { $why += '错误信封未把 user_hint 设为必填' }
         if (-not $emptyFlag) { $why += '信号结构未把 empty 设为必填（空数据与失败无法区分）' }
-        if (-not $tensionFlag) { $why += 'TensionData 未把 signal_count / insufficient 设为必填（断层会失去诚实底线）' }
+        if (-not $adviceFlag) { $why += 'AdviceData 未把 sources / empty / empty_notice / candidate_count 设为必填（没有出处就不给方案这条底线会失守）' }
+        if (-not $adviceSourceTriple) { $why += 'AdviceSource 未把 question_url / answer_url 设为必填（方案会缺出处）' }
         if ($toneDefault -ne 'gentle') { $why += "ToneId.default 不是 gentle（实际 '$toneDefault'）——用户拍板过默认是温和陪伴" }
         if (-not $authModeOk) { $why += 'AuthProfileData 未把 mode / fullname / empty 设为必填（前端分不清「没登录」与「登录了」）' }
         if (-not $authEnumOk) { $why += 'AuthMode 枚举缺 oauth / developer_account 两种模式' }
         if (-not $sourceTriple) { $why += 'SourceRef 未把 answer_url（原回答 URL）设为必填非空——卡片会缺出处' }
-        if (-not $cardKindOk) { $why += 'SourceCard.kind 枚举缺 knowledge_card / situation_question——卡片不许新造一套' }
+        if (-not $cardKindOk) { $why += 'SourceCard.kind 枚举缺 knowledge_card——卡片不许新造一套' }
         if (-not $cardsOk) { $why += 'CardsData 未把 cards / empty / empty_notice 设为必填（空数据与失败分不开）' }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处三件套必填 / user_hint 必填 / empty 必填 / 断层诚实底线必填 / 语气默认 gentle / 登录两模式齐全 / 卡片沿用 SourceCard"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处三件套必填 / user_hint 必填 / empty 必填 / 「问它」无出处不给方案必填 / 语气默认 gentle / 登录两模式齐全 / 卡片沿用 SourceCard / 认知闭环接口已下线"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }
