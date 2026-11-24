@@ -2493,3 +2493,137 @@ P1—P5 的功能与失败态基本收完，但**视觉与设计这一块从头�
 
 - **队友那边的额度认知要纠正**（未实名：搜索 10 次/天、**直答只有 2 次/天**）—— 待用户本人告诉他。
 - **演示现场要先预热缓存**（问同一个问题一次，把 5 分钟缓存填上）—— 待写进演示 checklist。
+
+---
+
+## D68 · P1 台词「先这样」—— 保持现状，一个字都不增不删
+
+- **日期**：2026-11-24 20:15
+- **触发**：用户 2026-11-24 20:15 在同一批指令里写了一句「**台词先这样**」。
+- **拍板方式**：直接给结论，无选项。
+
+### 决定
+
+**P1 台词保持现状 —— 不增、不删、不改。** 具体到三件事：
+
+1. **`contracts/tone.json` 的 14 句原样保留**，包括认知闭环下线后**不再被任何代码调用**的那 5 句
+   （`mirror` / `fracture` / `question` / `bridge` / `insufficient`）。
+   **保留 ≠ 保留在用**：它们还在目录里，但新主线不调它们。
+   → 推论：**`GET /api/tone` 仍然一次给全 14 句**，前端照旧按 key 取，不用做兼容分支。
+2. **新主线的 3 句桌宠话继续当前端固定文案**，**不进台词目录**：
+   面板提示「有想不通的事就说一声，我上知乎替你翻翻。」/ 请求发起时「我去知乎上找找，看有没有人遇到过一样的。」/
+   空结果「这次没找到能对得上的。我不给你一个查无出处的答案。」（都在 `web/js/app.js` 里）
+3. **新主线不新增任何台词。** 「问它」的结果由**后端数据 + 前端固定文案**表达，
+   桌宠只在结果出来后说 `source` 那句（目录里的第 5 句，原文不改）。
+
+### 为什么「保留不删」是对的
+
+- 台词目录是**契约层**（`contracts/tone.json`），它的读者是后端和前端两方。
+  删句会让 `line_keys` 变短 → 前端 `pet_lines` 取 key 变 undefined → **静默失效**。
+- D66 已经把「认知闭环下线」这件事表达清楚了（接口 404、`voided_endpoints`、D66 对照表）。
+  **再删一遍台词是重复表达同一件事**，而且代价更高（前端要改）。
+- 用户说「先这样」= **这是内容层的决定，AI 不得自行增删**（P1 纪律）。本条把这句话落成文档。
+
+### 落到哪
+
+- `docs/decisions.md` 本条。
+- `docs/P1-三件产出.md` §2.6 逐句审对照表：5 句的「待用户拍板去留」全部改成「✅ D68：保持现状」；
+  3 句前端固定文案的状态列同样改成「✅ D68：保持现状」。
+
+### 状态
+
+**已执行并落文档**。台词目录**一个字未改**（`tone.json` 本轮完全没动）。
+
+---
+
+## D69 · 契约三处同步，并把「冻结清单 == api.json 路径」焊进自检
+
+- **日期**：2026-11-24 20:20—20:40
+- **触发**：跑官方打包链第 [1/7] 步时 `scripts/build-check.js` **报 FAIL** —— 它还在按 D66 之前的 14 个路径要接口。
+  顺着查出：**D66 改了 `contracts/api.json`，但另外三处没跟着改**。
+
+### 决定
+
+1. **契约层四份文件必须一起改**（一条规则，不是四件事）：
+   | 文件 | 改了什么 |
+   | --- | --- |
+   | `contracts/api.json` | **v0.7** · 11 个路径 · `info.description` 整段重写（产品结构段 / 接口表 / 硬规则 1 / 渲染责任段）+ 6 处零散 schema 说明 |
+   | `contracts/contract.json` | **v0.7** · `frozen_endpoints` 换成 11 个（含 `POST /api/advice`）· **新增 `voided_endpoints`** 记录 4 个作废路径 + 指向 D66 |
+   | `contracts/CONTRACTS.md` | 接口表删 4 行 / 加 `/api/advice` / 产品结构段（2026-11-17 → 2026-11-24）/ 专属底线从「认知闭环」换成「问它」/ 新增「「问它」（`POST /api/advice`）」整节 / 台词数 13 → **14** |
+   | `scripts/build-check.js` | `REQUIRED_API_PATHS` 14 → **11**（删 4 个加 1 个）· 成功文案改成按 `REQUIRED_API_PATHS.length` 动态拼 |
+2. **作废不等于从未存在。** `contract.json` 里**新增 `voided_endpoints` 块**记 4 个作废路径 + 一句话指向 D66，
+   而不是直接抹掉 —— 决策层只增不改，历史留着。
+3. **把「冻结清单 == api.json 的路径」加进 `scripts/check-contract.ps1` 第 11 项**（**加固现有第 11 项，不新增第 15 项** ——
+   文档里多处引用「14 项」，新增一项会打破这些引用）。
+   判定：`frozen_endpoints` 与 `api.json` 的 `METHOD path` 集合**完全相等**，
+   且 **4 个作废路径必须登记在 `voided_endpoints.endpoints` 里**（漏登记也 FAIL）。
+   > 两份各写各的 → 改了 `api.json` 忘了改 `contract.json` → 冻结清单和真实接口对不上 →
+   > **换台机器接手时静默出错**（自检说 11 个齐全，实际少一个）。
+
+### 验证（正向 + 反向）
+
+- 正向：`check-contract.ps1` → **PASS 14 / WARN 0 / FAIL 0**，第 11 项文案多了「冻结清单与 api.json 一致」。
+- 反向 1：故意从 `frozen_endpoints` 删掉 `POST /api/advice` → **FAIL 1**，报「冻结清单与 api.json 对不上……只在 api.json：POST /api/advice」。
+- 反向 2：故意从 `voided_endpoints` 删掉 `POST /api/terrain/answer` → **FAIL 1**，报「作废路径未登记进 contract.json 的 voided_endpoints」。
+- 复原后 → **PASS 14 / WARN 0 / FAIL 0**。
+
+### 状态
+
+**已执行并实测**（含两项反向验证）。
+
+---
+
+## D70 · AI Works 部署包走官方 helper 链条；Windows 的 0755 按 ZIP 条目补
+
+- **日期**：2026-11-24 20:20—20:50
+- **触发**：用户要自己做公网链接，需要一份**能上传的 ZIP**；同时要求「按截图一步步教我怎么做」。
+
+### 决定
+
+1. **打包走官方 helper 的完整七步，不自制打包器。**
+   helper 是**公开可下**的（AI Works 的 step=2 页面**明文印着下载地址**）：
+   `https://zhstatic.zhihu.com/skill/application/d6c1-260923/zhihu-ai-works-deploy-helper_v1.2.0.zip`
+   （2026-11-24 实测 126,719 字节，SHA-256 `B7B410DB…EFA5`）。
+   **理由**：helper 同时是**平台部署 schema 的唯一真源** ——
+   `scf_bootstrap` / `backend.deploy.json` / `cloudbaserc.json` 的字段与平台校验口径都写死在官方脚本里；
+   自制打包器等于自己猜平台怎么验。仓库里的 `scripts/pack-deploy.js` **不再用于对外出包**。
+2. **Windows 上 `scf_bootstrap` 的 0755 按 ZIP 条目补，不放宽判定。**
+   NTFS 没有 Unix exec 位，Windows 上 Python 对普通文件的 `st_mode` 永远是 `0o666`/`0o444`
+   → 官方 `validate_deploy_output.py` 的「mode must be 0755」**必然误报**，与产物合规无关。
+   处理：**只改本地解压副本**（把该判定改成 POSIX-only，另存 `.orig` 原件），
+   权限位由 `scripts/fix-zip-exec-bit.py` 补进 **ZIP 条目**并逐项复检
+   （CRC + 成员清单 + 逐成员内容 SHA-256 + 权限位 + `create_system`）。
+   **内容校验照跑，判定强度没放宽**；补丁只在临时目录，不进仓库、不进交付包。
+3. **密钥只能走文件，不放环境变量。**
+   AI Works 的 step=2 **没有环境变量/密钥输入位**，官方描述符 `backend.deploy.json` 的 `"Env"` 被 schema 钉死为 `[]`
+   → 密钥靠 `make-delivery.js --secret` 写进 `secrets/access_secret`（`config.js` 已改写 5 处）。
+   这正好对上官方 FAQ 的「秘钥写入文件直接构建」口径。
+4. **出包后必须真机冒烟，不能只查文件。**
+   交付副本起进程 → `/api/health` 200 → `/api/quota` 200 → `/api/tone` 200（14 句）→ `/web/` 200
+   → `POST /api/advice` **200 / 17.6 秒**（4 步方案 + 5 条真实出处）→ **再问一次 3 毫秒**（缓存命中）。
+   平台自己的命令也本地实测过：`npm ci`（68 个包）· `npm ls --omit=dev` · `test -x scf_bootstrap`（由 ZIP 条目满足）。
+
+### 产物指纹（**对外只认这一份**）
+
+| 项 | 值 |
+| --- | --- |
+| 文件 | `%TEMP%\congxin\congxin.zip` |
+| 大小 / 条目 | 3,139,474 字节 / **84** 条（顶层前缀 `congxin/`） |
+| SHA-256（补执行位之后） | `bc5e2f2141ad2d5bafdae190b312bec1debbbddeca24f32076d63176d95f4e5c` |
+| 官方校验 | `validate_deploy_output.py` → 「deployment input validation passed」exit 0 |
+
+> ⚠️ **两个 SHA-256 不要混**：官方归档器打印的是**补执行位之前**的（`89105996…5c9b`），
+> **对外只报补执行位之后那个**。
+
+### 状态
+
+**已执行并实测**（七步全 exit 0 + 交付副本真机冒烟全过）。
+
+### 未做 / 仍待人
+
+- **上传侧平台返回 401**（`ApplyUpload` 签名校验失败）：同尺寸对照包同样失败、precheck 200、时钟无偏差
+  → **不是包的问题，是平台侧签名问题**。下一步是**用户在自己浏览器手动上传**；
+  自己浏览器也失败 → 找赛事组（官方小助手微信 / openplatform@zhihu.com），**不要反复重试**。
+- **参赛项目通道 12-05 10:00 才开**（黑客松页「＋创建项目」按钮现在 disabled）——
+  **AI Works 建站与参赛项目绑定是两件事**，建站可以现在做，绑定要等。
+- **部署专用密钥赛后要删并轮换** —— 它已经出现在本项目的对话记录里。

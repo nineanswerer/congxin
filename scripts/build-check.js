@@ -50,15 +50,11 @@ const REQUIRED_ASSETS = ['idle', 'thinking', 'cheer', 'greet', 'sleep', 'play'].
   (name) => `assets/kanshan/${name}.webp`
 );
 
-/** 契约里必须存在的 14 个路径（contracts/api.json v0.6）。 */
+/** 契约里必须存在的 11 个路径（contracts/api.json v0.7，认知闭环 4 个路径已下线）。 */
 const REQUIRED_API_PATHS = [
   '/api/behavior/favorites',
   '/api/behavior/followees',
   '/api/behavior/contents',
-  '/api/behavior/tension',
-  '/api/situation/question',
-  '/api/terrain',
-  '/api/terrain/answer',
   '/api/quota',
   '/api/tone',
   '/api/auth/profile',
@@ -66,6 +62,7 @@ const REQUIRED_API_PATHS = [
   '/api/auth/callback',
   '/api/auth/logout',
   '/api/cards',
+  '/api/advice',
 ];
 
 /**
@@ -119,7 +116,7 @@ export function checkBuildTree(root) {
     const paths = Object.keys(apiDoc.paths ?? {});
     const absent = REQUIRED_API_PATHS.filter((p) => !paths.includes(p));
     if (absent.length === 0) {
-      pass.push(`契约 api.json 可解析，14 个路径齐全`);
+      pass.push(`契约 api.json 可解析，${REQUIRED_API_PATHS.length} 个路径齐全`);
     } else {
       fail.push(`契约缺路径：${absent.join('、')}`);
     }

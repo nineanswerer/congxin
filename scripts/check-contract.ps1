@@ -323,6 +323,42 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         $revokedPaths = @('/api/behavior/tension', '/api/terrain', '/api/terrain/answer', '/api/situation/question')
         $revokedAlive = @($revokedPaths | Where-Object { $apiDoc.paths.PSObject.Properties[$_] })
 
+        # ⚠️ 2026-11-24（D69）：**contract.json 的 frozen_endpoints 必须与 api.json 的实际路径完全一致**。
+        #    这两份各写各的 → 改了 api.json 忘了改 contract.json → 冻结清单和真实接口对不上，
+        #    换台机器接手时**静默出错**（自检说 11 个齐全，实际少一个）。
+        #    同理，**作废的 4 个认知闭环路径必须登记在 voided_endpoints 里** —— 记录要留，不能当没发生过。
+        $frozenOk = $true
+        $frozenWhy = ''
+        try {
+            $contractDoc = ([System.IO.File]::ReadAllText((Join-Path $Root 'contracts\contract.json'))) | ConvertFrom-Json
+            $frozen = @($contractDoc.api_contract.frozen_endpoints)
+            $actual = @()
+            foreach ($p in $apiDoc.paths.PSObject.Properties) {
+                foreach ($m in $p.Value.PSObject.Properties.Name) {
+                    if ($m -in @('get', 'post', 'put', 'delete', 'patch')) { $actual += ("$($m.ToUpper()) $($p.Name)") }
+                }
+            }
+            $onlyFrozen = @($frozen | Where-Object { $actual -notcontains $_ })
+            $onlyActual = @($actual | Where-Object { $frozen -notcontains $_ })
+            if ($onlyFrozen.Count -gt 0 -or $onlyActual.Count -gt 0) {
+                $frozenOk = $false
+                $frozenWhy = ('冻结清单与 api.json 不一致 —— 只在冻结清单：' + ($onlyFrozen -join ', ') + '；只在 api.json：' + ($onlyActual -join ', '))
+            }
+            $voided = @($contractDoc.api_contract.voided_endpoints.endpoints)
+            $voidedMissing = @()
+            foreach ($rp in $revokedPaths) {
+                $hit = @($voided | Where-Object { $_ -like "*$rp" })
+                if ($hit.Count -eq 0) { $voidedMissing += $rp }
+            }
+            if ($voidedMissing.Count -gt 0) {
+                $frozenOk = $false
+                $frozenWhy += ('；作废路径未登记进 contract.json 的 voided_endpoints：' + ($voidedMissing -join ', '))
+            }
+        } catch {
+            $frozenOk = $false
+            $frozenWhy = ('contract.json 解析失败：' + $_.Exception.Message)
+        }
+
         $why = @()
         if ($missingPaths.Count -gt 0) { $why += ('缺接口 ' + ($missingPaths -join ', ')) }
         if ($revokedAlive.Count -gt 0) { $why += ('已撤销的认知闭环接口又回来了：' + ($revokedAlive -join ', ')) }
@@ -337,9 +373,10 @@ if (-not (Test-Path -LiteralPath $apiPath)) {
         if (-not $sourceTriple) { $why += 'SourceRef 未把 answer_url（原回答 URL）设为必填非空——卡片会缺出处' }
         if (-not $cardKindOk) { $why += 'SourceCard.kind 枚举缺 knowledge_card——卡片不许新造一套' }
         if (-not $cardsOk) { $why += 'CardsData 未把 cards / empty / empty_notice 设为必填（空数据与失败分不开）' }
+        if (-not $frozenOk) { $why += ('contract.json 的 frozen_endpoints 与 api.json 对不上：' + $frozenWhy) }
 
         if ($why.Count -eq 0) {
-            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处三件套必填 / user_hint 必填 / empty 必填 / 「问它」无出处不给方案必填 / 语气默认 gentle / 登录两模式齐全 / 卡片沿用 SourceCard / 认知闭环接口已下线"
+            Add-Result 'PASS' 'API 契约 api.json' "$($requiredPaths.Count) 个核心接口齐全；出处三件套必填 / user_hint 必填 / empty 必填 / 「问它」无出处不给方案必填 / 语气默认 gentle / 登录两模式齐全 / 卡片沿用 SourceCard / 认知闭环接口已下线 / 冻结清单与 api.json 一致"
         } else {
             Add-Result 'FAIL' 'API 契约 api.json' ($why -join ' | ')
         }

@@ -1,6 +1,6 @@
 # status.md — 当前进度
 
-最后更新：2026-11-24 12:35
+最后更新：2026-11-24 21:0x
 赛事：知乎黑客松 S3·湾区共创季（`activity_code=zhihu_hackathon_2026_p3`）
 
 > ⚠️ **2026-11-24 12:0x 起产品主线已换**（D66）：**认知地图不做，「认·清」认知闭环整条线下线**，
@@ -29,6 +29,38 @@
 
 ## 二、已完成
 
+- **✅【D70】AI Works 部署包已出，官方 helper 七步全跑通**（2026-11-24 20:20—20:50）：
+  helper 从平台 step=2 页面**印着的公开地址**直接下（`zhstatic.zhihu.com/skill/application/d6c1-260923/zhihu-ai-works-deploy-helper_v1.2.0.zip`，
+  126,719 字节）→ `build-check` PASS 11 → `inspect_node_project` exit 0 → `write_backend_runtime` → `write_deploy_descriptors`
+  → `validate_deploy_output` **「deployment input validation passed」exit 0** → `settle_agent` → `create_project_archive`
+  → `fix-zip-exec-bit`。
+  **产物**：`%TEMP%\congxin\congxin.zip` · **3,139,474 字节 / 84 条目** ·
+  **SHA-256（补执行位之后）`bc5e2f2141ad2d5bafdae190b312bec1debbbddeca24f32076d63176d95f4e5c`**。
+  **交付副本真机冒烟全过**：`/api/health` 200 · `/api/quota` 200 · `/api/tone` 200（14 句）· `/web/` 200 ·
+  `POST /api/advice` **200 / 17.6 秒**（4 步方案 + 5 条真实出处）→ 再问一次 **3 毫秒**命中缓存；
+  平台自己的 `npm ci`（68 个包）· `npm ls --omit=dev` 本地也实测过。
+  ⚠️ **上传侧平台返 401**（签名校验失败）—— 同尺寸对照包同样失败 → **不是包的问题**，改为用户在自己浏览器手动上传。
+- **✅【D69】契约四份文件已同步到 v0.7 / 11 路径**（2026-11-24 20:20—20:40）：
+  `contracts/api.json`（v0.7 · `info.description` 整段重写）· `contracts/contract.json`（v0.7 · 11 个 `frozen_endpoints` +
+  **新增 `voided_endpoints`** 记 4 个作废路径）· `contracts/CONTRACTS.md`（接口表 / 产品结构段 / 专属底线 / 台词数 13→14 / 新增「「问它」」整节）·
+  `scripts/build-check.js`（14→11 路径）。
+  **并把「冻结清单 == api.json 路径」焊进 `check-contract.ps1` 第 11 项**（加固，不新增第 15 项）——
+  正向 **PASS 14 / WARN 0 / FAIL 0**，**两项反向验证都拦得住**（删冻结清单项 → FAIL；删作废登记 → FAIL）。
+- **✅【D68】P1 台词「先这样」已落文档**（2026-11-24 20:15 用户拍板）：
+  `contracts/tone.json` **14 句一个字未改**（含认知闭环下线后不再调用的 `mirror`/`fracture`/`question`/`bridge`/`insufficient` —— **保留不删**）；
+  新主线 3 句桌宠话**继续当前端固定文案，不进目录**；**新主线不新增任何台词**。`docs/P1-三件产出.md` §2.6 已逐处标注。
+- **✅ 静帧 2 已按新主线重画**（用户「图片你上新」）：
+  `docs/p1-frames/frame-2-ask.html` + `.png`（1600×900）——
+  主题从「2.5D 认知地图 + 断层」换成「**问它**」，画面里每一条数据都是 **11-24 真实调用 `POST /api/advice` 的那次输出**
+  （问题 / 判断 `partially_applicable` / 4 步方案 / 5 条出处 / 依据编号一一对应）。
+  旧的 `frame-2-terrain-fracture.*` **已删除**（概念已下线，留着会被误当成现行插图）。
+  另出 **AI Works 建站封面图** `docs/aiworks/cover-icon.png`（1024×1024，深蓝渐变 + 真刘看山 + 同款字标）。
+- **✅ 计划书已定稿 v1.0**（用户「计划书可以定稿」）：
+  `docs/产品说明计划书.md` 去掉全部「待人审」标记 · §2.4 / §3.2 的实测数字换成 11-24 当天**两次实跑的真值**
+  （失眠 → `applicable` 5 步 5 出处；拖延 → `partially_applicable` 4 步 5 出处）并注明「**步数与条数每次实跑会变，但形状固定**」·
+  新增 §5.8 部署包实况 · 补「AI Works『项目说明』精简版」 · 待补清单只剩**公网体验链接**与演示视频。
+- **✅ 回归与自检全绿**（2026-11-24 20:5x）：完整回归 **PASS 14 / FAIL 0**（含「问它」三拍：判断/方案/出处对账 + 缓存命中）·
+  轻量回归 **PASS 7 / FAIL 0** · 契约自检 **PASS 14 / WARN 0 / FAIL 0** · 编码自检 U+FFFD=0 / 无 BOM / 纯 LF。
 - 读通官网规则全文（`/api/content`，2026-11-14 版）→ [rules-知乎S3.md](rules-知乎S3.md) 第十一节。
 - **读通官方飞书《知乎黑客松S3- 技术指南》正文**（11-16，该文档公开可读）→ rules 第十一节 11.1—11.10。**解决了三个此前悬空的问题**：800 美元到底是什么（看山积分，D21）、作品要不要做在看山工作台上（不用，官方 FAQ"不限制 Agent 开发工具"）、怎么部署（AI Works 源码发布，且"前端+Node 后端无数据库"有官方口径背书 D15，D22）。
 - 下载官方 Skill 包 `zhihu-cli-skill.zip`（107 KB），读通 `references/hackathon.md`（S3 开发者手册摘要）、`hackathon-oauth.md`、`cli.md` → rules 第十二节。**含官网未列的 9 类额度、OAuth 凭证领取时机、提交前检查全本 9 条、人气奖与 OAuth 登录人数的关系。**
@@ -103,6 +135,13 @@
 - **✅✅ 「问它」面板样式变量化 + 直答超时修复（11-24 19:3x—20:0x，D67）** —— **两件事，都实测过**。① **面板视觉终于能交出去了**：原先面板样式写成内联 `style="..."`，**内联优先级高于 class，队友在 `web/css/` 里改不动** —— 「面板视觉归队友」这条承诺**兑现不了**；现改成 `var(--ask-xxx, 默认值)` + 18 个 `ask__*` 语义 class（登记进 `ui-contract.json` 的 `js_owned_classes`），队友在 `web/css/` 里加一行 `:root { --ask-card-border: 2px solid #3b82f6 }` 就能改，**双方零冲突**。**浏览器实测 11 个变量逐个覆盖全部生效**（卡片 3px dashed 蓝 / 步骤线 2px solid 绿 / 出处条 7px double 紫 / 输入框 5px solid 红）。⚠️ **踩过的坑**：变量塞在 `border:` 简写里时，值必须是**完整简写** —— 只写颜色会让整条边框失效（宽度归 0），已写进 `分工-视觉与功能.md` §4.1 与 `队友体验指南.md`。② **直答白烧额度**（真 bug，D67）：`client.js` 对所有上游用同一个 10 秒超时 + 最多重试 4 次，而直答是**推理模型**（真实 20—35 秒）→ **一次「问它」实际烧 5 次直答额度**（82→77），而额度只有 100/天（全项目最紧）；改后**冷启动 10.4 秒、只烧 1 次**、缓存命中 2.1 秒，**完整回归 PASS 14 / FAIL 0**（改前那两拍是真的挂了：504 超时）。前端加了 8 秒后的第二段等待提示（「还在等知乎那边回话……这一步可能要 20—40 秒。」—— **只说在等，不假装有进度**，D62）。**顺带收口**：`docs/队友体验指南.md` 头部状态行、第 7 节文档表、6 处过期表述全部更新（队友照着跑不会再找不到已下线的断层/情境题/地形）。
 
 ## 三、阻塞项
+
+- **🔴【D70】AI Works 上传侧返 401**（`ApplyUpload` 签名校验失败）：
+  同尺寸的对照包同样失败、precheck 200、时钟无偏差 → **不是交付包的问题，是平台侧签名问题**。
+  **下一步：用户在自己 Chrome/Edge 手动上传**；自己浏览器也失败 → 找赛事组
+  （官方小助手微信 / openplatform@zhihu.com），**不要反复重试**。
+- **🔴 公网链接**：12-04 前必须拿到（审核时间不可控）；**参赛项目通道 12-05 10:00 才开**，
+  但 **AI Works 建站与参赛项目绑定是两件事** —— 建站现在就能做。
 
 | # | 事项 | 现状 | 谁来推 |
 | --- | --- | --- | --- |

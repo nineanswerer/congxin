@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>从心 · AI Works 项目图标</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1024px; height: 1024px; overflow: hidden; }
+  body {
+    position: relative;
+    background:
+      radial-gradient(760px 620px at 34% 26%, rgba(74,158,255,.30), transparent 64%),
+      radial-gradient(620px 520px at 86% 88%, rgba(255,180,84,.13), transparent 66%),
+      linear-gradient(165deg, #0d1018 0%, #161c29 52%, #0b0e16 100%);
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  .grain {
+    position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 5px 5px;
+  }
+  .ring {
+    position: absolute; left: 50%; top: 46%; width: 700px; height: 700px;
+    margin: -350px 0 0 -350px; border-radius: 50%;
+    border: 1px solid rgba(74,158,255,.18);
+    box-shadow: 0 0 0 40px rgba(74,158,255,.045), 0 0 0 96px rgba(74,158,255,.028);
+  }
+
+  /* ---- 字标 ---- */
+  .mark {
+    position: absolute; left: 78px; top: 76px; z-index: 3;
+    font-size: 78px; font-weight: 800; letter-spacing: 12px; color: #eef1f7;
+    text-shadow: 0 6px 26px rgba(0,0,0,.6);
+  }
+  .mark em { font-style: normal; color: #4a9eff; }
+  .sub {
+    position: absolute; left: 84px; top: 186px; z-index: 3;
+    font-size: 22px; letter-spacing: 5px; color: rgba(207,228,255,.55); font-weight: 600;
+  }
+
+  /* ---- 出处卡片 ---- */
+  .card {
+    position: absolute; right: 68px; top: 196px; width: 392px; height: 250px;
+    border-radius: 26px; transform: rotate(-5deg);
+    background: linear-gradient(180deg, rgba(255,255,255,.155), rgba(255,255,255,.06));
+    border: 1px solid rgba(255,255,255,.30);
+    box-shadow: 0 34px 70px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.24);
+    padding: 30px 32px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 25px; font-weight: 700; color: #cfe4ff;
+    padding: 9px 20px; border-radius: 999px;
+    background: rgba(74,158,255,.20); border: 1px solid rgba(74,158,255,.55);
+  }
+  .chip .dot { width: 11px; height: 11px; border-radius: 50%; background: #4a9eff; }
+  .bar { height: 17px; border-radius: 9px; background: rgba(255,255,255,.30); margin-top: 22px; }
+  .bar.w88 { width: 88%; }
+  .bar.w62 { width: 62%; margin-top: 14px; }
+  .link {
+    margin-top: 26px; display: flex; align-items: center; gap: 12px;
+    font-size: 21px; font-weight: 700; color: #7fc0ff;
+  }
+  .link .lk {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 3px solid #7fc0ff; position: relative; flex: 0 0 auto;
+  }
+  .link .lk::after {
+    content: ""; position: absolute; right: -5px; bottom: -5px;
+    width: 12px; height: 12px; border-right: 3px solid #7fc0ff; border-bottom: 3px solid #7fc0ff;
+    border-radius: 0 0 3px 0; transform: rotate(45deg);
+  }
+
+  /* ---- 桌宠 ---- */
+  .pet {
+    position: absolute; left: 96px; bottom: 26px; width: 600px; height: 640px;
+    filter: drop-shadow(0 30px 46px rgba(0,0,0,.62));
+  }
+  .pet img { width: 100%; height: 100%; object-fit: contain; object-position: bottom center; }
+  .halo {
+    position: absolute; left: 150px; bottom: 40px; width: 560px; height: 200px;
+    background: radial-gradient(closest-side, rgba(74,158,255,.30), transparent 72%);
+    filter: blur(6px);
+  }
+</style>
+</head>
+<body>
+  <div class="grain"></div>
+  <div class="ring"></div>
+  <div class="halo"></div>
+
+  <div class="mark">从<em>心</em></div>
+  <div class="sub">AI × 陪伴与交互</div>
+
+  <div class="card">
+    <div class="chip"><span class="dot"></span>出处 · 知乎回答</div>
+    <div class="bar w88"></div>
+    <div class="bar w62"></div>
+    <div class="link"><span class="lk"></span>点回原文</div>
+  </div>
+
+  <div class="pet"><img src="../../assets/kanshan/idle.webp" alt="从心桌宠" /></div>
+</body>
+</html>
