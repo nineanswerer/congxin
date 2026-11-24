@@ -680,19 +680,63 @@ const ASK_EXAMPLES = [
   '实习期被同事甩锅',
 ];
 
-/** 内联样式（见上面的「样式为什么用内联」）。 */
+/**
+ * 「问它」面板的样式 —— **全部走 CSS 变量，值写在变量里当 fallback**。
+ *
+ * ## 为什么这样写（队友要能改）
+ *
+ * 队友的「问它」面板视觉是他的活（`web/css/` 是他的地盘）。
+ * 如果这里直接写死内联样式（`style="border:1px solid ..."`），
+ * **他改不动** —— 内联样式的优先级高于任何 class，
+ * 他在 `web/css/` 里写什么都不生效（除非用 `!important`，那是坏味道）。
+ *
+ * 所以这里一律写成 `var(--ask-xxx, 默认值)`：
+ * - **默认值**在 JS 里（没有样式表也能正常显示）
+ * - **队友在 `web/css/` 里加一行 `:root { --ask-xxx: ... }` 就能改**
+ * - 双方零冲突：**我们不碰 `web/css/`，他不碰 `web/js/`**
+ *
+ * ## ⚠️ 两种变量，别搞混（这个坑真的踩过）
+ *
+ * 变量值塞在**简写属性**里时，值必须是**完整简写**，不能只给一部分：
+ *
+ * - `border: var(--ask-card-border, 1px solid rgba(...))`
+ *   → 队友要写 `--ask-card-border: 2px solid #3b82f6`（**宽度 + 样式 + 颜色一起写**）
+ *   → 写成 `--ask-card-border: #3b82f6`（只给颜色）会让整条 border **失效**（宽度归 0）——
+ *     因为 `border: #3b82f6` 不是合法的 border 值。
+ * - `gap: var(--ask-gap, 10px)` 这种**单值属性**，值就只写一个值。
+ *
+ * 之所以不给「只改颜色」的口子：内联样式把 border 的宽度/样式/颜色**一起锁死**了，
+ * 队友想改宽度，class 规则（`.ask__card { border-width: 2px }`）**也压不过内联** ——
+ * 所以宽度只能靠变量给，而给了变量就得给完整简写。
+ *
+ * ## 变量清单（11 个，都在用）
+ *
+ * **完整简写型（4 个）** —— 值必须写全 `宽度 样式 颜色`：
+ * - `--ask-input-border` 输入框边框，默认 `1px solid rgba(127,127,127,.35)`
+ * - `--ask-card-border`  答案卡边框，默认 `1px solid rgba(127,127,127,.28)`
+ * - `--ask-src-border`   出处条边框，默认 `1px solid rgba(127,127,127,.22)`
+ * - `--ask-step-line`    步骤分隔线（`border-top`），默认 `1px dashed rgba(127,127,127,.25)`
+ *
+ * **单值型（7 个）**：
+ * - `--ask-gap` 横向间距（默认 `10px`）· `--ask-margin` 卡上边距（`12px`）
+ * - `--ask-radius` 卡圆角（`12px`）· `--ask-pad` 卡内边距（`14px 16px`）
+ * - `--ask-input-radius` 输入框圆角（`10px`）· `--ask-src-radius` 出处条圆角（`9px`）
+ * - `--ask-muted` 次要文字透明度（`.62`）
+ */
 const ASK_STYLE = {
-  row: 'display:flex; gap:10px; flex-wrap:wrap; align-items:center',
+  row: 'display:flex; gap:var(--ask-gap,10px); flex-wrap:wrap; align-items:center',
   input:
-    'flex:1 1 260px; padding:10px 12px; border-radius:10px; ' +
-    'border:1px solid rgba(127,127,127,.35); background:transparent; color:inherit; font:inherit',
+    'flex:1 1 260px; padding:10px 12px; border-radius:var(--ask-input-radius,10px); ' +
+    'border:var(--ask-input-border,1px solid rgba(127,127,127,.35)); background:transparent; color:inherit; font:inherit',
   card:
-    'border:1px solid rgba(127,127,127,.28); border-radius:12px; padding:14px 16px; margin-top:12px',
+    'border:var(--ask-card-border,1px solid rgba(127,127,127,.28)); border-radius:var(--ask-radius,12px); ' +
+    'padding:var(--ask-pad,14px 16px); margin-top:var(--ask-margin,12px)',
   step:
-    'display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-top:1px dashed rgba(127,127,127,.25)',
+    'display:flex; gap:10px; align-items:flex-start; padding:8px 0; ' +
+    'border-top:var(--ask-step-line,1px dashed rgba(127,127,127,.25))',
   src:
-    'display:block; margin-top:6px; padding:9px 11px; border-radius:9px; ' +
-    'border:1px solid rgba(127,127,127,.22); text-decoration:none',
+    'display:block; margin-top:6px; padding:9px 11px; border-radius:var(--ask-src-radius,9px); ' +
+    'border:var(--ask-src-border,1px solid rgba(127,127,127,.22)); text-decoration:none',
 };
 
 /** 建「问它」面板（内容全部由 JS 生成，不改 index.html）。 */
@@ -707,25 +751,25 @@ function renderAskPanel() {
   }
 
   panel.innerHTML = `
-    <div class="sec-title" style="flex-wrap:wrap">
+    <div class="sec-title ask__head" style="flex-wrap:wrap">
       <b style="white-space:nowrap">问它一件事</b>
       <span class="tag" style="white-space:nowrap;flex:0 0 auto">知乎找答案</span>
       <span class="rule" style="flex:0 0 36px"></span>
       <span style="flex:1 1 240px;min-width:0">你说你的事，它去找<b>知乎上遇到同样问题的人</b>怎么处理的</span>
     </div>
-    <div style="${ASK_STYLE.row}; margin-top:12px">
+    <div class="ask__bar" style="${ASK_STYLE.row}; margin-top:12px">
       <input id="ask-input" maxlength="100" autocomplete="off"
              placeholder="比如：工作压力大到睡不着怎么办"
              aria-label="说一件你正遇到的事"
              style="${ASK_STYLE.input}" />
       <button class="btn btn--primary" id="btn-ask">让它帮我想想</button>
     </div>
-    <div style="${ASK_STYLE.row}; margin-top:10px">
+    <div class="ask__examples" style="${ASK_STYLE.row}; margin-top:10px">
       ${ASK_EXAMPLES.map(
         (q) => `<button class="btn btn--secondary" data-ask-example="${escapeHtml(q)}">${escapeHtml(q)}</button>`
       ).join('')}
     </div>
-    <div id="ask-result" style="margin-top:16px"></div>
+    <div id="ask-result" class="ask__result" style="margin-top:16px"></div>
     ${ZHIHU_LOGIN_HINT}
   `;
 
@@ -766,12 +810,23 @@ async function askAdvice(question, inputEl) {
   }
   const box = $('#ask-result');
   const btn = $('#btn-ask');
+  let waitTimer = null;
   if (btn) btn.disabled = true;
   try {
     pet.setState('thinking');
     pet.sayText('我去知乎上找找，看有没有人遇到过一样的。');
     if (box) box.innerHTML = noticeBox('正在知乎上找相似的人怎么处理的……');
     if (inputEl) inputEl.value = '';
+
+    // ⚠️ **等久了要换句话陪他等**（2026-11-24 实测：直答真实耗时 20—35 秒）。
+    //    一句「正在找…」挂 30 秒不动，用户会以为功能卡死了。
+    //    ⚠️ **只说「还在等」，不假装有进度** —— 台词不许早于事实（D62）：
+    //    我们不知道搜索有没有回来，所以**不能说**「知乎上找到了」。
+    waitTimer = setTimeout(() => {
+      if (box && box.textContent.includes('正在知乎上找')) {
+        box.innerHTML = noticeBox(escapeHtml('还在等知乎那边回话……这一步可能要 20—40 秒。'));
+      }
+    }, 8000);
 
     const data = await getAdvice({ question: q, tone: state.tone?.tone });
     state.advice = data;
@@ -796,6 +851,7 @@ async function askAdvice(question, inputEl) {
     revealAskResult(box);
     petSayFail(err, '没找到答案');
   } finally {
+    if (waitTimer) clearTimeout(waitTimer);
     if (btn) btn.disabled = false;
   }
 }
@@ -827,7 +883,7 @@ function revealAskResult(box) {
 function srcNote(refs) {
   const list = Array.isArray(refs) ? refs : [];
   if (!list.length) return '';
-  return `<span style="opacity:.62; font-size:12px; margin-left:8px">依据 ${list.map((n) => escapeHtml(String(n))).join('、')} 条</span>`;
+  return `<span style="opacity:var(--ask-muted,.62); font-size:12px; margin-left:8px">依据 ${list.map((n) => escapeHtml(String(n))).join('、')} 条</span>`;
 }
 
 /** 方案 + 出处的渲染。出处**全部是上游真实 URL**（模型只回了编号）。 */
@@ -837,12 +893,12 @@ function renderAdvice(data) {
   const sources = data.sources ?? [];
 
   const steps = plan.length
-    ? `<div style="${ASK_STYLE.row}; flex-direction:column; align-items:stretch; margin-top:10px">
+    ? `<div class="ask__plan" style="${ASK_STYLE.row}; flex-direction:column; align-items:stretch; margin-top:10px">
         ${plan
           .map(
-            (s) => `<div style="${ASK_STYLE.step}">
-              <b style="min-width:22px">${escapeHtml(String(s.index ?? ''))}</b>
-              <span>${escapeHtml(s.text ?? '')}${srcNote(s.source_indexes)}</span>
+            (s) => `<div class="ask__step" style="${ASK_STYLE.step}">
+              <b class="ask__step-no" style="min-width:22px">${escapeHtml(String(s.index ?? ''))}</b>
+              <span class="ask__step-text">${escapeHtml(s.text ?? '')}${srcNote(s.source_indexes)}</span>
             </div>`
           )
           .join('')}
@@ -850,18 +906,18 @@ function renderAdvice(data) {
     : '';
 
   const srcHtml = sources.length
-    ? `<div style="margin-top:14px">
-        <div class="sec-title" style="margin-top:0;flex-wrap:wrap">
+    ? `<div class="ask__sources" style="margin-top:14px">
+        <div class="sec-title ask__sources-title" style="margin-top:0;flex-wrap:wrap">
           <b style="white-space:nowrap">依据</b>
           <span class="rule" style="flex:0 0 36px"></span>
           <span style="flex:1 1 auto;min-width:0">${sources.length} 条知乎出处 · 都能点回原文</span>
         </div>
         ${sources
           .map(
-            (s) => `<a style="${ASK_STYLE.src}" href="${escapeHtml(s.answer_url ?? s.question_url ?? '#')}"
+            (s) => `<a class="ask__src" style="${ASK_STYLE.src}" href="${escapeHtml(s.answer_url ?? s.question_url ?? '#')}"
                target="_blank" rel="noopener">
-              <div>[${escapeHtml(String(s.ref ?? ''))}] ${escapeHtml(s.question_title ?? '')}</div>
-              <div style="opacity:.72; font-size:12px; margin-top:3px">
+              <div class="ask__src-title">[${escapeHtml(String(s.ref ?? ''))}] ${escapeHtml(s.question_title ?? '')}</div>
+              <div class="ask__src-meta" style="opacity:var(--ask-muted,.72); font-size:12px; margin-top:3px">
                 ${escapeHtml(s.author_name ?? '匿名')}${s.vote_up_count != null ? ` · ${s.vote_up_count} 赞同` : ''}
               </div>
             </a>`
@@ -871,14 +927,14 @@ function renderAdvice(data) {
     : '';
 
   const caveat = data.caveat
-    ? `<div style="margin-top:12px; opacity:.8; font-size:13px">${escapeHtml(data.caveat)}</div>`
+    ? `<div class="ask__caveat" style="margin-top:12px; opacity:var(--ask-muted,.8); font-size:13px">${escapeHtml(data.caveat)}</div>`
     : '';
 
   return `
-    <div style="${ASK_STYLE.card}">
-      <div class="sec-title" style="margin-top:0;flex-wrap:wrap">
-        <b style="flex:1 1 auto;min-width:0">${escapeHtml(data.summary || v.text)}</b>
-        <span class="tag ${v.tone === 'ok' ? '' : 'amber'}" style="white-space:nowrap;flex:0 0 auto">${escapeHtml(v.text)}</span>
+    <div class="ask__card" style="${ASK_STYLE.card}">
+      <div class="sec-title ask__card-head" style="margin-top:0;flex-wrap:wrap">
+        <b class="ask__summary" style="flex:1 1 auto;min-width:0">${escapeHtml(data.summary || v.text)}</b>
+        <span class="tag ${v.tone === 'ok' ? '' : 'amber'} ask__verdict" style="white-space:nowrap;flex:0 0 auto">${escapeHtml(v.text)}</span>
       </div>
       ${steps}
       ${caveat}

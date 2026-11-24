@@ -6,6 +6,7 @@
  */
 
 import { callUpstream, callUpstreamPost } from './client.js';
+import { config } from '../config.js';
 
 export async function getQuota() {
   const data = await callUpstream('/api/v1/quota');
@@ -145,6 +146,14 @@ export async function chatComplete(model, messages, { temperature = 0.7 } = {}) 
     messages,
     stream: false,
     temperature,
+  }, {
+    // ⚠️ **直答单独一套超时与重试策略**（2026-11-24 实测，详见 config.chatTimeoutMs）：
+    //   ① 推理模型真实耗时 20—35 秒 → 用 60 秒超时，**别用 10 秒**；
+    //   ② **超时不重试** —— 超时多半已经计费了，再试就是白烧直答额度（100/天，最紧）；
+    //   ③ 最多试 2 次（默认 4 次 × 60 秒 = 用户要等 4 分钟，太过分）。
+    timeoutMs: config.chatTimeoutMs,
+    maxAttempts: 2,
+    retryOnTimeout: false,
   });
   const content = payload?.choices?.[0]?.message?.content ?? null;
   return {

@@ -57,13 +57,29 @@ export async function callUpstream(path, query = {}) {
  * ⚠️ 直答的响应**不是** `{Code, Message, Data}` 信封，而是 OpenAI 兼容的
  *    `{ choices: [{ message: { content } }] }`——所以这里**不拆信封**，原样返回 JSON。
  * @param {string} path
- * @param {{query?:object, body?:object}} options
+ * @param {object} body
+ * @param {{timeoutMs?:number, maxAttempts?:number, retryOnTimeout?:boolean}} options
  */
-export async function callUpstreamPost(path, body = {}) {
-  return callUpstreamJson(path, { method: 'POST', body, raw: true });
+export async function callUpstreamPost(path, body = {}, options = {}) {
+  return callUpstreamJson(path, { method: 'POST', body, raw: true, ...options });
 }
 
-async function callUpstreamJson(path, { method = 'GET', query = {}, body = null, raw = false } = {}) {
+/**
+ * @param {string} path
+ * @param {object} opts
+ * @param {number} opts.timeoutMs        单次请求超时（默认 10s；直答走 60s）
+ * @param {number} opts.maxAttempts      最多试几次（默认 4）
+ * @param {boolean} opts.retryOnTimeout  超时后要不要再试（**直答必须 false**，见下）
+ */
+async function callUpstreamJson(path, {
+  method = 'GET',
+  query = {},
+  body = null,
+  raw = false,
+  timeoutMs = config.upstreamTimeoutMs,
+  maxAttempts = MAX_ATTEMPTS,
+  retryOnTimeout = true,
+} = {}) {
   // ⚠️ **没有凭据就别白跑上游**（11-19 部署预检时加的）。
   //    部署到 AI Works 后如果密钥没注入对，接口本来会回 401，
   //    但那会显示成「知乎那边暂时不稳定」——**不准确**（真实原因是没凭据）。
@@ -82,13 +98,13 @@ async function callUpstreamJson(path, { method = 'GET', query = {}, body = null,
 
   let lastError = null;
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       const res = await fetch(url, {
         method,
         headers: buildHeaders(),
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(config.upstreamTimeoutMs),
+        signal: AbortSignal.timeout(timeoutMs),
       });
 
       if (res.status === 401 || res.status === 403) {
@@ -126,7 +142,7 @@ async function callUpstreamJson(path, { method = 'GET', query = {}, body = null,
           upstream: { code: payload.Code, message: payload.Message },
           retryAfterMs: config.retryBaseMs * attempt,
         });
-        if (attempt === MAX_ATTEMPTS) break;
+        if (attempt === maxAttempts) break;
         await sleep(config.retryBaseMs * attempt + Math.floor(Math.random() * 300));
         continue;
       }
@@ -162,15 +178,20 @@ async function callUpstreamJson(path, { method = 'GET', query = {}, body = null,
         if (err.code === 'ZHIHU_AUTH_INVALID') throw err;
         lastError = err;
       } else if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
-        lastError = new ApiError('ZHIHU_TIMEOUT', `知乎接口超时（${config.upstreamTimeoutMs}ms）`, {
+        lastError = new ApiError('ZHIHU_TIMEOUT', `知乎接口超时（${timeoutMs}ms）`, {
           retryAfterMs: 3000,
         });
+        // ⚠️ **超时不重试**（直答路径必须这样）：
+        //   超时说明请求**很可能已经到达上游并被计费**了 —— 再试一次就是**白烧额度**。
+        //   直答 100 次/天，是全项目最紧的一组，**宁可不重试也不浪费**。
+        //   （搜索那种 5000/天 的，走默认的「超时可重试」，代价可以忽略。）
+        if (!retryOnTimeout) break;
       } else {
         lastError = new ApiError('ZHIHU_UPSTREAM_ERROR', `调用知乎接口失败：${err?.message || err}`, {
           retryable: true,
         });
       }
-      if (attempt === MAX_ATTEMPTS) break;
+      if (attempt === maxAttempts) break;
       await sleep(config.retryBaseMs * attempt);
     }
   }
