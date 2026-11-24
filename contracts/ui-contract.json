@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "updated": "2026-11-24",
+  "purpose": "web/index.html 归队友（5zdz5）所有，但我们的 JS 靠一批 id / class / data 属性取元素。这份文件把「不许动的钩子」冻结下来，scripts/check-contract.ps1 第 14 项会校验：队友改坏一个钩子，提交当场报 FAIL。",
+  "index_html_owner": "5zdz5",
+  "contract_owner": "nineanswerer",
+  "rules": [
+    "队友可以自由增删改 web/index.html 的结构、class、素材、样式 —— 那是他的地盘。",
+    "index_ids / index_classes / index_data_attrs 里的钩子不许删、不许改名：我们的 JS 按它们取元素，改了就静默打断功能。",
+    "我们要新增界面元素，一律在 web/js/ 里建 DOM（document.createElement / innerHTML 模板），不去改 index.html。",
+    "确实要动某个钩子：先改这份文件、再改我们的 JS，两边一起提 PR；不要只改一边。",
+    "CSS 里的类名如果也是 JS 的取元素钩子（index_classes 那几项），改类名同样算动钩子。"
+  ],
+  "index_ids": [
+    "btn-feed",
+    "btn-guide",
+    "btn-outro",
+    "btn-tension",
+    "btn-terrain",
+    "btn-views",
+    "ch-bubble-text",
+    "ch-count",
+    "ch-days",
+    "ch-note-count",
+    "ch-pet",
+    "ch-talk",
+    "ch-turns",
+    "daily-enter",
+    "daily-paper",
+    "detail-identity",
+    "detail-quota",
+    "dropzone",
+    "flow-cards",
+    "flow-list",
+    "flow-views",
+    "materials",
+    "mirror-fracture",
+    "mirror-quiz",
+    "mirror-situation",
+    "mirror-terrain",
+    "nav-detail",
+    "nav-status",
+    "outro",
+    "panel-flow",
+    "panel-mirror",
+    "pet",
+    "pill-profile",
+    "pill-quota",
+    "profile-text",
+    "strip",
+    "tabs",
+    "theme-toggle",
+    "tone-switch"
+  ],
+  "index_classes": [
+    "ch__pet-img",
+    "outro-pet",
+    "petanim",
+    "petfigure"
+  ],
+  "index_data_attrs": [
+    "data-tab"
+  ],
+  "js_owned_ids": [
+    "btn-mirror-run",
+    "btn-quiz-jump",
+    "btn-reset-quiz",
+    "btn-situation",
+    "pc-form",
+    "pc-input",
+    "pc-log",
+    "pc-mood-text",
+    "pc-panel",
+    "pc-pet"
+  ],
+  "js_owned_classes": [
+    "ob__card",
+    "opt",
+    "terrain-wrap"
+  ],
+  "js_owned_data_attrs": [
+    "data-block-id",
+    "data-drag",
+    "data-fracture-id",
+    "data-idx",
+    "data-ob",
+    "data-pet-bubble",
+    "data-pet-img",
+    "data-pet-state",
+    "data-qid",
+    "data-terrain"
+  ]
+}

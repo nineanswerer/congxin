@@ -129,7 +129,7 @@ node server/src/index.js
 **验证命令**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\check-contract.ps1                          # 期望 PASS 13 / WARN 0 / FAIL 0
+powershell -ExecutionPolicy Bypass -File scripts\check-contract.ps1                          # 期望 PASS 14 / WARN 0 / FAIL 0（11-24 新增第 14 项「界面契约完整性」）
 node scripts\regress-p3.js --light --base http://localhost:18800                              # 期望 PASS 6 / FAIL 0
 ```
 

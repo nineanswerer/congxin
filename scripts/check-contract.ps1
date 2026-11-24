@@ -409,6 +409,75 @@ if (-not (Test-Path -LiteralPath $tonePath)) {
     }
 }
 
+# ---------------------------------------------------------------- 14. 界面契约完整性
+# web/index.html 归队友所有，但我们的 JS 靠一批 id / class / data 属性取元素。
+# 队友改坏一个钩子，功能会**静默**失效 —— 这里当场报 FAIL，不让它流到提报那天。
+$uiPath = Join-Path $Root 'contracts\ui-contract.json'
+$htmlPath = Join-Path $Root 'web\index.html'
+if (-not (Test-Path -LiteralPath $uiPath)) {
+    Add-Result 'FAIL' '界面契约 ui-contract.json' '文件缺失'
+} elseif (-not (Test-Path -LiteralPath $htmlPath)) {
+    Add-Result 'FAIL' '界面契约 ui-contract.json' 'web\index.html 缺失'
+} else {
+    try {
+        $uiDoc = ([System.IO.File]::ReadAllText($uiPath)) | ConvertFrom-Json
+        $htmlSrc = [System.IO.File]::ReadAllText($htmlPath)
+        $why = @()
+
+        $idCount = @($uiDoc.index_ids).Count
+        $clsCount = @($uiDoc.index_classes).Count
+        $attrCount = @($uiDoc.index_data_attrs).Count
+
+        foreach ($hookId in @($uiDoc.index_ids)) {
+            if ($htmlSrc -notmatch ('id\s*=\s*["'']' + [regex]::Escape($hookId) + '["'']')) {
+                $why += "index.html 里少了 id『$hookId』"
+            }
+        }
+        foreach ($hookClass in @($uiDoc.index_classes)) {
+            if ($htmlSrc -notmatch [regex]::Escape($hookClass)) {
+                $why += "index.html 里少了 class『$hookClass』"
+            }
+        }
+        foreach ($hookAttr in @($uiDoc.index_data_attrs)) {
+            if ($htmlSrc -notmatch [regex]::Escape($hookAttr)) {
+                $why += "index.html 里少了属性『$hookAttr』"
+            }
+        }
+
+        # 反向：我们的 JS 引用了没登记的钩子 → 契约漏登记，提醒补上
+        $known = @{}
+        foreach ($x in @($uiDoc.index_ids)) { $known[$x] = $true }
+        foreach ($x in @($uiDoc.js_owned_ids)) { $known[$x] = $true }
+        $unregistered = New-Object System.Collections.ArrayList
+        $jsDir = Join-Path $Root 'web\js'
+        if (Test-Path -LiteralPath $jsDir) {
+            foreach ($jsFile in Get-ChildItem -LiteralPath $jsDir -Filter *.js -File) {
+                $src = [System.IO.File]::ReadAllText($jsFile.FullName)
+                foreach ($litMatch in [regex]::Matches($src, '[''"`]([^''"`]+)[''"`]')) {
+                    $lit = $litMatch.Groups[1].Value
+                    if ($lit -notmatch '^[#.\[]') { continue }
+                    foreach ($idMatch in [regex]::Matches($lit, '#([a-z][a-z0-9-]*)')) {
+                        $hookId = $idMatch.Groups[1].Value
+                        if ($known.ContainsKey($hookId)) { continue }
+                        if ($htmlSrc -match ('id\s*=\s*["'']' + [regex]::Escape($hookId) + '["'']')) { continue }
+                        if (-not $unregistered.Contains($hookId)) { [void]$unregistered.Add($hookId) }
+                    }
+                }
+            }
+        }
+
+        if ($why.Count -eq 0 -and $unregistered.Count -eq 0) {
+            Add-Result 'PASS' '界面契约 ui-contract.json' "$idCount 个 id / $clsCount 个 class / $attrCount 个属性在 index.html 里都在；JS 引用无未登记钩子"
+        } elseif ($why.Count -gt 0) {
+            Add-Result 'FAIL' '界面契约 ui-contract.json' ($why -join ' | ')
+        } else {
+            Add-Result 'WARN' '界面契约 ui-contract.json' ("JS 引用了未登记的 id：" + (($unregistered | Sort-Object) -join '、') + ' —— 请把新钩子登记进 contracts\ui-contract.json')
+        }
+    } catch {
+        Add-Result 'FAIL' '界面契约 ui-contract.json' ('解析失败：' + $_.Exception.Message)
+    }
+}
+
 # ---------------------------------------------------------------- 输出
 $pass = @($results | Where-Object { $_.Level -eq 'PASS' }).Count
 $warn = @($results | Where-Object { $_.Level -eq 'WARN' }).Count
