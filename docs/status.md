@@ -1,6 +1,6 @@
 # status.md — 当前进度
 
-最后更新：2026-11-25 10:1x
+最后更新：2026-11-25 10:2x
 赛事：知乎黑客松 S3·湾区共创季（`activity_code=zhihu_hackathon_2026_p3`）
 
 > ⚠️ **2026-11-24 12:0x 起产品主线已换**（D66）：**认知地图不做，「认·清」认知闭环整条线下线**，
@@ -29,6 +29,20 @@
 
 ## 二、已完成
 
+- **✅✅✅【D73】对账官方 Skill 规范 + 升到 1.2.2 重出包（2026-11-25 10:1x—10:28）** —— 用户贴出官方 `zhihu-ai-works-deploy-helper` 的使用说明（「**先只读探测；展示阻断项和执行边界，确认后再构建**」）问「我们遵循了吗？」。
+  **对账结论：漏了两步，且版本落后** —— ① 没跑官方 step 0 的更新检查 ② 没做过「只读探测 → 展示阻断项 → 确认后再构建」这个顺序 ③ 只解压调脚本，**没做官方 README 的 `npx skills add -g` 安装**。
+  **补跑只读探测（这正是官方要的那一步）**：**在当前项目目录（仓库根）上探测 = `Status: blocked`，5 个 error**（`E_DISK_WRITE_FORBIDDEN`、`E_LOCAL_PERSISTENCE`、`E_PORT_CONTRACT_UNSAFE`、`E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED`、`E_AGENT_BUILD_REQUIRED`）—— **证据全部指向 `.ctx/*.mjs` 一次性脚本与 `scripts/make-delivery.js` / `predeploy-check.js` 这些开发期文件，运行期代码不在其中**；外加 warning `W_SENSITIVE_SOURCE_FILE`（`server/.env.example`）。
+  **在交付副本上探测 = `Status: review-required`，5 个 finding 全是 warning、0 error** → 可构建。
+  **→ 结论：仓库根这条路按官方规范走不通**，官方 SKILL.md 自己也要求在「隔离交付源码」上做 —— 这正是 D56/D70「只带运行期文件进包」的原因。
+  **版本落后已修**：`check_skill_update.py` 报远端已是 **1.2.2**（`localVersion 1.2.0` → `remoteVersion 1.2.2`，SHA-256 `0d4c1c82…`）→ **已下载并逐项核对** → `npx --yes skills add <dir> -g --agent '*' -y` **全局安装到 `~\.agents\skills\zhihu-ai-works-deploy-helper`**。
+  **⚠️ 用 1.2.0 出的包过不了 1.2.2 的校验器**（`backend.deploy.json is not the deterministic output of deploy-plan.json` + `backend penultimate CustomStep must verify the pipeline CloudBase CLI`）→ **用 1.2.2 重出**。
+  **1.2.2 新增随包采集**：`collection_data.py begin` 在项目内建 `_tmp/seo.intent.json` / `_tmp/deploy.remediation.json` → 收录 **1 条项目意图**（`id ba30329d-fa07-42a7-93d1-30c69db51669`，目标受众=黑客松评审 + 被具体难事困住的普通用户）→ 归档器 `collection.exported` 两个文件、`warnings: []` → **已实际读 ZIP 里的这两个文件核对，与项目文件逐字一致**。
+  **Windows 两个坑**（已记进 D73）：`install_skill_update.py` 内部调 `npx` 不带 `.cmd` → `[WinError 2]`，得手动 `npx --yes skills add ... --agent '*' -y`（不加 `--agent '*' -y` 会 `[SKILLS_PROMPT_REQUIRES_TTY]` 什么都没装）；`validate_deploy_output.py` 的 0755 判定在 Windows 必误报 → 打 `os.name != "nt"` 补丁，⚠️ **1.2.2 顶部没有 `import os`，只改判定行会 `NameError`，必须连 import 一起加**。
+  **新包**：`%TEMP%\congxin\congxin.zip` · **3,148,394 字节 / 87 条目** · **SHA-256（补执行位之后）`4ba10377faf3d11df1476e425e2a59f0207312a6d8faba31e6c1de4b2367e72e`**。
+  **官方链全 exit 0**（1.2.2：inspect → write_backend_runtime → write_deploy_descriptors → validate「deployment input validation passed」→ settle_agent → create_project_archive → fix-zip-exec-bit）。
+  **交付副本真机冒烟全过**：`/api/health` 200 · `/api/quota` 200（**计数确实会涨**：知乎搜索 1 / 问题发现 4 / 直答 1）· `/api/tone` 200 · `/web/` 200（**460,679 字符 · 12 个内联 `<style>` · 守护脚本已注入**）· `POST /api/advice` **200 / 10.9 秒**（`applicable` + 4 步方案 + 4 条真实出处）。
+  **端口交付标准：Agent 没为它改过源码** —— 仓库源 `config.js` 本来就是 `process.env.PORT` → fallback **9000**、监听 **`0.0.0.0`**，交付副本与仓库源逐字一致。
+  **ZIP 校验**：87 条目 · `testzip()` 无错 · `scf_bootstrap` **0755** · 无 `node_modules`/`docs`/`.git`/`__pycache__`/`.env` · 两个采集文件在包里且内容一致。
 - **✅✅【D72】含 D71 修复的新交付包已出（2026-11-25 10:0x—10:16）** —— 用户拍板「**现在出新包**」（D63 要点名授权，已拿到）。
   **出包前 `make-delivery.js` 连续两次当场报错退出**（两次都是自检按设计工作，不是 bug）：
   ① **HTML 证据行找不到** —— D71 把 `index.html` 改成自定义 handler 后，证据行还指着旧的 `express.static` 挂载写法 → 证据行换成 handler 挂载 + 根路径重定向（**证据行必须与源码逐字一致，不许留假证据**）；
@@ -148,9 +162,9 @@
 
 ## 三、阻塞项
 
-- **🔴【D71/D72】preview 现在刷新还是塌陷 —— 修复已写完并**已出新包**，但**用户还没重新上传**：
+- **🔴【D71/D72/D73】preview 现在刷新还是塌陷 —— 修复已写完并**已出新包**，但**用户还没重新上传**：
   根因是 **CloudBase 平台并发限流**（随机 429 打掉首屏静态资源，见「已完成」D71），代码已修好（CSS 内联 + 资源守护 + 只重试平台级 429）。
-  **新包已出**：`%TEMP%\congxin\congxin.zip`（3,147,493 字节 / 85 条目 / SHA-256 `f99727d510dc3b75b412d5b0a38dd23ec9b0b715833f44de65ec86d360f49186`），交付副本真机冒烟全过、12 张 CSS 确认已内联。
+  **新包已出（1.2.2 官方链重出的那一版）**：`%TEMP%\congxin\congxin.zip`（3,148,394 字节 / 87 条目 / SHA-256 `4ba10377faf3d11df1476e425e2a59f0207312a6d8faba31e6c1de4b2367e72e`），交付副本真机冒烟全过、12 张 CSS 确认已内联。
   **下一步：用户在 AI Works step=2 重新上传这个 ZIP** → preview 才会变稳。
   ⚠️ 上传侧平台返 401（`ApplyUpload` 签名校验失败，平台侧问题）→ 用户在自己 Chrome/Edge 手动传；还是失败就找赛事组，别反复重试。
 - **🔴【D70】AI Works 上传侧返 401**（`ApplyUpload` 签名校验失败）：
@@ -196,7 +210,7 @@
 | B31 | **分工：视觉与设计 vs 功能** | ✅ **已按用户拍板分家并落地（11-24 11:0x—11:2x，D65）**。用户原话：「不要全部自己做吧，让队友做视觉和设计的部分，我们做功能这些的部分，最好是分开分工」。**目录级硬边界**：队友 `5zdz5` 拿 `web/index.html` + `web/css/` + `web/assets/` + `assets/` + `docs/adr/`（**视觉与设计**）；本会话拿 `web/js/` + `server/` + `contracts/` + `scripts/` + `docs/decisions.md` + `docs/status.md`（**功能**）。**接缝只有 `web/index.html` 一处**，用**界面契约**兜住：新增 `contracts/ui-contract.json`（冻结 **39 个 id + 4 个 class + 1 个 data 属性**），**我们要加界面元素一律在 `web/js/` 里建 DOM**；`scripts/check-contract.ps1` **新增第 14 项**当场校验 —— 钩子少一个 → `FAIL`（退出码 1），JS 引用未登记钩子 → `WARN`。**实测**：自检 **PASS 14 / WARN 0 / FAIL 0**；反向把 `id="ch-pet"` 改坏 → 当场 `FAIL 界面契约 ui-contract.json — index.html 里少了 id『ch-pet』`，改回即恢复全绿。**提交方式**：队友的改动**走 PR**（D41 触发条件「队友回来」已满足 —— 视觉改动可能打断我们的 JS 契约），我们自己那半边**继续直推 main**。**完整边界 + 双方交付物 + 验收标准**见 `docs/分工-视觉与功能.md`；给队友的确认稿在 `docs/队友对齐清单.md` **零 M** | AI（已落地）+ 用户（发给队友） |
 | B32 | **换主线：认知地图砍掉，「问它」上线** | ✅ **已按用户拍板换完（11-24 12:0x—12:3x，D66）**。用户带来队友原话（「抛给他一个问题 → 通过知乎搜索相似困境 → 找对策 → 判断采用与否 → 给出方案」）并明确「**认知地图不打算做了**」，三问**全选推荐项**：① **认知闭环全砍**（断层 / 情境题 / 认知地形三个接口 + 三个 service + 前端渲染全拆，卡片主流程保留）② **直答一条龙**（`zhida-thinking-1p5`，**不接 JeV**）③ **知乎搜索（5000/天）**做上游（不占「问题发现 100/天」）。**代码**：新增 `server/src/services/advice.js` + `server/src/routes/advice.js` + `endpoints.js` 的 `zhihuSearch()`；**删 6 个文件**（`routes/cognition.js` / `services/tension.js` / `services/situation.js` / `services/terrain.js` / `web/js/quiz.js` / `web/js/terrain.js`）；`web/js/` 换成「问它」面板 + 4 步引导 + 新演练脚本 + 桌宠对话接后端。**契约**：`api.json` v0.7（**11 个路径**）、`ui-contract.json` v2（33 个 id）。⚠️ **零 M 白话版当前那版还在要求队友做 P4 真 3D 推镜 + 认知地图 —— 已过期，不能发** | AI（已完成）+ 用户（重写零 M 后自己发） |
 | B33 | **「问它」链路能不能真跑通、出处是不是真的** | ✅ **能（11-24 12:0x—12:3x，实测）**。`POST /api/advice` 实跑 **HTTP 200**：`verdict=applicable` + 一句话结论 + **6 步方案**（每步带「依据 N 条」）+ **4 条真实出处**（含 `https://www.zhihu.com/question/.../answer/...` 与 `zhuanlan.zhihu.com/p/...`）+ `candidate_count=6`；再问一次 `cached=true` 命中缓存。**浏览器实测**（18801）：首屏 → tab 切到「问它 · 它帮你找答案」→ 抛问题 → 方案卡 + 依据标注 + 出处列表全部渲染正常；4 步引导走完出完成卡（「你刚刚自己问通了「问它」」+ 真实数字）。**回归重写**：`scripts/regress-p3.js` 新增「出处对账」与「认知闭环接口必须 404」两拍 → **PASS 14 / FAIL 0**（轻量版 7/7，零额度消耗）；契约自检 **PASS 14 / WARN 0 / FAIL 0**。**顺手修一个真 bug**：工作台是「固定高度 + 内部滚动」窗口，答案渲染在窗口内部 → 不主动滚一下用户会以为没反应，已加 `revealAskResult()`。⚠️ **两条实测结论别改回去**：格式要求必须和材料一起写进 **user** 消息（放 system 里模型直接无视）；`zhihu_search` **能给原回答 URL**（推翻了 11-18 的旧记录） | AI（已完成） |
-| B34 | **preview 部署版「每次刷新长得都不一样」** | ✅ **根因已查明并修好，但没上线（11-24 22:0x—22:4x，D71）**。**不是审美问题、也不是我们代码的问题** —— 是 **CloudBase 平台并发限流**（429 body `{"code":"EXCEED_RATELIMIT","message":"Client 127.0.0.6 exceeds rate limit."}`；`x-cloudbase-upstream-type: Tencent-SCF_HTTP` → 每个静态资源都回源 SCF；平台把 `cache-control` 改写成 `private, no-store` → 每次刷新全量重下）。**首屏同域并发约 26 个、冷启动容量 ~6 → 8 个 429 + 6 个 200**，**打掉哪几个随机** → 每次缺的不一样 → 每次长得不一样。**修复（全部在我们自己的 `server/` + `web/js/`）**：12 张 CSS 内联进 `index.html`（级联顺序不变）· 内联注入资源守护脚本（图片/script 被 429 打掉自动重试）· API **只重试平台级 429**、**我们自己的 `ZHIHU_RATE_LIMITED` 绝不重试**（免得再烧直答额度）· 静态资源加缓存头备着。**顺带把首屏大字口径切成「问它」**（沿用「只在还是旧值时才改」惯例）。**实测**：本地 `/web/` 459,004 字符 · 12 个内联 `<style>` · 浏览器 console 无 error · 契约自检 **PASS 14 / WARN 0 / FAIL 0** · 回归 **PASS 14 / FAIL 0**。⚠️ **修复已进新包**（11-25 10:16，D72：3,147,493 字节 / 85 条目 / SHA-256 `f99727d510dc3b75b412d5b0a38dd23ec9b0b715833f44de65ec86d360f49186`，交付副本冒烟全过、12 张 CSS 确认已内联）→ **等用户在 AI Works step=2 重新上传**，preview 才会变稳 | AI（已出包）+ 用户（上传） |
+| B34 | **preview 部署版「每次刷新长得都不一样」** | ✅ **根因已查明并修好，但没上线（11-24 22:0x—22:4x，D71）**。**不是审美问题、也不是我们代码的问题** —— 是 **CloudBase 平台并发限流**（429 body `{"code":"EXCEED_RATELIMIT","message":"Client 127.0.0.6 exceeds rate limit."}`；`x-cloudbase-upstream-type: Tencent-SCF_HTTP` → 每个静态资源都回源 SCF；平台把 `cache-control` 改写成 `private, no-store` → 每次刷新全量重下）。**首屏同域并发约 26 个、冷启动容量 ~6 → 8 个 429 + 6 个 200**，**打掉哪几个随机** → 每次缺的不一样 → 每次长得不一样。**修复（全部在我们自己的 `server/` + `web/js/`）**：12 张 CSS 内联进 `index.html`（级联顺序不变）· 内联注入资源守护脚本（图片/script 被 429 打掉自动重试）· API **只重试平台级 429**、**我们自己的 `ZHIHU_RATE_LIMITED` 绝不重试**（免得再烧直答额度）· 静态资源加缓存头备着。**顺带把首屏大字口径切成「问它」**（沿用「只在还是旧值时才改」惯例）。**实测**：本地 `/web/` 459,004 字符 · 12 个内联 `<style>` · 浏览器 console 无 error · 契约自检 **PASS 14 / WARN 0 / FAIL 0** · 回归 **PASS 14 / FAIL 0**。⚠️ **修复已进新包**（11-25 10:28，D73 用官方 1.2.2 重出：3,148,394 字节 / 87 条目 / SHA-256 `4ba10377faf3d11df1476e425e2a59f0207312a6d8faba31e6c1de4b2367e72e`，交付副本冒烟全过、12 张 CSS 确认已内联）→ **等用户在 AI Works step=2 重新上传**，preview 才会变稳 | AI（已出包）+ 用户（上传） |
 
 
 ## 四、开发顺序与倒排计划

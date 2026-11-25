@@ -2739,4 +2739,88 @@ D71 把 `index.html` 改成**自定义 handler**（CSS 内联 + 守护脚本注�
   `validate_deploy_output` → `settle_agent` → `create_project_archive` → `fix-zip-exec-bit`）**必须全跑**，
   只跑 `make-delivery.js` 出来的目录**不是**可上传的包。
 
+## D73 · 对账官方 `zhihu-ai-works-deploy-helper` 规范：漏了两步，且版本落后 → 升到 1.2.2 重出包
+
+- **时间**：2026-11-25 10:28
+- **触发**：用户贴出官方 Skill 的使用说明（「**先只读探测；展示阻断项和执行边界，确认后再构建**」），问「**我们遵循了吗？**」。
+
+### 1. 对账结果（逐条）
+
+| 官方规范 | 我们之前 | 判定 |
+| --- | --- | --- |
+| 从公开地址下载 Skill ZIP | ✅ 下了 `zhstatic.zhihu.com/.../v1.2.0.zip` | ✅ |
+| 「安装」= `npx skills add <path> -g` | ❌ 只解压并直接调脚本 | ❌ 漏（**本轮补做**） |
+| step 0 更新检查 `check_skill_update.py` | ❌ 没跑 | ❌ 漏 → **本轮跑了，发现远端已是 1.2.2** |
+| **先只读探测** | ⚠️ 跑了，但在**交付副本**上，不在「当前项目目录」上 | ⚠️ 半 |
+| **展示阻断项和执行边界** | ❌ 没展示，一路构建到底 | ❌ **漏** |
+| **确认后再构建** | ⚠️ 有「现在出新包」的授权，但没看过阻断项清单 | ⚠️ 顺序不对 |
+| 官方脚本生成 runtime/描述符/bootstrap/ZIP | ✅ 七步全 exit 0 | ✅ |
+| 交付用 npm、ZIP 交源码、不带本地产物 | ✅ | ✅ |
+| 项目变化后从探测重来 | ✅ 每次都从 inspect 重跑 | ✅ |
+| 不创建/修改云资源 | ✅ | ✅ |
+
+### 2. 补跑的只读探测（仓库根 vs 交付副本）
+
+**在「当前项目目录」（仓库根）上探测 = `Status: blocked`，5 个 error**：
+
+| 阻断项 | 证据指向 | 说明 |
+| --- | --- | --- |
+| `E_DISK_WRITE_FORBIDDEN` | `.ctx/*.mjs` | 我们的**一次性脚本**会写盘（云函数文件系统只读） |
+| `E_LOCAL_PERSISTENCE` | 同上 | 同上 |
+| `E_PORT_CONTRACT_UNSAFE` | 同上 | 探测器在仓库根扫到了开发脚本；**交付副本无此 finding** |
+| `E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED` | `scripts/make-delivery.js`、`scripts/predeploy-check.js`、`.ctx/*` | 全是**开发脚本**读的环境变量（`ZHIHU_*`/`FRONT_ORIGIN`/`NODE_ENV`/`TEMP`…），**运行期代码不在其中** |
+| `E_AGENT_BUILD_REQUIRED` | `package.json#scripts.build` | 仓库的 `build` 是部署面自检（不产出产物），官方静态 resolver 不认 |
+
+外加 warning `W_SENSITIVE_SOURCE_FILE`（`server/.env.example`）、`W_EVENT_TRACKING_BRIDGE_SKIPPED`（计划 blocked 就不注桥）。
+
+**在交付副本上探测 = `Status: review-required`，5 个 finding，全是 warning，0 error** → 可以构建。
+
+> **结论：「在仓库根准备 CloudBase 部署输入」这条路按官方规范走不通** —— 阻断项全部来自「开发期文件进了扫描范围」。
+> 这正是 D56/D70「只带运行期文件进包」的原因。**官方 SKILL.md 自己也要求在「隔离交付源码」上做这件事**，
+> 所以正确动作是：**在隔离副本上探测 → 把阻断项摆出来 → 确认 → 再构建**，而不是在仓库根硬来。
+
+### 3. 升到 1.2.2（官方 step 0 的产物）
+
+`check_skill_update.py` 返回：`{"status":"update-available","localVersion":"1.2.0","remoteVersion":"1.2.2","installable":true}`，
+URL `https://zhstatic.zhihu.com/skill/application/9949-261123/zhihu-ai-works-deploy-helper_v1.2.2.zip`，
+SHA-256 `0d4c1c8220ec0b7ab4d8fa2d57e91541dbccf152070efbc47f4e50a581fa5634` / 141,653 字节 —— **已下载并逐项核对**。
+
+**⚠️ 用 1.2.0 出的包过不了 1.2.2 的校验器**：
+
+```
+error: backend.deploy.json is not the deterministic output of deploy-plan.json
+error: backend penultimate CustomStep must verify the pipeline CloudBase CLI
+validation failed: 2 error(s)
+```
+
+→ **必须用 1.2.2 重出**（描述符契约收紧了）。
+
+**1.2.2 相对 1.2.0 的变化**：新增 `scripts/collection_data.py` + `references/collection.md` +
+`references/schemas/seo-intent.schema.json`；`inspect_node_project.py` / `validate_deploy_output.py` /
+`write_deploy_descriptors.py` / `create_project_archive.py` 都改了。
+
+**1.2.2 新增的随包采集**（官方「完成条件」硬要求）：
+项目内 `_tmp/seo.intent.json` 与 `_tmp/deploy.remediation.json` **必须随 ZIP 交付**（空数据也要写 `intents: []` / `records: []`），
+归档后要**读 ZIP 里的这两个文件核对与项目文件一致**。本轮收录了 **1 条项目意图**（目标受众 = 黑客松评审 + 被具体难事困住的普通用户；
+需求 = 有一件难事想弄清楚；价值 = 桌宠形态 + 知乎真实答案出处可点回原文），
+`id = ba30329d-fa07-42a7-93d1-30c69db51669`。
+
+### 4. 官方脚本在 Windows 上的两个坑
+
+1. **`install_skill_update.py` 在 Windows 上必失败** —— 它内部 `subprocess.run(["npx", "skills", "add", ...])`，
+   Windows 上 `npx` 是 `npx.cmd`，不带 shell 解析 → `[WinError 2] 系统找不到指定的文件`。
+   **改法**：手动跑 `npx --yes skills add <解压目录> -g --agent '*' -y`（`--agent '*' -y` 是必须的，
+   否则它要 TTY 交互 → `[SKILLS_PROMPT_REQUIRES_TTY]`，什么都没装）。装到了 `~\.agents\skills\zhihu-ai-works-deploy-helper`。
+2. **`validate_deploy_output.py` 的 0755 判定在 Windows 上必然误报**（NTFS 没有 exec 位）→ 照 D70 的办法
+   **给本地副本打补丁**：`if os.name != "nt" and stat.S_IMODE(...) != 0o755`，
+   ⚠️ **1.2.2 的文件顶部没有 `import os`，只改判定行会 `NameError: name 'os' is not defined`** → **必须连 `import os` 一起加**
+   （D70 那版 1.2.0 的文件里已经 import 了 os，所以没暴露这个坑）。
+
+### 5. 端口交付标准的披露（官方完成条件第 6 条）
+
+**Agent 没有为端口标准改过任何源码** —— 仓库源的 `server/src/config.js` 本来就是：
+`const PORT = Number(process.env.PORT)` → `port: Number.isFinite(PORT) && PORT > 0 ? PORT : 9000`、
+`const HOST = process.env.HOST || '0.0.0.0'` → `host: HOST`，**交付副本与仓库源这两段逐字一致**。
+交付副本里的改动只有「环境变量 → 字面量 / 文件」那一类（D72 已记）。
+
 
