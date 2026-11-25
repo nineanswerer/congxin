@@ -24,6 +24,15 @@
  *   2. **script 重试**：module script 被 429 打掉时，页面会**完全没有交互**
  *      （连「叫它出来聊聊」都点不动）。服务端给每个 script 标了 `data-g`，
  *      这里靠 `onerror` 标记失败，然后换 query 重新挂载。
+ *      ⚠️ 2026-11-25（D74）：原来每个 script **只重试 1 轮**（`data-gretried` 一旦
+ *      置位就再也不重试）→ 平台连续两轮限流就彻底死掉。改成**最多 6 轮**，
+ *      每轮间隔 900ms。
+ *      ⚠️ 这里的重试是「**整个 module 图**重挂」，救不了「依赖里的某个模块
+ *      被 429」—— 那种情况靠 `module-loader.js` 的**单模块级**动态 import 重试。
+ *
+ *   3. **module 依赖图自愈**（D74，见 module-loader.js）：首屏 module 的静态
+ *      import 在服务端被改写成动态 import + 单模块重试 → 某个依赖被 429 打掉时
+ *      它自己等一等再来一次，不连累整张图。
  *
  * ## 为什么不做更多
  *
@@ -39,7 +48,7 @@
  *    也不能用模板串里未转义的 `${`。
  */
 export const ASSET_GUARD_SCRIPT = `(function () {
-  var MAX_ROUNDS = 4;
+  var MAX_ROUNDS = 6;
   var rounds = 0;
 
   function retryImage(img) {
@@ -53,16 +62,17 @@ export const ASSET_GUARD_SCRIPT = `(function () {
 
   function retryScript(old) {
     if (!old.dataset.gFailed) return;
-    if (old.dataset.gRetried) return;
-    old.dataset.gRetried = '1';
+    var tries = Number(old.dataset.gTries || '0');
+    if (tries >= MAX_ROUNDS) return;
+    old.dataset.gTries = String(tries + 1);
     var next = document.createElement('script');
     for (var i = 0; i < old.attributes.length; i++) {
       var a = old.attributes[i];
-      if (a.name === 'data-gfailed' || a.name === 'data-gretried') continue;
+      if (a.name === 'data-gfailed' || a.name === 'data-gtries') continue;
       next.setAttribute(a.name, a.value);
     }
     next.setAttribute('data-g', '1');
-    next.setAttribute('data-gretried', '1');
+    next.setAttribute('data-gtries', String(tries + 1));
     if (old.parentNode) old.parentNode.replaceChild(next, old);
   }
 

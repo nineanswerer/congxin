@@ -2823,4 +2823,98 @@ validation failed: 2 error(s)
 `const HOST = process.env.HOST || '0.0.0.0'` → `host: HOST`，**交付副本与仓库源这两段逐字一致**。
 交付副本里的改动只有「环境变量 → 字面量 / 文件」那一类（D72 已记）。
 
+## D74 · preview 上「module 依赖图被打死」：服务端把静态 import 改写成**带重试的动态 import**
+
+- **时间**：2026-11-25
+- **触发**：用户上传 D73 出的 1.2.2 包后回复「**上传完成了**」；我在 preview 上实测（浏览器 SSO 登录态）。
+
+### 1. 实测事实（preview，2026-11-25）
+
+| 观察项 | 结果 |
+| --- | --- |
+| CSS 内联（D71） | ✅ **生效** —— 首屏**零 CSS 请求**，样式一次到位 |
+| JS 模块 | ❌ **5 个被 429 打掉**：`/web/js/api.js`、`pet.js`、`daily.js`、`outro.js`、`/web/assets-kit/ui/ui.js` |
+| 页面状态 | 首屏按钮还是「叫它出来聊聊」（D71 的 `renderHeroAsk()` 没跑）；右上角一直「连接中…」（`/api/auth/profile` 根本没发请求）；点「问它」没反应 |
+
+根因是 ESM 的语义：**`app.js` 的静态 import 链里只要有一个模块 429，整张模块图就不执行** ——
+表现就是「每次刷新长得都不一样」的**第二个成因**（第一个是 CSS，D71 已治）。
+
+### 2. 为什么 D71 的 asset-guard 救不了
+
+- asset-guard 靠 `<script>` 元素的 `onerror` **重挂脚本**：
+  - module **自己**被 429 → 能重挂，但**整张依赖图重新并发拉一遍**，依赖还是可能再被打掉；
+  - module 的**某个依赖**被 429 → 整张图静默失败 —— **没有「单模块级」的重试**。
+- 而且 asset-guard 原来每个 script **只重试 1 轮**（`data-gretried` 一旦置位就不再重试）
+  → 平台连续两轮限流就彻底死。
+
+### 3. 两个非直觉的坑（本地限流代理实测撞出来的）
+
+**坑一：浏览器会记住失败的 module URL。** 同一个 URL 再 `import()` 一次会**直接 reject，根本不再发请求**。
+证据：限流代理日志里每个模块只记到 **1 次** 429，第 2 次重试**根本没出网**。
+→ 处置：失败后给 URL 挂一个递增的 `?fromxin_r=N` 再试。
+
+**坑二：首屏的动态 `import()` 大多不是字面量**，而是运行时算出来的：
+`import(new URL('ui/ui.js', HERE).href)`、`import(new URL(\`${name}/fragment.js\`, BASE).href)`
+→ 静态分析拿不到 spec，**必须原样保留表达式**，由**调用模块自己**用 `import.meta.url` 解析。
+
+### 4. 处置（**全部在 `server/`，`web/` 下的源文件一个字没动**）
+
+新增 `server/src/lib/module-loader.js`：
+
+- 扫描源码里**真实**的 module 引用（跳过注释与字符串）——
+  ⚠️ `web/assets-kit/ui/ui.js` 的文件头注释里就有一行假 import（`import ui from './assets/ui/ui.js';`），
+  用纯正则会把它当真的改掉 → 那个路径不存在 → 模块直接挂。
+- 构建首屏依赖图（**实测 12 个模块**）+ Tarjan 找环（**实测无环**；有环的模块整模块跳过改写，动态 import 遇环会死锁）。
+- 在**响应时**把静态 import 改写成：
+  ```js
+  const __fromxinMods = await Promise.all([globalThis.__fromxinImp('/web/js/api.js'), ...]);
+  const { apiGet, getTone, ... } = __fromxinMods[0];
+  ```
+- 把动态 `import()` 改写成 `globalThis.__fromxinImp(new URL(<原表达式>, import.meta.url).href)`。
+- 内联一个 classic script 到 `</head>` 之前，定义 `globalThis.__fromxinImp`：
+  单模块最多重试 **5 次**（380ms × n + 随机抖动），**失败后换 query 绕开浏览器的失败记忆**。
+- registry 放 `globalThis` → 多个模块 import 同一个模块时拿到**同一个 URL** → 那个模块不会执行两遍。
+
+同时把 `asset-guard` 的 script 重试从 **1 轮放宽到 6 轮**。
+
+### 5. 边界（必须诚实）
+
+- 只改写**首屏依赖图内**的模块；图外的 assets-kit 素材原样返回。
+- `export ... from` 不改写（首屏图里没有；遇到就整模块跳过）。
+- 改写后模块顶层变成 **async module**（顶层 await），Chrome 89+ 支持。
+- 静态 live binding 变成快照 —— 首屏图里全部导出是 `export const/function/class`（**没有 `export let`**），行为不变。
+- 改写只作用于**响应**，`git diff` 里看不到任何 `web/` 改动。
+
+### 6. 验证（本地限流代理复现，5 个模块前 2 次请求直接回 429）
+
+| 轮次 | api.js | pet.js | daily.js | outro.js | ui/ui.js |
+| --- | --- | --- | --- | --- | --- |
+| 第 1 次 | 429 | 429 | 429 | 429 | 429 |
+| 第 2 次（重试**真的出网了**） | 429 | 429 | 429 | 429 | 429 |
+| 第 3 次 | **200** | **200** | **200** | **200** | **200** |
+
+- 总耗时约 **1.5 秒**，页面 **零 console error**（改写前是 3 个 uncaught exception）。
+- 首屏按钮恢复成「**问它一件事**」（D71 的 `renderHeroAsk()` 正常执行）。
+- 回归 **14 拍 PASS 14 / FAIL 0**（含「问它」那一拍：判断 `partially_applicable`、4 步方案、2 条真实出处、缓存命中）。
+- 契约自检 PASS 14 / WARN 0 / FAIL 0；3 个改动文件编码检查全过。
+
+### 7. 尚未验证 / 风险（不藏）
+
+- **还没在真 preview 上验证** —— 要等用户重新上传新包后连刷。
+- 平台对**带 query 的请求**另有口径（缓存 / 路由）未验证。
+- 最坏情况 5 次重试约 4 秒才放弃 → 演示现场首屏会明显变慢，但**不会半死**。
+
+### 8. 附：口径澄清 ——「我们已经在用大模型」
+
+用户问「为什么不介入大模型 AI」。事实口径（写进决策层免得反复讨论）：
+
+- **已经在用**：`server/src/services/advice.js` 的 `MODEL = 'zhida-thinking-1p5'`（知乎直答·深度思考档，推理模型，
+  实测 20—35 秒）。「问它」的判断/结论/方案全是它写的，每问烧 1 次直答额度（100/天）。
+- **不接第三方通用大模型**（GPT/Claude/DeepSeek）**不违规** —— 官方规则明说「底层大模型不限」；
+  这是产品与工程取舍，5 条理由：出处链会断（模型编 URL）／交付环境只放行 `PORT`/`HOST`（第三方 key 只能明文进包）／
+  直答是赛事白给额度而第三方要自备 key 与钱／直答已 20—35 秒且 60 秒是硬超时线／`zhida-agent` 实测不能用。
+- **JeV 不接**（D66 已定）：不产文字、要额外第三方 key 与部署环境变量；换模型只是改 `advice.js` 里一个常量。
+- 想「再加点模型」时的性价比排序：**知乎知识库（RAG，500/天）> 小工具 PDF 解析（10/天）> 两段式直答 > 第三方大模型**。
+  主链路在 12-04 拿正式链接前**冻结**，知识库列为决赛前的加强项。
+
 

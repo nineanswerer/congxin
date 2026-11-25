@@ -44,13 +44,38 @@
  *
  * CSS 内联只做一次、写在原 `<link>` 的位置 → **级联顺序完全不变**，
  * 队友的样式不会被我们改坏。
+ *
+ * ------------------------------------------------------------------
+ * ⚠️ 2026-11-25（D74）：**首屏 module 依赖图**也做了同样的处置
+ *
+ * 用户上传 1.2.2 出的包之后，在 preview 上实测：
+ *
+ *     GET /web/js/api.js            → 429
+ *     GET /web/js/pet.js            → 429
+ *     GET /web/js/daily.js          → 429
+ *     GET /web/js/outro.js          → 429
+ *     GET /web/assets-kit/ui/ui.js  → 429
+ *
+ * CSS 内联生效了（首屏零 CSS 请求），但 **module 图被打残**：
+ * `app.js` 的静态 import 链里有一个 429，**整张模块图都不执行** →
+ * 「问它」文案没改写、profile 没请求、按钮点不动。
+ *
+ * 处置：**在服务端把静态 import 改写成带重试的动态 import**
+ * （`module-loader.js`）→ 某个模块被 429 打掉时它自己重试，不连累整张图。
+ * ⚠️ 只改**响应**，web/ 下的源文件一个字没动。
  */
 
 import express from 'express';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ASSET_GUARD_SCRIPT, markGuardedScripts } from './asset-guard.js';
+import {
+  MODULE_IMP_HELPER,
+  buildModuleGraph,
+  findModuleEntries,
+  rewriteModule,
+} from './module-loader.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url)); // server/src/lib
 
@@ -140,7 +165,7 @@ export function inlineStylesheets(html, webDir) {
 }
 
 /**
- * 组装最终下发的 index.html：内联 CSS → 标记 script → 注入守护脚本。
+ * 组装最终下发的 index.html：内联 CSS → 标记 script → 注入守护脚本 → 注入 module 重试 helper。
  */
 export function buildIndexHtml(html, webDir) {
   const { html: styled, inlined, skipped } = inlineStylesheets(html, webDir);
@@ -148,7 +173,13 @@ export function buildIndexHtml(html, webDir) {
   const withGuard = guarded.includes('</body>')
     ? guarded.replace('</body>', `<script>${ASSET_GUARD_SCRIPT}</script>\n</body>`)
     : guarded + `<script>${ASSET_GUARD_SCRIPT}</script>`;
-  return { html: withGuard, inlined, skipped };
+  // ⚠️ module 重试 helper 必须早于**任何** module script：
+  //    classic script 是同步阻塞的，`<script type="module">` 是 defer 语义 →
+  //    放在 </head> 之前天然满足顺序要求。
+  const withHelper = withGuard.includes('</head>')
+    ? withGuard.replace('</head>', `<script>${MODULE_IMP_HELPER}</script>\n</head>`)
+    : `<script>${MODULE_IMP_HELPER}</script>\n${withGuard}`;
+  return { html: withHelper, inlined, skipped };
 }
 
 /**
@@ -210,6 +241,60 @@ export function mountWeb(app) {
   app.get('/web', indexHandler);
   app.get('/web/', indexHandler);
   app.get('/web/index.html', indexHandler);
+
+  // ---- 首屏 module 依赖图（D74）----
+  //
+  // 静态 import 改写成「可重试的动态 import」：某个模块被平台 429 打掉时，
+  // 它自己等一等再来一次，而不是整张模块图陪葬。详见 module-loader.js。
+  //
+  // ⚠️ 只改**响应**，不改 web/ 下的任何源文件。
+  let graphCache = null;
+
+  /** 图 + 图内所有文件的 mtime 汇总 —— 用来判断缓存是否过期（开发期改 import 立刻生效）。 */
+  const graphStamp = (graph) => {
+    let stamp = '';
+    for (const rel of ['index.html', ...graph.modules.keys()]) {
+      try {
+        stamp += `${rel}:${statSync(join(webDir, rel)).mtimeMs};`;
+      } catch {
+        stamp += `${rel}:x;`;
+      }
+    }
+    return stamp;
+  };
+
+  const getModuleGraph = () => {
+    let entries = [];
+    try {
+      entries = findModuleEntries(readFileSync(join(webDir, 'index.html'), 'utf8'));
+    } catch {
+      entries = [];
+    }
+    const key = entries.join('|');
+    if (graphCache && graphCache.key === key && graphCache.stamp === graphStamp(graphCache.graph)) {
+      return graphCache.graph;
+    }
+    const graph = buildModuleGraph(webDir, entries);
+    graphCache = { key, graph, stamp: graphStamp(graph) };
+    return graph;
+  };
+
+  // ⚠️ 必须排在下面的 express.static 之前 —— static 会直接命中 .js 文件。
+  app.use('/web', (req, res, next) => {
+    if (!req.path.endsWith('.js')) return next();
+    const rel = posix.normalize(req.path.replace(/^\/+/, ''));
+    const graph = getModuleGraph();
+    if (!graph.modules.has(rel)) return next();
+    // 有循环依赖 → 动态 import 会死锁，保持原样
+    if (graph.cyclic.has(rel)) return next();
+    const node = graph.modules.get(rel);
+    const rewritten = rewriteModule(node.code, rel);
+    // 改不动（再导出 / import 不在顶部 / clause 认不出来）→ 原样放行
+    if (!rewritten.changed) return next();
+    res.setHeader('Content-Type', 'text/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', staticCacheControl);
+    res.send(rewritten.code);
+  });
 
   // 页面：不缓存，保证演示现场改完刷新就能看到（宁可多请求一次，不要看到旧版）
   app.use(

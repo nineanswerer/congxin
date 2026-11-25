@@ -1,6 +1,6 @@
 # status.md — 当前进度
 
-最后更新：2026-11-25 10:2x
+最后更新：2026-11-25 11:2x
 赛事：知乎黑客松 S3·湾区共创季（`activity_code=zhihu_hackathon_2026_p3`）
 
 > ⚠️ **2026-11-24 12:0x 起产品主线已换**（D66）：**认知地图不做，「认·清」认知闭环整条线下线**，
@@ -29,6 +29,13 @@
 
 ## 二、已完成
 
+- **✅✅✅【D74】preview 上「module 依赖图被打死」已修：服务端把静态 import 改写成**带重试的动态 import（2026-11-25 10:3x—11:2x）** —— 用户上传 D73 出的 1.2.2 包后回复「**上传完成了**」；我在 preview 上实测（浏览器 SSO 登录态）抓到**第二个成因**：**D71 的 CSS 内联确实生效了**（首屏**零 CSS 请求**），但 **5 个 JS 模块被平台 429 打掉**（`/web/js/api.js`、`pet.js`、`daily.js`、`outro.js`、`/web/assets-kit/ui/ui.js`）→ `app.js` 的静态 import 链里有一个 429，**整张模块图就不执行** → 首屏按钮还是「叫它出来聊聊」（D71 的 `renderHeroAsk()` 没跑）· 右上角一直「连接中…」· 点「问它」没反应。
+  **为什么 D71 的 asset-guard 救不了**：它靠 `<script>` 的 `onerror` **重挂脚本** —— module **自己**被 429 能重挂，但**整张依赖图重新并发拉**，依赖还是可能再被打掉；module 的**某个依赖**被 429 则整张图静默失败，**没有「单模块级」重试**。而且它原来每个 script **只重试 1 轮**。
+  **撞出来的两个非直觉的坑**：① **浏览器会记住失败的 module URL** —— 同一个 URL 再 `import()` 一次直接 reject、**根本不再发请求**（限流代理日志里每个模块只记到 1 次 429）→ 处置是失败后挂递增的 `?fromxin_r=N` 再试；② 首屏的动态 `import()` **大多不是字面量**（`import(new URL('ui/ui.js', HERE).href)`）→ 静态分析拿不到 spec，**必须原样保留表达式**，由调用模块自己用 `import.meta.url` 解析。
+  **处置（全部在 `server/`，`web/` 源文件一个字没动）**：新增 `server/src/lib/module-loader.js` —— 扫描源码里**真实**的 module 引用（跳过注释；⚠️ `assets-kit/ui/ui.js` 的文件头注释里就有一行假 import，纯正则会把它当真改掉）· 构建首屏依赖图（**实测 12 个模块**）· Tarjan 找环（**实测无环**；有环的整模块跳过，动态 import 遇环会死锁）· **在响应时**把静态 import 改写成 `const __fromxinMods = await Promise.all([globalThis.__fromxinImp('/web/js/api.js'), ...])` + 解构 · 把动态 `import()` 改写成 `globalThis.__fromxinImp(new URL(<原表达式>, import.meta.url).href)` · 内联一个 classic script 到 `</head>` 之前定义 `globalThis.__fromxinImp`（单模块最多重试 **5 次**，380ms×n + 随机抖动，**失败后换 query 绕开浏览器的失败记忆**；registry 放 `globalThis` → 同一模块不会被执行两遍）。同时把 asset-guard 的 script 重试从 **1 轮放宽到 6 轮**。
+  **验证（本地限流代理复现，5 个模块前 2 次请求直接回 429）**：第 1 次全 429 → 第 2 次（重试**真的出网了**）全 429 → 第 3 次 **5 个全 200**；总耗时约 **1.5 秒**；**零 console error**（改写前 3 个 uncaught exception）；首屏按钮恢复成「**问它一件事**」；**回归 14 拍 PASS 14 / FAIL 0**（含「问它」那拍：判断 `partially_applicable` · 4 步方案 · 2 条真实出处 · 缓存命中）；**契约自检 PASS 14 / WARN 0 / FAIL 0**；3 个改动文件编码检查全过。
+  ⚠️ **还没在真 preview 上验证** —— 要等用户重新上传新包后连刷；平台对带 query 的请求另有口径未验证；最坏情况 5 次重试约 4 秒才放弃（会慢，但不会半死）。
+  **附：口径澄清**（用户问「为什么不介入大模型 AI」）—— 我们**已经在用**知乎直答 `zhida-thinking-1p5`（推理模型，20—35 秒）；不接第三方通用大模型**不违规**（官方「底层大模型不限」），取舍是出处链会断／交付环境只放行 `PORT`+`HOST`（第三方 key 只能明文进包）／直答是赛事白给额度／直答已 20—35 秒且 60 秒是硬超时线／`zhida-agent` 实测不能用；JeV 不接（D66）。想加码的性价比排序：**知乎知识库 RAG（500/天）> 小工具 PDF 解析（10/天）> 两段式直答 > 第三方大模型** —— 主链路在 12-04 拿正式链接前**冻结**。
 - **✅✅✅【D73】对账官方 Skill 规范 + 升到 1.2.2 重出包（2026-11-25 10:1x—10:28）** —— 用户贴出官方 `zhihu-ai-works-deploy-helper` 的使用说明（「**先只读探测；展示阻断项和执行边界，确认后再构建**」）问「我们遵循了吗？」。
   **对账结论：漏了两步，且版本落后** —— ① 没跑官方 step 0 的更新检查 ② 没做过「只读探测 → 展示阻断项 → 确认后再构建」这个顺序 ③ 只解压调脚本，**没做官方 README 的 `npx skills add -g` 安装**。
   **补跑只读探测（这正是官方要的那一步）**：**在当前项目目录（仓库根）上探测 = `Status: blocked`，5 个 error**（`E_DISK_WRITE_FORBIDDEN`、`E_LOCAL_PERSISTENCE`、`E_PORT_CONTRACT_UNSAFE`、`E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED`、`E_AGENT_BUILD_REQUIRED`）—— **证据全部指向 `.ctx/*.mjs` 一次性脚本与 `scripts/make-delivery.js` / `predeploy-check.js` 这些开发期文件，运行期代码不在其中**；外加 warning `W_SENSITIVE_SOURCE_FILE`（`server/.env.example`）。
@@ -162,11 +169,15 @@
 
 ## 三、阻塞项
 
-- **🔴【D71/D72/D73】preview 现在刷新还是塌陷 —— 修复已写完并**已出新包**，但**用户还没重新上传**：
-  根因是 **CloudBase 平台并发限流**（随机 429 打掉首屏静态资源，见「已完成」D71），代码已修好（CSS 内联 + 资源守护 + 只重试平台级 429）。
-  **新包已出（1.2.2 官方链重出的那一版）**：`%TEMP%\congxin\congxin.zip`（3,148,394 字节 / 87 条目 / SHA-256 `4ba10377faf3d11df1476e425e2a59f0207312a6d8faba31e6c1de4b2367e72e`），交付副本真机冒烟全过、12 张 CSS 确认已内联。
-  **下一步：用户在 AI Works step=2 重新上传这个 ZIP** → preview 才会变稳。
+- **🔴【D74】preview 仍然是半死的 —— 用户已上传过 1.2.2 的包，但实测发现**第二个成因**（module 依赖图被打死），D74 修复已写完并验证通过，新包已出，**等用户重新上传**：
+  2026-11-25 10:36 用户上传了 D73 出的包（3,148,394 字节那版）→ 我在 preview 上实测（浏览器 SSO 登录态）：
+  **D71 的 CSS 内联确实生效了**（首屏**零 CSS 请求**），但 **5 个 JS 模块被平台 429 打掉**（`api.js`/`pet.js`/`daily.js`/`outro.js`/`assets-kit/ui/ui.js`）→ 静态 import 链断一个 → **整张模块图不执行** → 按钮还是「叫它出来聊聊」、右上角一直「连接中…」。
+  **D74 已修**：服务端把静态 import 改写成**带重试的动态 import**（单个模块被 429 就自己重试，不连累整张图），并把动态 `import()` 一并纳入；asset-guard 的 script 重试从 1 轮放宽到 6 轮。
+  **本地限流代理复现验证**：5 个模块前 2 次强制 429 → 第 3 次全部 200，总耗时约 1.5 秒，零 console error。
+  **新包已出（官方 1.2.2 链全 exit 0）**：`%TEMP%\congxin\congxin.zip` · **3,157,497 字节 / 88 条目** · **SHA-256 `afc7b477e2538ea384b27f8ccf219644d767ac00a6f45ebf1b67a02ab26206fe`**；交付副本真机冒烟 **PASS 18 / FAIL 0**（含「CSS 内联 12 张」「helper 已注入且在 module 之前」「app.js 改写后无静态 import」「system.js + ui/ui.js 的动态 import 已包上重试」「pet.js 原样返回」）+ `POST /api/advice` **200 / 13.5 秒**（判断 `partially_applicable` · 4 步方案带依据编号 · 4 条真实出处）。
+  **下一步：用户在 AI Works step=2 重新上传这个 ZIP** → preview 才会真的稳。
   ⚠️ 上传侧平台返 401（`ApplyUpload` 签名校验失败，平台侧问题）→ 用户在自己 Chrome/Edge 手动传；还是失败就找赛事组，别反复重试。
+  ⚠️ **D74 还没在真 preview 上验证过** —— 上传后要连刷 5 次，确认四种塌陷（荧光绿 / 文字叠一起 / 图标方块 / 刘看山变 alt 文字）都没了，且「问它一件事」按钮正常。
 - **🔴【D70】AI Works 上传侧返 401**（`ApplyUpload` 签名校验失败）：
   同尺寸的对照包同样失败、precheck 200、时钟无偏差 → **不是交付包的问题，是平台侧签名问题**。
   **下一步：用户在自己 Chrome/Edge 手动上传**；自己浏览器也失败 → 找赛事组
