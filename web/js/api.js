@@ -22,6 +22,24 @@ export class ApiFail extends Error {
   }
 }
 
+/** 等一会儿（毫秒）。 */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 平台级限流的错误码 —— 来自腾讯云 CloudBase 网关，**不是我们自己的**。
+ *
+ * 2026-11-24 preview 实测（响应体原文）：
+ *     {"code":"EXCEED_RATELIMIT","message":"Client 127.0.0.6 exceeds rate limit.",
+ *      "requestId":"..."}
+ *
+ * ⚠️ 关键区别 —— **平台级 429 没有 `error` 信封**，我们自己的 429 有
+ *    （`{"error":{"code":"ZHIHU_RATE_LIMITED",...}}`）。
+ *    两者**必须分开对待**：
+ *      - 平台级 429 = 请求**根本没到我们的函数** → 知乎额度**没烧** → 可以安全重试；
+ *      - 我们自己的 429 = 上游知乎接口在限流 → 重试会**再烧一次额度** → 绝不重试。
+ */
+const PLATFORM_LIMIT_CODE = 'EXCEED_RATELIMIT';
+
 async function request(path, { method = 'GET', body = null, query = null } = {}) {
   const url = new URL(path, location.origin);
   if (query) {
@@ -30,40 +48,66 @@ async function request(path, { method = 'GET', body = null, query = null } = {})
     }
   }
 
-  let res;
-  try {
-    res = await fetch(url, {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (err) {
-    // ⚠️ 这句是给**终端用户**看的，不能带本地开发指令 ——
-    //    部署到公网后「先跑 node server/src/index.js」是句错话
-    //    （服务器在别处跑着，用户手里根本没有这个进程）。
-    //    开发细节进控制台，界面只说「连不上 + 稍后再试」（2026-11-23 22:3x 拟真审计）。
-    console.warn('[从心] 网络请求失败', path, err);
-    throw new ApiFail('NETWORK_ERROR', String(err?.message ?? err),
-      '连不上服务器。这次没读到数据，过一会儿再试一次。');
+  // 首屏会同时发好几个接口，平台在冷启动时会随机限流 → 退避重试两次。
+  const MAX_ATTEMPTS = 3;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res;
+    let json = null;
+
+    try {
+      res = await fetch(url, {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    } catch (err) {
+      // ⚠️ 这句是给**终端用户**看的，不能带本地开发指令 ——
+      //    部署到公网后「先跑 node server/src/index.js」是句错话
+      //    （服务器在别处跑着，用户手里根本没有这个进程）。
+      //    开发细节进控制台，界面只说「连不上 + 稍后再试」（2026-11-23 22:3x 拟真审计）。
+      console.warn('[从心] 网络请求失败', path, err);
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(600 * attempt);
+        continue;
+      }
+      throw new ApiFail('NETWORK_ERROR', String(err?.message ?? err),
+        '连不上服务器。这次没读到数据，过一会儿再试一次。');
+    }
+
+    const text = await res.text();
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+
+    // 平台级限流 → 退避重试（请求没到后端，额度没烧）
+    const isPlatformLimit = res.status === 429 && !json?.error && json?.code === PLATFORM_LIMIT_CODE;
+    if (isPlatformLimit && attempt < MAX_ATTEMPTS) {
+      console.warn('[从心] 平台限流，重试', path, `第 ${attempt} 次`);
+      await sleep(700 * attempt);
+      continue;
+    }
+
+    if (!res.ok) {
+      const e = json?.error ?? {};
+      // 平台级 429（重试用尽仍被限）：给我们自己的错误信封套一个中文提示
+      if (res.status === 429 && !e.code) {
+        throw new ApiFail('RATE_LIMITED', json?.message ?? 'HTTP 429',
+          '服务有点挤，没挤进来。过一会儿再试一次。');
+      }
+      throw new ApiFail(e.code ?? `HTTP_${res.status}`, e.message ?? `HTTP ${res.status}`,
+        e.user_hint ?? `请求失败了（HTTP ${res.status}）。`, e.detail ?? null);
+    }
+    if (!json) {
+      throw new ApiFail('BAD_RESPONSE', '后端返回的不是 JSON', '后端返回了意料之外的内容，接口可能出问题了。');
+    }
+    return json;
   }
 
-  const text = await res.text();
-  let json = null;
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
-
-  if (!res.ok) {
-    const e = json?.error ?? {};
-    throw new ApiFail(e.code ?? `HTTP_${res.status}`, e.message ?? `HTTP ${res.status}`,
-      e.user_hint ?? `请求失败了（HTTP ${res.status}）。`, e.detail ?? null);
-  }
-  if (!json) {
-    throw new ApiFail('BAD_RESPONSE', '后端返回的不是 JSON', '后端返回了意料之外的内容，接口可能出问题了。');
-  }
-  return json;
+  // 理论上走不到（最后一次要么 return 要么 throw）
+  throw new ApiFail('NETWORK_ERROR', '请求没能完成', '连不上服务器。这次没读到数据，过一会儿再试一次。');
 }
 
 export const apiGet = (path, query) => request(path, { query });

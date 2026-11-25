@@ -673,6 +673,79 @@ async function loadViewpoints() {
 const ASK_TAB_OLD_TITLE = '照镜子 · 认知闭环';
 const ASK_TAB_NEW_TITLE = '问它 · 它帮你找答案';
 
+/**
+ * 首屏主视觉 —— 把「问它」推到第一眼（2026-11-24，D66 主线切换后的收尾）。
+ *
+ * ## 背景
+ *
+ * D66 已经把主线从「认知地图/认知闭环」换成「**问它**」，但首屏那行大字
+ * 仍然是旧主线的话（「读过的东西，它会替你记着。」+「印成日报」）——
+ * 评审打开链接第一眼看到的是**已经下线的那个产品**，「问它」藏在页面最下面
+ * 的工作台 tab 里，等于没有。
+ *
+ * ## 为什么只在「还是旧值」时才改
+ *
+ * `web/index.html` 是**队友的地盘**（D65）。我们不碰他的文件，只在运行时
+ * 改**他还没改的旧文案** —— 和上面 `ASK_TAB_OLD_TITLE` 一个套路：
+ * 他哪天自己把首屏改成新口径，我们的代码自动让位，两边不打架。
+ *
+ * ⚠️ 只改**主视觉口径**（首屏大字 + 首段话 + 主按钮），
+ *    下面「日报 / 工作台」那些 section **一个字不动** ——
+ *    收藏→日报这条线一直是真功能（`/api/behavior/favorites`、`/api/cards`
+ *    都在契约里），下线的只有认知闭环那四个接口。
+ */
+const HERO_TITLE_OLD_TEXT = '读过的东西，它会替你记着。';
+const HERO_TITLE_NEW = '问它一件事。<br />它去知乎上找答案。';
+
+const HERO_LEAD_OLD =
+  '刘看山就待在你身边。你把知乎收藏交给它，它读出真实条目、印成日报，也记得你们聊过几句——只存在这台浏览器。';
+const HERO_LEAD_NEW =
+  '刘看山就待在你身边。你抛一件正遇到的难事，它去知乎上找遇到同样问题的人怎么处理的 —— 每条方案都带出处，点得回知乎原话。';
+
+const HERO_TALK_OLD = '叫它出来聊聊';
+const HERO_TALK_NEW = '问它一件事';
+
+/** 归一化空白，用来比对「这段文案还是不是旧值」。 */
+const normText = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+
+/**
+ * 把首屏主视觉换成「问它」口径。
+ *
+ * @returns {string[]} 实际改了哪几处（空数组 = 队友已经改过了，或元素不在）
+ */
+function renderHeroAsk() {
+  const changed = [];
+
+  const title = $('#ch-h');
+  // ⚠️ 比对用 **textContent**，不是 innerHTML ——
+  //    浏览器会把源码里的 `<br />` 规范化成 `<br>`，按 innerHTML 比必然不等
+  //    （2026-11-24 实测踩过：标题没换，lead 和按钮却换成功了）。
+  if (title && normText(title.textContent) === normText(HERO_TITLE_OLD_TEXT)) {
+    title.innerHTML = HERO_TITLE_NEW;
+    changed.push('#ch-h');
+  }
+
+  const lead = document.querySelector('.ch__lead');
+  if (lead && normText(lead.textContent) === normText(HERO_LEAD_OLD)) {
+    lead.textContent = HERO_LEAD_NEW;
+    changed.push('.ch__lead');
+  }
+
+  // 按钮里有个图标 <i>，只换文字节点，别把图标一起吃掉
+  const talk = $('#ch-talk');
+  if (talk) {
+    for (const node of talk.childNodes) {
+      if (node.nodeType === 3 && normText(node.textContent) === HERO_TALK_OLD) {
+        node.textContent = node.textContent.replace(HERO_TALK_OLD, HERO_TALK_NEW);
+        changed.push('#ch-talk');
+        break;
+      }
+    }
+  }
+
+  return changed;
+}
+
 /** 演示用的示例问题 —— 都是**真实的困境**，不是编出来的文案。 */
 const ASK_EXAMPLES = [
   '工作压力大到睡不着怎么办',
@@ -1010,7 +1083,7 @@ async function init() {
     pet.setTone(state.tone);
     renderToneSwitch();
     pet.setState('greet');
-    pet.say('opening', { note: '把资料拖进来，或者点下面的按钮' });
+    pet.say('opening', { note: '说说一件你正遇到的难事' });
   } catch (err) {
     pet.setState('error');
     pet.sayText(escapeHtml(err instanceof ApiFail ? err.hint : '台词加载失败。'));
@@ -1048,6 +1121,10 @@ async function init() {
 
   // 顶栏详情（身份 + 今日额度，点胶囊展开）
   initNavDetail();
+
+  // 首屏主视觉切「问它」口径（只在队友还是旧文案时才改 —— 见 renderHeroAsk 注释）
+  const heroChanged = renderHeroAsk();
+  if (heroChanged.length) console.log('[从心] 首屏口径已切「问它」：', heroChanged.join(', '));
 
   renderAskPanel();
   renderCards();

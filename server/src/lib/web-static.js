@@ -18,12 +18,39 @@
  *
  * 仓库根的定位：**按本文件位置算**（server/src/lib → 上溯三层），
  * 不看工作目录 —— 容器里的工作目录不一定是代码根。
+ *
+ * ------------------------------------------------------------------
+ * ⚠️ 2026-11-24：index.html 走**自定义处理**，不再直接交给 express.static
+ *
+ * 部署实测（preview 域名，响应头可证）：**每一个静态资源都经过腾讯云
+ * CloudBase 的 SCF 云函数**（`x-cloudbase-upstream-type: Tencent-SCF_HTTP`），
+ * 而平台的限流是**并发**限流：
+ *
+ *     HTTP 429 {"code":"EXCEED_RATELIMIT",
+ *               "message":"Client 127.0.0.6 exceeds rate limit."}
+ *
+ * 首屏同域并发约 26 个请求（12 个 CSS + 12 个 module script + 图片 + 接口），
+ * 函数冷启动期间并发容量只有 ~6，**超出的被平台直接 429 打掉**，且打掉哪几个
+ * 是随机的 → 每次刷新都可能缺样式表/缺图 → 页面塌成「荧光绿背景 + 文字叠在
+ * 一起 + 图标变方块」。2026-11-24 的实测录屏里 6 帧形态完全不同，就是这个。
+ *
+ * 三处处置（**全在 server/ 与 web/js/，不碰队友的 web/index.html、web/css/**）：
+ *   1. **CSS 全部内联**进 index.html → 首屏少 12 个并发请求，且样式**永远在**，
+ *      不会再出现「先塌后好」的闪烁。相对 url() 会改写成绝对路径。
+ *   2. **资源守护脚本**内联注入（`asset-guard.js`）→ 图片 / script 被 429 打掉
+ *      时自动重试。
+ *   3. **静态资源加缓存头** → 万一平台哪天尊重 `public, max-age`，第二次刷新
+ *      就是零请求。（平台目前强制 `private, no-store`，所以这一条先备着。）
+ *
+ * CSS 内联只做一次、写在原 `<link>` 的位置 → **级联顺序完全不变**，
+ * 队友的样式不会被我们改坏。
  */
 
 import express from 'express';
-import { existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ASSET_GUARD_SCRIPT, markGuardedScripts } from './asset-guard.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url)); // server/src/lib
 
@@ -40,6 +67,90 @@ export function findRepoRoot() {
   return null;
 }
 
+/** `<link rel="stylesheet" ...>` —— 只认带 href 的、且没有 media 的（media 的不内联）。 */
+const STYLE_LINK_RE = /<link\b[^>]*\brel=["']stylesheet["'][^>]*>/gi;
+const HREF_RE = /\bhref=["']([^"']+)["']/i;
+
+/**
+ * 改写 CSS 里的**相对 url()** —— 内联之后基准从「CSS 文件所在目录」变成了
+ * 「HTML 所在目录」，不改就会 404。
+ *
+ * 排除：data:、http(s):、//、#（SVG 片段）、%23（# 的 URL 编码形式）。
+ * 2026-11-24 实测：12 张样式表里只有 **2 处**相对 url()
+ *   - vendor/remixicon/remixicon.css → fonts/remixicon.woff2
+ *   - css/companion-home.css        → ../assets/companion/A_calm_*.png
+ * 其余全是 data URI 或 SVG 片段。
+ */
+export function rewriteCssUrls(css, href) {
+  const baseDir = posix.normalize('/web/' + posix.dirname(href));
+  return css.replace(
+    /url\(\s*(["']?)(?!data:|https?:|\/\/|#|%23)([^"')]+)\1\s*\)/gi,
+    (_match, quote, rel) => {
+      const value = rel.trim();
+      // 注释里的占位写法（如 `--g-photo: url(...) for .bg-photo`）不是真 URL，别碰
+      if (/^\.{1,3}$/.test(value) || value.includes('…')) return _match;
+      const abs = posix.normalize(posix.join(baseDir, value));
+      return `url(${quote}${abs}${quote})`;
+    },
+  );
+}
+
+/**
+ * 把 index.html 里的样式表内联成 `<style>`。
+ *
+ * @param {string} html 原始 HTML
+ * @param {string} webDir web/ 目录绝对路径
+ * @returns {{ html: string, inlined: string[], skipped: string[] }}
+ */
+export function inlineStylesheets(html, webDir) {
+  const inlined = [];
+  const skipped = [];
+
+  const out = html.replace(STYLE_LINK_RE, (tag) => {
+    const hrefMatch = HREF_RE.exec(tag);
+    const href = hrefMatch ? hrefMatch[1] : '';
+    // 绝对路径、带 query、带 hash 的不处理（首屏没有，但别误伤）
+    if (!href || href.startsWith('/') || href.includes('?') || href.includes('#')) {
+      skipped.push(href || '(no href)');
+      return tag;
+    }
+    // 带 media 的不内联（内联后优先级语义会变）
+    if (/\bmedia\s*=/i.test(tag)) {
+      skipped.push(href);
+      return tag;
+    }
+
+    const file = join(webDir, href);
+    if (!existsSync(file)) {
+      skipped.push(href);
+      return tag;
+    }
+    try {
+      const css = readFileSync(file, 'utf8');
+      const patched = rewriteCssUrls(css, href);
+      inlined.push(href);
+      return `<style data-inline-from="${href}">\n${patched}\n</style>`;
+    } catch {
+      skipped.push(href);
+      return tag;
+    }
+  });
+
+  return { html: out, inlined, skipped };
+}
+
+/**
+ * 组装最终下发的 index.html：内联 CSS → 标记 script → 注入守护脚本。
+ */
+export function buildIndexHtml(html, webDir) {
+  const { html: styled, inlined, skipped } = inlineStylesheets(html, webDir);
+  const guarded = markGuardedScripts(styled);
+  const withGuard = guarded.includes('</body>')
+    ? guarded.replace('</body>', `<script>${ASSET_GUARD_SCRIPT}</script>\n</body>`)
+    : guarded + `<script>${ASSET_GUARD_SCRIPT}</script>`;
+  return { html: withGuard, inlined, skipped };
+}
+
 /**
  * 挂载前端静态资源。**必须在接口路由之后、404 兜底之前调用**：
  * 顺序反了会「接口被静态吃掉」或「静态永远轮不到」。
@@ -51,11 +162,71 @@ export function mountWeb(app) {
     return { mounted: false, root: null };
   }
 
-  // 素材：缓存 1 小时（内容不变，带 hash 更好，但 ffmpeg 转出来的文件名固定）
-  app.use('/assets', express.static(join(root, 'assets'), { index: false, maxAge: '1h' }));
+  const webDir = join(root, 'web');
+
+  // 静态资源的缓存时长（秒）。
+  //   - 默认 300（5 分钟）：同一场演示里反复刷新时，第二次起浏览器直接用缓存，
+  //     不会再触发一轮「26 个并发请求」的风暴 → 页面稳定。
+  //   - 平台目前把 Cache-Control 改写成 `private, no-store`（2026-11-24 实测），
+  //     所以这个值在公网上**大概率不生效**；留着是为了哪天平台改口径时我们已经在位。
+  //   - 本地开发改完 CSS 想立刻看到 → 等 5 分钟，或把 STATIC_MAX_AGE_SEC 设成 0。
+  const staticMaxAge = Number(process.env.STATIC_MAX_AGE_SEC ?? 300);
+  const staticCacheControl = `public, max-age=${staticMaxAge}`;
+
+  // 素材：内容不变（刘看山那几张 webp），缓存久一点
+  app.use(
+    '/assets',
+    express.static(join(root, 'assets'), {
+      index: false,
+      maxAge: '1h',
+      setHeaders: (res) => res.setHeader('Cache-Control', 'public, max-age=3600'),
+    }),
+  );
+
+  // index.html 走自定义处理：CSS 内联 + 守护脚本注入。
+  // ⚠️ 必须排在下面的 express.static 之前 —— static 会直接命中 index.html。
+  const indexHandler = (req, res) => {
+    try {
+      const raw = readFileSync(join(webDir, 'index.html'), 'utf8');
+      const built = buildIndexHtml(raw, webDir);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      // 页面本身不缓存：改完刷新就要看到（演示现场会反复改）。
+      res.setHeader('Cache-Control', 'no-cache');
+      res.send(built.html);
+    } catch (err) {
+      res.status(500).json({
+        error: {
+          code: 'INDEX_BUILD_FAILED',
+          message: '页面没能组装出来',
+          user_hint: '刷新一下试试',
+          retryable: true,
+          retry_after_ms: null,
+          upstream: null,
+          detail: String(err && err.message),
+        },
+      });
+    }
+  };
+  app.get('/web', indexHandler);
+  app.get('/web/', indexHandler);
+  app.get('/web/index.html', indexHandler);
 
   // 页面：不缓存，保证演示现场改完刷新就能看到（宁可多请求一次，不要看到旧版）
-  app.use('/web', express.static(join(root, 'web'), { index: 'index.html', maxAge: 0 }));
+  app.use(
+    '/web',
+    express.static(webDir, {
+      index: false,
+      maxAge: 0,
+      setHeaders: (res, filePath) => {
+        // HTML 不缓存；CSS/JS/图片/字体按 STATIC_MAX_AGE_SEC 缓存
+        if (filePath.endsWith('.html')) {
+          res.setHeader('Cache-Control', 'no-cache');
+        } else {
+          res.setHeader('Cache-Control', staticCacheControl);
+        }
+      },
+    }),
+  );
 
   // 根路径 → 页面（素材是相对路径，必须从 /web/ 进）
   app.get('/', (req, res) => res.redirect(302, '/web/'));

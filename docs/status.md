@@ -1,6 +1,6 @@
 # status.md — 当前进度
 
-最后更新：2026-11-24 21:0x
+最后更新：2026-11-24 22:4x
 赛事：知乎黑客松 S3·湾区共创季（`activity_code=zhihu_hackathon_2026_p3`）
 
 > ⚠️ **2026-11-24 12:0x 起产品主线已换**（D66）：**认知地图不做，「认·清」认知闭环整条线下线**，
@@ -29,6 +29,7 @@
 
 ## 二、已完成
 
+- **✅✅【D71】preview「每次刷新长得都不一样」的根因锁定 = CloudBase 平台并发限流，修复已写完并本地验证通过（2026-11-24 22:0x—22:4x）** —— 用户贴 preview 链接说「看着很难看」+ 补录屏说「每次刷新都是不一样的，并且都很奇怪」。**实测证据（不是推断）**：preview 响应头 `x-cloudbase-upstream-type: Tencent-SCF_HTTP`（**每个静态资源都回源到我们的 SCF 云函数**）· `server: BLB/25.12.0.2`（EdgeOne 最外层）· 429 body `{"code":"EXCEED_RATELIMIT","message":"Client 127.0.0.6 exceeds rate limit."}`（**平台文案**）· `cache-control` 被平台改写成 `private, no-store` → 每次刷新全量重下。**并发实测**：首屏同域并发约 **26 个** → 冷启动期容量 ~6 → **8 个 429 + 6 个 200**；热身 9 个并发全 200，再打 12 个 → 11 个 200 + 1 个 429。**打掉哪几个是随机的** → 每次缺的东西不一样 → 每次长得不一样。塌陷形态对应关系实测到：缺 `backgrounds.css`/`companion-home.css` → 整屏荧光绿 · 缺 `layout.css` → 文字叠在一起 · 缺 `remixicon.css` → 图标变方块 · 缺 `idle.webp` → 刘看山变三个 alt 文字 · 缺 `/api/tone` → 桌宠没台词 · 缺 `/api/auth/profile` → 右上角「知乎没连好」（用户录屏 6 帧形态完全不同，正是这一条）。**处置全部落在我们自己的 `server/` + `web/js/`，队友目录一个字没碰**：① **`server/src/lib/web-static.js` 重写** —— 12 张 `<link rel="stylesheet">` **原地**内联成 `<style>`（保持文档顺序 → 级联顺序不变，相对 `url()` 改绝对路径，只 2 处真相对 url），`/web`/`/web/`/`/web/index.html` 改自定义 handler 且**排在 `express.static` 之前** ② **`server/src/lib/asset-guard.js` 新建** —— 内联注入资源守护脚本（图片/script 被 429 打掉自动重试；**不做 CSS 重试**，避免 FOUC）③ **`web/js/api.js`** —— API 退避重试，但**只重试平台级 429**（没到后端、没烧知乎额度），**我们自己的 `ZHIHU_RATE_LIMITED` 绝不重试**（否则再烧一次直答额度）④ 静态资源加缓存头 `STATIC_MAX_AGE_SEC`（默认 300 秒，**平台目前强制 `no-store`，这条先备着**）。**顺带把首屏大字口径切成「问它」**（D66 换了主线但首屏还是旧口径，评审第一眼看到的仍是已下线的产品）—— 沿用代码里已有的「只在还是旧值时才改」惯例（`ASK_TAB_OLD_TITLE` 模式），**队友自己改了我们的代码自动让位**。**实测**：本地 `/web/` 输出 459,004 字符 · `<style data-inline-from>` **12 个** · `<link rel="stylesheet">` 只剩 1 条（Google Fonts，正确跳过）· 浏览器实测背景图/图标/刘看山/底栏 9·0·1 全正常 · console **只有 1 条 log、无 error** · 「问它」面板渲染正常、手动提问返回真实方案 · **契约自检 PASS 14 / WARN 0 / FAIL 0 · 完整回归 PASS 14 / FAIL 0 · 轻量回归 PASS 7 / FAIL 0** · 编码自检 `BOM=N / U+FFFD=0 / CRLF=0`。⚠️ **修好的代码还没上线** —— preview 此刻仍指向旧包，见阻塞项。
 - **✅【D70】AI Works 部署包已出，官方 helper 七步全跑通**（2026-11-24 20:20—20:50）：
   helper 从平台 step=2 页面**印着的公开地址**直接下（`zhstatic.zhihu.com/skill/application/d6c1-260923/zhihu-ai-works-deploy-helper_v1.2.0.zip`，
   126,719 字节）→ `build-check` PASS 11 → `inspect_node_project` exit 0 → `write_backend_runtime` → `write_deploy_descriptors`
@@ -136,6 +137,11 @@
 
 ## 三、阻塞项
 
+- **🔴【D71】preview 现在刷新还是塌陷 —— 修复已写完并本地验证通过，但没上线**：
+  根因是 **CloudBase 平台并发限流**（随机 429 打掉首屏静态资源，见「已完成」D71），代码已修好（CSS 内联 + 资源守护 + 只重试平台级 429）。
+  **但 `%TEMP%\congxin\congxin.zip` 仍是旧包，不含本轮修复** → preview `https://pekropd3uupx.preview.aiworks.site/web/` 此刻刷新还是塌陷。
+  **下一步：用户授权出包（按 D63 不主动出包）→ 用户在 AI Works step=2 重新上传** → preview 才会变稳。
+  ⚠️ 出包要走官方 helper 七步（不是只跑 `make-delivery.js`），步骤见 `docs/handoffs/2026-11-24-2240-preview-ratelimit-css-inline.md` 第 4 节。
 - **🔴【D70】AI Works 上传侧返 401**（`ApplyUpload` 签名校验失败）：
   同尺寸的对照包同样失败、precheck 200、时钟无偏差 → **不是交付包的问题，是平台侧签名问题**。
   **下一步：用户在自己 Chrome/Edge 手动上传**；自己浏览器也失败 → 找赛事组
@@ -179,6 +185,7 @@
 | B31 | **分工：视觉与设计 vs 功能** | ✅ **已按用户拍板分家并落地（11-24 11:0x—11:2x，D65）**。用户原话：「不要全部自己做吧，让队友做视觉和设计的部分，我们做功能这些的部分，最好是分开分工」。**目录级硬边界**：队友 `5zdz5` 拿 `web/index.html` + `web/css/` + `web/assets/` + `assets/` + `docs/adr/`（**视觉与设计**）；本会话拿 `web/js/` + `server/` + `contracts/` + `scripts/` + `docs/decisions.md` + `docs/status.md`（**功能**）。**接缝只有 `web/index.html` 一处**，用**界面契约**兜住：新增 `contracts/ui-contract.json`（冻结 **39 个 id + 4 个 class + 1 个 data 属性**），**我们要加界面元素一律在 `web/js/` 里建 DOM**；`scripts/check-contract.ps1` **新增第 14 项**当场校验 —— 钩子少一个 → `FAIL`（退出码 1），JS 引用未登记钩子 → `WARN`。**实测**：自检 **PASS 14 / WARN 0 / FAIL 0**；反向把 `id="ch-pet"` 改坏 → 当场 `FAIL 界面契约 ui-contract.json — index.html 里少了 id『ch-pet』`，改回即恢复全绿。**提交方式**：队友的改动**走 PR**（D41 触发条件「队友回来」已满足 —— 视觉改动可能打断我们的 JS 契约），我们自己那半边**继续直推 main**。**完整边界 + 双方交付物 + 验收标准**见 `docs/分工-视觉与功能.md`；给队友的确认稿在 `docs/队友对齐清单.md` **零 M** | AI（已落地）+ 用户（发给队友） |
 | B32 | **换主线：认知地图砍掉，「问它」上线** | ✅ **已按用户拍板换完（11-24 12:0x—12:3x，D66）**。用户带来队友原话（「抛给他一个问题 → 通过知乎搜索相似困境 → 找对策 → 判断采用与否 → 给出方案」）并明确「**认知地图不打算做了**」，三问**全选推荐项**：① **认知闭环全砍**（断层 / 情境题 / 认知地形三个接口 + 三个 service + 前端渲染全拆，卡片主流程保留）② **直答一条龙**（`zhida-thinking-1p5`，**不接 JeV**）③ **知乎搜索（5000/天）**做上游（不占「问题发现 100/天」）。**代码**：新增 `server/src/services/advice.js` + `server/src/routes/advice.js` + `endpoints.js` 的 `zhihuSearch()`；**删 6 个文件**（`routes/cognition.js` / `services/tension.js` / `services/situation.js` / `services/terrain.js` / `web/js/quiz.js` / `web/js/terrain.js`）；`web/js/` 换成「问它」面板 + 4 步引导 + 新演练脚本 + 桌宠对话接后端。**契约**：`api.json` v0.7（**11 个路径**）、`ui-contract.json` v2（33 个 id）。⚠️ **零 M 白话版当前那版还在要求队友做 P4 真 3D 推镜 + 认知地图 —— 已过期，不能发** | AI（已完成）+ 用户（重写零 M 后自己发） |
 | B33 | **「问它」链路能不能真跑通、出处是不是真的** | ✅ **能（11-24 12:0x—12:3x，实测）**。`POST /api/advice` 实跑 **HTTP 200**：`verdict=applicable` + 一句话结论 + **6 步方案**（每步带「依据 N 条」）+ **4 条真实出处**（含 `https://www.zhihu.com/question/.../answer/...` 与 `zhuanlan.zhihu.com/p/...`）+ `candidate_count=6`；再问一次 `cached=true` 命中缓存。**浏览器实测**（18801）：首屏 → tab 切到「问它 · 它帮你找答案」→ 抛问题 → 方案卡 + 依据标注 + 出处列表全部渲染正常；4 步引导走完出完成卡（「你刚刚自己问通了「问它」」+ 真实数字）。**回归重写**：`scripts/regress-p3.js` 新增「出处对账」与「认知闭环接口必须 404」两拍 → **PASS 14 / FAIL 0**（轻量版 7/7，零额度消耗）；契约自检 **PASS 14 / WARN 0 / FAIL 0**。**顺手修一个真 bug**：工作台是「固定高度 + 内部滚动」窗口，答案渲染在窗口内部 → 不主动滚一下用户会以为没反应，已加 `revealAskResult()`。⚠️ **两条实测结论别改回去**：格式要求必须和材料一起写进 **user** 消息（放 system 里模型直接无视）；`zhihu_search` **能给原回答 URL**（推翻了 11-18 的旧记录） | AI（已完成） |
+| B34 | **preview 部署版「每次刷新长得都不一样」** | ✅ **根因已查明并修好，但没上线（11-24 22:0x—22:4x，D71）**。**不是审美问题、也不是我们代码的问题** —— 是 **CloudBase 平台并发限流**（429 body `{"code":"EXCEED_RATELIMIT","message":"Client 127.0.0.6 exceeds rate limit."}`；`x-cloudbase-upstream-type: Tencent-SCF_HTTP` → 每个静态资源都回源 SCF；平台把 `cache-control` 改写成 `private, no-store` → 每次刷新全量重下）。**首屏同域并发约 26 个、冷启动容量 ~6 → 8 个 429 + 6 个 200**，**打掉哪几个随机** → 每次缺的不一样 → 每次长得不一样。**修复（全部在我们自己的 `server/` + `web/js/`）**：12 张 CSS 内联进 `index.html`（级联顺序不变）· 内联注入资源守护脚本（图片/script 被 429 打掉自动重试）· API **只重试平台级 429**、**我们自己的 `ZHIHU_RATE_LIMITED` 绝不重试**（免得再烧直答额度）· 静态资源加缓存头备着。**顺带把首屏大字口径切成「问它」**（沿用「只在还是旧值时才改」惯例）。**实测**：本地 `/web/` 459,004 字符 · 12 个内联 `<style>` · 浏览器 console 无 error · 契约自检 **PASS 14 / WARN 0 / FAIL 0** · 回归 **PASS 14 / FAIL 0**。⚠️ **修复没上线**：现存 ZIP 是旧包 → **需用户授权出包（D63）+ 用户重新上传**，preview 才会变稳 | AI（已修好，等授权出包）+ 用户（上传） |
 
 
 ## 四、开发顺序与倒排计划
@@ -331,7 +338,7 @@ Access Secret 已配置（`zhihu-cli auth set` 因其自带校验环节报 `AUTH
 7. **12-05 提报入口开放后去赛事页面取 App ID / App Key**（B4，路径已确认）：**不要发邮件申请**。OAuth 联调窗口可能只有 12-05 → 12-07，但 **Demo 主路径不依赖 OAuth**（已用真实进程验过：没有登录态时行为接口照样读得到真实收藏 9 条）。
 8. ✅ **方向已拍板（B13 关闭，D29）**｜✅ **零 I 已发**｜✅ **契约 14 个路径全部实现并实跑**｜✅ **P1 七件事已拍板（D33）**｜✅ **接入方式定案：维持 API 直连（D34）**｜✅ **「Demo 不依赖 OAuth 也能跑」已验**｜✅ **`web/` 前端第一版已出并实跑（11-18 21:4x）**。
 9. **P1—P9 按总表推进**，每阶段结束必须拿到"能给人看的东西"才算过。
-10. 🔴 **P7 的审核时间是外部依赖**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**（总表已把 P7 排到 11-30，别拖）。✅ **部署形态本身已就绪（11-19，D42）**：后端进程同进程挂前端静态，实测**一个进程就能出完整作品**（`/` → 302 → `/web/`，13 个请求全 200、console 0 错、9 条真实收藏正常）。✅ **打包与预检也已就绪（11-19，D46）**：`node scripts\predeploy-check.js` 一条命令出 **ZIP + manifest + 「部署前 9 条检查」对照报告**，**实跑全绿**；步骤见 `docs/部署指南.md` —— **剩下的只是「用户授权 → 人在平台点上传 → 等审核」**。
+10. 🔴 **P7 的审核时间是外部依赖**：AI Works 正式公网链接要等内容审核通过，**12-04 前必须完成一次已审核发布**（总表已把 P7 排到 11-30，别拖）。✅ **部署形态本身已就绪（11-19，D42）**：后端进程同进程挂前端静态，实测**一个进程就能出完整作品**（`/` → 302 → `/web/`，13 个请求全 200、console 0 错、9 条真实收藏正常）。✅ **打包与预检也已就绪（11-19，D46）**：`node scripts\predeploy-check.js` 一条命令出 **ZIP + manifest + 「部署前 9 条检查」对照报告**，**实跑全绿**；步骤见 `docs/部署指南.md` —— **剩下的只是「用户授权 → 人在平台点上传 → 等审核」**。⚠️ **11-24 22:4x 补（D71）**：preview 之所以「每次刷新都不一样」是**平台并发限流随机打掉静态资源**，代码已修好（CSS 内联 + 资源守护 + 只重试平台级 429）→ **必须重出包并重新上传才会变稳**（出包需用户点名授权，D63）。
 11. **人时是紧的**：总表合计 55 人时贴着上限（可用 28—56）。D66 砍掉认知闭环后**实际约 43 人时**，缺口从 13 缩到约 3。⚠️ **「最后才砍真 3D 推镜」这条已作废**（D66：2.5D 地图 + 真 3D 推镜整体取消）→ 现在要盯的是 **P7 的外部审核时间**和 **P6 的观感打磨**。
 12. 🔴 **换主线后必须由人做的三件（AI 不能代劳）**：
     - **零 M 白话版重写** —— 当前 `fb62d72` 那版还在要求队友做 P4 真 3D 推镜 + 认知地图，**已过期不能发**；新版要去掉这两项、加上「问它」新主线、并说清**为什么用直答而不是 JeV**（JeV 不产文字、要多一个第三方 key + 部署环境变量；后面想换随时能换）。
