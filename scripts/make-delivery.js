@@ -350,6 +350,29 @@ export function resolveAccessSecret() {
 }
 
 /**
+ * 交付副本的 `web-static.js` 改写：静态资源缓存时长改成**字面量**。
+ *
+ * 为什么：官方 AI Works 只放行 `PORT` / `HOST` 这几个受管环境变量，
+ * 别的 `process.env.*` 会被官方探测器判成 `E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED`
+ * **直接阻断打包**（交付副本自检与官方探测器同口径，宁可在这里红）。
+ *
+ * 仓库里保留 `STATIC_MAX_AGE_SEC` 这个开关是**给本地开发用的**
+ * （改完 CSS 不想等浏览器缓存时设成 0）；**交付版直接写死 300 秒** ——
+ * 平台目前把 Cache-Control 改写成 `private, no-store`（2026-11-24 实测），
+ * 这个值在公网上本来就不生效，写死不影响任何线上行为。
+ */
+function patchWebStatic() {
+  return [
+    replace(
+      'server/src/lib/web-static.js',
+      'const staticMaxAge = Number(process.env.STATIC_MAX_AGE_SEC ?? 300);',
+      'const staticMaxAge = 300; // 交付版：不读环境变量（官方规范只放行 PORT / HOST）',
+      'web-static.js：缓存时长写死 300 秒'
+    ),
+  ];
+}
+
+/**
  * 交付副本的 `package.json` 改写。
  *
  * ## 为什么交付版没有 `build` 脚本
@@ -690,10 +713,15 @@ function checkRuntimeRefs() {
  * 官方要求：后端如果会把 HTML 发给浏览器，必须逐个页面记录
  * 「项目根相对路径 + 源码证据」，传给 `--backend-html-pages`。
  *
- * 我们的页面只有 `web/index.html` 一个，证据是挂载它的那几行源码。
+ * 我们的页面只有 `web/index.html` 一个。
+ *
+ * ⚠️ 2026-11-24（D71）证据行跟着代码一起改过：原先 index.html 是直接交给
+ * `express.static` 的，证据行是那一句挂载；现在 index.html 走**自定义 handler**
+ * （CSS 内联 + 资源守护脚本注入），所以证据行换成 handler 的挂载与根路径重定向。
+ * **证据行必须与当前源码逐字一致** —— 找不到就会在这里直接报错（不静默产出坏包）。
  */
 function writeHtmlPages() {
-  const staticLine = "app.use('/web', express.static(join(root, 'web'), { index: 'index.html', maxAge: 0 }));";
+  const indexHandlerLine = "app.get('/web/', indexHandler);";
   const redirectLine = "app.get('/', (req, res) => res.redirect(302, '/web/'));";
   const mountLine = 'const web = mountWeb(app);';
 
@@ -701,13 +729,14 @@ function writeHtmlPages() {
     {
       Path: 'web/index.html',
       Reason:
-        '后端在接口路由之后、404 兜底之前用 express.static 挂载 /web 目录（index 指向 web/index.html），' +
+        '后端在接口路由之后、404 兜底之前用 mountWeb 挂载 /web 目录：index.html 由自定义 handler ' +
+        '组装后下发（CSS 内联 + 资源守护脚本注入），其余静态资源交给 express.static；' +
         '根路径 302 到 /web/；所以浏览器能拿到这个 HTML 页面。',
       Evidence: [
         {
           File: 'server/src/lib/web-static.js',
-          Line: findLine('server/src/lib/web-static.js', staticLine),
-          Text: staticLine,
+          Line: findLine('server/src/lib/web-static.js', indexHandlerLine),
+          Text: indexHandlerLine,
         },
         {
           File: 'server/src/lib/web-static.js',
@@ -764,6 +793,9 @@ function main() {
 
   const changes = patchConfig();
   console.log(`[2/4] 改写 config.js：${changes.length} 处`);
+
+  const staticChanges = patchWebStatic();
+  console.log(`    改写 web-static.js：${staticChanges.length} 处`);
 
   patchPackageJson();
 

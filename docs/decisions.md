@@ -2693,3 +2693,50 @@ D66 已把主线换成「问它」，但首屏大字仍是旧主线的话（「�
 - **CSS 内联是服务端行为**，队友在本地开发时看到的仍是原来的 `<link>` 版本（开发期是双进程 `web/serve.js`）——
   两边行为不同，但**线上版本才是评审看到的那份**。
 
+## D72 · 交付副本与仓库源可以不同，但差异只允许「环境变量 → 字面量」这一类
+
+- **时间**：2026-11-25 10:16
+- **触发**：D71 重写 `web-static.js` 之后重出交付包，`make-delivery.js` **连续两次当场报错退出**。
+  两次都不是 bug，是**这套自检在按设计工作** —— 它宁可在这里红，也不让一个到了官方那边才被阻断的包出笼。
+
+### 1. 第一次拦：HTML 证据行找不到
+
+`writeHtmlPages()` 里硬编码了一条证据行，指的是 D71 之前的挂载写法：
+
+```
+app.use('/web', express.static(join(root, 'web'), { index: 'index.html', maxAge: 0 }));
+```
+
+D71 把 `index.html` 改成**自定义 handler**（CSS 内联 + 守护脚本注入）之后，这行不存在了 →
+`✗ 交付副本生成失败：证据行找不到：server/src/lib/web-static.js → app.use('/web', express.static(...))`。
+
+**处置**：证据行换成 handler 的挂载与根路径重定向（`app.get('/web/', indexHandler);` /
+`app.get('/', (req, res) => res.redirect(302, '/web/'));` / `const web = mountWeb(app);`），
+`Reason` 同步改成「index.html 由自定义 handler 组装下发，其余静态资源交给 express.static」。
+**证据行的作用就是「官方回头查源码时能对上」** —— 源码变了它必须跟着变，不许留着一行过期的假证据。
+
+### 2. 第二次拦：交付副本读了非受管环境变量
+
+```
+✗ 交付副本生成失败：交付副本自检没过（这批文件会被官方探测器判成阻断项）：
+  - server/src/lib/web-static.js:173 读了非受管环境变量 STATIC_MAX_AGE_SEC
+```
+
+官方 AI Works 只放行 `PORT` / `HOST` / `HOSTNAME` / `NITRO_HOST` / `NITRO_PORT`，
+别的 `process.env.*` 会被官方探测器判成 `E_USER_ENVIRONMENT_VARIABLE_UNSUPPORTED` **直接阻断打包**。
+
+**处置**：**仓库源保留 `STATIC_MAX_AGE_SEC` 开关**（本地开发改完 CSS 不想等浏览器缓存时设 0），
+**交付副本把它写死 300 秒**（`make-delivery.js` 新增 `patchWebStatic()`）。
+平台目前把 `Cache-Control` 改写成 `private, no-store`（D71 实测），这个值在公网上**本来就不生效**，
+写死不影响任何线上行为。
+
+### 3. 结论
+
+- **交付副本 ≠ 仓库源**，但差异**只允许「环境变量 → 字面量 / 文件」这一类**
+  （官方只认 `PORT`/`HOST`，密钥走官方 11.7 的「写入文件」口径）。
+- **任何让交付版多读一个不受管环境变量的改动，出包时会被当场拦下** —— 这是自检的价值，别去放宽它。
+- 官方链七步（`inspect_node_project` → `write_backend_runtime` → `write_deploy_descriptors` →
+  `validate_deploy_output` → `settle_agent` → `create_project_archive` → `fix-zip-exec-bit`）**必须全跑**，
+  只跑 `make-delivery.js` 出来的目录**不是**可上传的包。
+
+
