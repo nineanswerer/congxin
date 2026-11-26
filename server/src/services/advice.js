@@ -57,10 +57,33 @@ import { zhihuSearch, chatComplete } from '../zhihu/endpoints.js';
 import { petLines, resolveTone } from './tone.js';
 
 const MODEL = 'zhida-thinking-1p5';
+const MODEL_FAST = 'zhida-fast-1p5';
 const MAX_QUESTION_LEN = 100;
 const MAX_CANDIDATES = 6;      // 实际送进模型的候选条数（上游给 10 条）
 const EXCERPT_LEN = 700;       // 每条正文截断长度（模型上下文有限）
+const COMPACT_CANDIDATES = 3;  // 兜底档位：候选条数砍到 3 条
+const COMPACT_EXCERPT_LEN = 320; // 兜底档位：正文截断砍到 320 字
 const POOL_TTL_MS = 5 * 60 * 1000;
+
+/**
+ * 2026-11-26 实测（见 D77）：**上游直答有一个「等待任务 3 秒」的窗口**。
+ *
+ * - 正式域名（AI Works 出口）上带完整材料（6 条 × 700 字 ≈ 4200 字）必超时：
+ *   上游回 HTTP 433 + `{"ret_code":200401}`，ret_msg 解开是
+ *   "Waiting task timed out after 3 seconds"。
+ * - 同一份代码在本机跑同样的 prompt **能成功**（端到端 7 秒）→ 不是代码问题，
+ *   是「出口链路耗时把上游那 3 秒的等待窗口吃掉了」。
+ * - 同一 prompt 下 `zhida-fast-1p5` 比 `zhida-thinking-1p5` 快一倍多
+ *   （短 prompt 实测 1.5s vs 3.5s）。
+ *
+ * → 所以这里不是「重试同一个模型」，而是**按档位往下走**：
+ *   ① thinking + 全量材料（质量最好）
+ *   ② fast + 全量材料
+ *   ③ fast + 精简材料（3 条 × 320 字）
+ * 每一档都是一次真实的上游调用 → **最多烧 3 次直答**（100 次/天那组），
+ * 同一问题 5 分钟内走缓存不再烧。
+ */
+let thinkingTimedOut = false;   // thinking 一旦超时，后续直接先走快模型（别再白烧一次）
 
 /** 适用性判断的三档（模型只能回这三种值之一）。 */
 const VERDICTS = new Set(['applicable', 'partially_applicable', 'not_applicable']);
@@ -109,16 +132,27 @@ async function fetchCandidates(question) {
 
 // ---------------------------------------------------------------- 直答
 
-/** 送进模型的那段材料：编号 + 问题标题 + 作者 + 正文。 */
-function buildMaterial(candidates) {
+/**
+ * 送进模型的那段材料：编号 + 问题标题 + 作者 + 正文。
+ *
+ * @param {object[]} candidates
+ * @param {{limit?:number, excerptLen?:number}} [opts]
+ *   limit     最多取几条（兜底档位砍到 3 条）
+ *   excerptLen 每条正文截断长度（兜底档位砍到 320 字）
+ *   ⚠️ **编号必须跟 candidates 的下标一一对应** —— 模型回的是编号，
+ *      后端拿编号回指真实 URL，所以只能从前面取，不能跳着取。
+ */
+function buildMaterial(candidates, { limit = MAX_CANDIDATES, excerptLen = EXCERPT_LEN } = {}) {
   return candidates
+    .slice(0, limit)
     .map((c, i) => {
       const n = i + 1;
-      const extra = c.has_more_text ? '（正文较长，已截断）' : '';
+      const text = excerptLen < c.excerpt.length ? c.excerpt.slice(0, excerptLen) : c.excerpt;
+      const extra = (c.has_more_text || text.length < c.excerpt.length) ? '（正文较长，已截断）' : '';
       return [
         `[${n}] 问题：${c.question_title}`,
         `    作者：${c.author_name ?? '匿名'}`,
-        `    回答：${c.excerpt}${extra}`,
+        `    回答：${text}${extra}`,
       ].join('\n');
     })
     .join('\n\n');
@@ -224,12 +258,30 @@ const SYSTEM_PROMPT_RETRY = null;   // ⚠️ 见上面：格式要求必须进 
  * @param {string} prefix    重试时顶在最前面的额外强调
  * @returns {{content:string|null, parsed:object|null}}
  */
-async function askModel(userText, temperature, prefix = '') {
-  const { content } = await chatComplete(MODEL, [
+async function askModel(model, userText, temperature, prefix = '') {
+  const { content } = await chatComplete(model, [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: `${prefix}${userText}` },
   ], { temperature });
   return { content, parsed: parseAdvice(content) };
+}
+
+/**
+ * 判断这次失败是不是**上游「等待任务超时」**（2026-11-26 实测，详见 D77）。
+ *
+ * ⚠️ 只有这一种才值得换档重试：
+ *   - 额度耗尽（30002）→ 重试到明天也没用；
+ *   - 鉴权失败（20001 / 401）→ 重试也是白烧。
+ * 上游超时的特征：HTTP 433 或 `ret_code: 200401`，
+ * `ret_msg` 解开是 "Waiting task timed out after 3 seconds"。
+ */
+function isUpstreamTaskTimeout(err) {
+  if (!err) return false;
+  const up = err.upstream ?? {};
+  return err.code === 'ZHIHU_UPSTREAM_ERROR'
+    && (up.code === 433
+      || up.ret_code === 200401
+      || /timed out after/i.test(String(up.ret_msg ?? '')));
 }
 
 /**
@@ -484,22 +536,50 @@ export async function buildAdvice(req) {
 
   // ②③ 完整结果（直答，100/天）—— 缓存 5 分钟，同问题重复问不烧额度
   const full = await cached(`advice:full:${qKey}:${toneId}`, POOL_TTL_MS, async () => {
-    const material = buildMaterial(candidates);
-    // ⚠️ **格式要求必须和材料放在同一条 user 消息里** —— 放 system 里模型会无视它。
-    const userText = `${FORMAT_INSTRUCTIONS}\n\n【朋友的问题】\n${question}\n\n【知乎上搜到的真实回答】\n${material}`;
+    // ---- 直答：**按档位往下走**（2026-11-26 实测，见 D77）----
+    //   ① thinking + 全量材料（质量最好）
+    //   ② 上游「等待任务 3 秒超时」→ fast + 全量材料
+    //   ③ 还是超时 → fast + 精简材料（3 条 × 320 字）
+    // 最多 3 次上游调用；同一问题 5 分钟内走缓存，不再烧。
+    const tiers = [
+      { model: MODEL, limit: MAX_CANDIDATES, excerpt: EXCERPT_LEN },
+      { model: MODEL_FAST, limit: MAX_CANDIDATES, excerpt: EXCERPT_LEN },
+      { model: MODEL_FAST, limit: COMPACT_CANDIDATES, excerpt: COMPACT_EXCERPT_LEN },
+    ];
+    // thinking 一旦在这台机器上超时过，后面就别再拿它当第一档白烧一次额度了
+    const tierList = thinkingTimedOut ? tiers.slice(1) : tiers;
 
-    // ---- 第一次：正常提示 ----
-    let attempt = await askModel(userText, 0.4);
+    const buildUserText = (tier) => {
+      const material = buildMaterial(candidates, tier);
+      // ⚠️ **格式要求必须和材料放在同一条 user 消息里** —— 放 system 里模型会无视它。
+      return `${FORMAT_INSTRUCTIONS}\n\n【朋友的问题】\n${question}\n\n【知乎上搜到的真实回答】\n${material}`;
+    };
 
-    // ---- 第二次：**只在第一次没解析出来时**才重试 ----
-    //   直答 100 次/天，很紧 → 正常路径只烧 1 次。
-    //   重试用更强调格式的前缀 + temperature 0（要稳定，不要发挥）。
-    if (!attempt.parsed) {
-      attempt = await askModel(userText, 0, RETRY_PREFIX);
+    let attempt = { content: null, parsed: null };
+    let prefix = '';
+    let temperature = 0.4;
+    let lastTimeout = null;
+
+    for (const tier of tierList) {
+      const userText = buildUserText(tier);
+      try {
+        const r = await askModel(tier.model, userText, temperature, prefix);
+        attempt = r;
+        if (r.parsed) break;
+        // 没解析出来 → 下一档用更强调格式的前缀 + temperature 0（要稳定，不要发挥）
+        prefix = RETRY_PREFIX;
+        temperature = 0;
+      } catch (err) {
+        if (!isUpstreamTaskTimeout(err)) throw err;   // 额度/鉴权等 → 直接抛，不重试
+        lastTimeout = err;
+        if (tier.model === MODEL) thinkingTimedOut = true;
+      }
     }
 
     const parsed = attempt.parsed;
     if (!parsed) {
+      // 全档位都被上游超时打掉 → **说真话**（别包装成「没整理出格式」）
+      if (lastTimeout) throw lastTimeout;
       return { ok: false, reason: 'model_format' };
     }
 

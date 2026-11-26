@@ -113,8 +113,26 @@ async function callUpstreamJson(path, {
         });
       }
       if (!res.ok) {
+        // ⚠️ **必须读一次响应体**（2026-11-26 实测）：
+        //    知乎直答的失败原因**写在 body 里**，不在 status 里 ——
+        //      {"ret_code":200401,"ret_msg":"<base64>","duration_in_ms":3000}
+        //      ret_msg 解开是 "Waiting task timed out after 3 seconds"
+        //    只看 statusText 会把「上游等任务超时」变成一句没信息量的「HTTP 433」，
+        //    后面就没法据此换模型重试了。
+        const upstream = { code: res.status, message: res.statusText };
+        try {
+          const parsed = JSON.parse(await res.text());
+          if (parsed?.ret_code != null) upstream.ret_code = parsed.ret_code;
+          if (parsed?.ret_msg) {
+            upstream.ret_msg = String(parsed.ret_msg);
+            try {
+              const decoded = Buffer.from(String(parsed.ret_msg), 'base64').toString('utf8');
+              if (decoded && /^[\x20-\x7E\u4E00-\u9FA5\s]+$/.test(decoded)) upstream.ret_msg = decoded;
+            } catch { /* 解不开就留原文 */ }
+          }
+        } catch { /* 读不到 body 就算了，不影响错误信封 */ }
         throw new ApiError('ZHIHU_UPSTREAM_ERROR', `知乎接口返回 HTTP ${res.status}`, {
-          upstream: { code: res.status, message: res.statusText },
+          upstream,
           retryable: res.status >= 500,
         });
       }
